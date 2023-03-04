@@ -1,5 +1,5 @@
 use crate::ogre_std::ogre_queues::{
-    full_sync_queues::full_sync_base::FullSyncBase,
+    full_sync_queues::full_sync_meta::FullSyncMeta,
 };
 use std::{
     time::Duration,
@@ -26,7 +26,7 @@ pub struct OgreMPMCQueue<ItemType:           Unpin + Send + Sync + Debug,
                           const MAX_STREAMS: usize> {
     /// General non-blocking full sync queue allowing to report back on the number of retained elements after enqueueing,
     /// so to work optimally with our round-robin stream-awaking algorithm
-    queue:                  FullSyncBase<ItemType, BUFFER_SIZE>,
+    queue:                  FullSyncMeta<ItemType, BUFFER_SIZE>,
     wakers:                 [Option<Waker>; MAX_STREAMS],
     created_streams_count:  AtomicU32,
     finished_streams_count: AtomicU32,
@@ -163,7 +163,7 @@ impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
 for*/ OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     pub fn new() -> Arc<Pin<Box<Self>>> {
-        let queue = FullSyncBase::<ItemType, BUFFER_SIZE>::new();
+        let queue = FullSyncMeta::<ItemType, BUFFER_SIZE>::new();
         Arc::new(Box::pin(Self {
             queue,
             wakers:                 (0..MAX_STREAMS).map(|_| Option::<Waker>::None).collect::<Vec<_>>().try_into().unwrap(),

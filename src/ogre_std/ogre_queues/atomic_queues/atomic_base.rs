@@ -1,16 +1,21 @@
-//! Basis for multiple producer / multiple consumer queues using atomics for synchronization
+//! Basis for multiple producer / multiple consumer queues using atomics for synchronization,
+//! allowing enqueueing syncing to be (almost) fully detached from the dequeueing syncing
 
-use super::super::OgreQueue;
+use super::super::{
+    OgreQueue,
+    meta_queue::MetaQueue,
+};
 use std::{
     fmt::Debug,
     sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
     mem::MaybeUninit,
+    pin::Pin,
 };
-use std::pin::Pin;
+
 
 /// to make the most of performance, let BUFFER_SIZE be a power of 2 (so that 'i % BUFFER_SIZE' modulus will be optimized)
 // #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
-pub struct AtomicBase<SlotType,
+pub struct AtomicMeta<SlotType,
                       const BUFFER_SIZE: usize> {
     /// where to enqueue the next element -- we'll enforce this won't overlap with 'head'\
     /// -- after increasing this field, the enqueuer must still write the value (until so, it is
@@ -29,10 +34,11 @@ pub struct AtomicBase<SlotType,
 
 impl<SlotType:          Clone + Debug,
      const BUFFER_SIZE: usize>
-AtomicBase<SlotType,
+MetaQueue<SlotType> for
+AtomicMeta<SlotType,
            BUFFER_SIZE> {
 
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             head:                 AtomicU32::new(0),
             enqueuer_tail:        AtomicU32::new(0),
@@ -43,13 +49,14 @@ AtomicBase<SlotType,
     }
 
     #[inline(always)]
-    pub fn enqueue<SetterFn:                   Fn(&mut SlotType),
-                   ReportFullFn:               Fn() -> bool,
-                   ReportLenAfterEnqueueingFn: Fn(u32)>
-                  (&self, setter_fn:                      SetterFn,
-                          report_full_fn:                 ReportFullFn,
-                          report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
-                  -> bool {
+    fn enqueue<SetterFn:                   FnOnce(&mut SlotType),
+               ReportFullFn:               Fn() -> bool,
+               ReportLenAfterEnqueueingFn: FnOnce(u32)>
+              (&self,
+               setter_fn:                      SetterFn,
+               report_full_fn:                 ReportFullFn,
+               report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
+              -> bool {
 
         let mutable_buffer = unsafe {
             let const_ptr = self.buffer.as_ptr();
@@ -116,11 +123,15 @@ AtomicBase<SlotType,
     }
 
     #[inline(always)]
-    pub fn dequeue<ReportEmptyFn:              Fn() -> bool,
-                   ReportLenAfterDequeueingFn: Fn(i32)>
-                  (&self, report_empty_fn:                ReportEmptyFn,
-                          report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
-                  -> Option<SlotType> {
+    fn dequeue<GetterReturnType,
+               GetterFn:                   Fn(&SlotType) -> GetterReturnType,
+               ReportEmptyFn:              Fn() -> bool,
+               ReportLenAfterDequeueingFn: FnOnce(i32)>
+              (&self,
+               getter_fn:                      GetterFn,
+               report_empty_fn:                ReportEmptyFn,
+               report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
+              -> Option<GetterReturnType> {
 
         let mut head = self.head.load(Relaxed);
         let mut tail = self.dequeuer_tail.load(Relaxed);
@@ -160,11 +171,12 @@ AtomicBase<SlotType,
             }
 
             // return the value if we were the one to increase 'head'
-            let slot_value = self.buffer[head as usize % BUFFER_SIZE].clone();
+            let slot_value = &self.buffer[head as usize % BUFFER_SIZE];
+            let ret_val = getter_fn(slot_value);
             match self.head.compare_exchange(head, head+1, Relaxed, Relaxed) {
                 Ok(_) => {
                     report_len_after_dequeueing_fn(len_before-1);
-                    return Some(slot_value);
+                    return Some(ret_val);
                 },
                 Err(reloaded_val) => {
                     head = reloaded_val;
@@ -175,11 +187,46 @@ AtomicBase<SlotType,
         }
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.enqueuer_tail.load(Relaxed).overflowing_sub(self.head.load(Relaxed)).0 as usize
     }
 
-    pub fn buffer_size(&self) -> usize {
+    fn max_size(&self) -> usize {
         BUFFER_SIZE
+    }
+
+    unsafe fn peek_all(&self) -> [&[SlotType]; 2] {
+        let head_index = self.head.load(Relaxed) as usize % BUFFER_SIZE;
+        let tail_index = self.dequeuer_tail.load(Relaxed) as usize % BUFFER_SIZE;
+        if self.head.load(Relaxed) == self.dequeuer_tail.load(Relaxed) {
+            [&[],&[]]
+        } else if head_index < tail_index {
+            unsafe {
+                let const_ptr = self.buffer.as_ptr();
+                let ptr = const_ptr as *const [SlotType; BUFFER_SIZE];
+                let array = &*ptr;
+                [&array[head_index ..tail_index], &[]]
+            }
+        } else {
+            unsafe {
+                let const_ptr = self.buffer.as_ptr();
+                let ptr = const_ptr as *const [SlotType; BUFFER_SIZE];
+                let array = &*ptr;
+                [&array[head_index..BUFFER_SIZE], &array[0..tail_index]]
+            }
+        }
+    }
+
+    fn debug_info(&self) -> String {
+        let Self {enqueuer_tail, concurrent_enqueuers, buffer, head, dequeuer_tail} = self;
+        let enqueuer_tail = enqueuer_tail.load(Relaxed);
+        let head = head.load(Relaxed);
+        let dequeuer_tail = dequeuer_tail.load(Relaxed);
+        format!("ogre_queues::atomic_meta's state: {{head: {head}, enqueuer_tail: {enqueuer_tail}, dequeuer_tail: {dequeuer_tail}, (len: {}), elements: {{{}}}'}}",
+                self.len(),
+                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
+                    acc.push_str(&format!("'{:?}',", e));
+                    acc
+                }))
     }
 }

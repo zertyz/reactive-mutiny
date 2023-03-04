@@ -4,8 +4,9 @@ use super::super::super::{
     container_instruments::ContainerInstruments,
     ogre_queues::{
         OgreQueue,
+        meta_queue::MetaQueue,
         OgreBlockingQueue,
-        atomic_queues::atomic_base::AtomicBase,
+        atomic_queues::atomic_base::AtomicMeta,
     },
 };
 use std::{
@@ -38,7 +39,7 @@ pub struct BlockingQueue<SlotType:                  Copy+Debug,
     /// locked when the queue is full, unlocked when it is no longer full
     full_guard:         RawMutex,
     /// queue
-    base_queue:         AtomicBase<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicMeta<SlotType, BUFFER_SIZE>,
     /// locked when the queue is empty, unlocked when it is no longer empty
     empty_guard:        RawMutex,
     // metrics for dequeue
@@ -174,7 +175,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             full_guard:         RawMutex::INIT,
-            base_queue:         AtomicBase::new(),
+            base_queue:         AtomicMeta::new(),
             empty_guard:        RawMutex::INIT,
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
@@ -204,7 +205,8 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     #[inline(always)]
     fn dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|| self.report_empty(),
+        self.base_queue.dequeue(|slot| *slot,
+                                || self.report_empty(),
                                 |len| {
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' dequeued an element", self.queue_name);
@@ -226,7 +228,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     fn max_size(&self) -> usize {
-        self.base_queue.buffer_size()
+        self.base_queue.max_size()
     }
 
     fn debug_enabled(&self) -> bool {
@@ -296,17 +298,18 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     fn try_dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|| {
-                                if ContainerInstruments::from(INSTRUMENTS).tracing() {
-                                    trace!("### QUEUE '{}' is empty when non-blockingly dequeueing an element", self.queue_name);
-                                }
-                                if ContainerInstruments::from(INSTRUMENTS).metrics() {
-                                    self.queue_empty_count.fetch_add(1, Relaxed);
-                                }
-                                if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
-                                    self.metrics_diagnostics();
-                                }
-                                false
+        self.base_queue.dequeue(|slot| *slot,
+                                || {
+                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                        trace!("### QUEUE '{}' is empty when non-blockingly dequeueing an element", self.queue_name);
+                                    }
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                        self.queue_empty_count.fetch_add(1, Relaxed);
+                                    }
+                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                        self.metrics_diagnostics();
+                                    }
+                                    false
                                 },
                                 |len| {
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {

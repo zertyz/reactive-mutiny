@@ -9,7 +9,7 @@ use crate::{
     },
     ogre_std::ogre_queues::{
         OgreQueue,
-        full_sync_queues::full_sync_base::FullSyncBase,
+        full_sync_queues::full_sync_meta::FullSyncMeta,
     },
 };
 use std::{
@@ -50,7 +50,7 @@ pub struct InternalOgreMPMCQueue<ItemType:          Clone + Unpin + Send + Sync 
     pub (crate) buffer:     AllocatorType,
     /// General non-blocking full sync queues allowing to report back on the number of retained elements after enqueueing,
     /// so to work optimally with our round-robin stream-awaking algorithm
-    queues:                 [FullSyncBase<u32, BUFFER_SIZE>; MAX_STREAMS],
+    queues:                 [FullSyncMeta<u32, BUFFER_SIZE>; MAX_STREAMS],
     created_streams_count:  AtomicU32,
     /// the id # of streams that can be created are stored here -- for the purposes of accessing its `waker[]`.\
     /// synced with `used_streams` so creating & dropping streams occurs as fast as possible, as well as enqueueing elements
@@ -259,9 +259,9 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
         let instance = Arc::new(Box::pin(Self {
             buffer:                 AllocatorType::<ItemType, BUFFER_SIZE>::new(),
             queues:                 {
-                                         let mut queues: [FullSyncBase<u32, BUFFER_SIZE>; MAX_STREAMS] = unsafe { MaybeUninit::zeroed().assume_init() };
+                                         let mut queues: [FullSyncMeta<u32, BUFFER_SIZE>; MAX_STREAMS] = unsafe { MaybeUninit::zeroed().assume_init() };
                                          for i in 0..queues.len() {
-                                             queues[i] = FullSyncBase::<u32, BUFFER_SIZE>::new();
+                                             queues[i] = FullSyncMeta::<u32, BUFFER_SIZE>::new();
                                          }
                                          queues
                                      },

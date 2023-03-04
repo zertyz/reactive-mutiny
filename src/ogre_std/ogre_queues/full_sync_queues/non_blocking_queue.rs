@@ -4,7 +4,7 @@ use super::super::super::{
     ogre_queues::{
         OgreQueue,
         meta_queue::MetaQueue,
-        full_sync_queues::full_sync_base::FullSyncBase,
+        full_sync_queues::full_sync_meta::FullSyncMeta,
     },
 };
 use std::{
@@ -28,7 +28,7 @@ pub struct NonBlockingQueue<SlotType:          Unpin + Debug,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         FullSyncBase<SlotType, BUFFER_SIZE>,
+    base_queue:         FullSyncMeta<SlotType, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,
@@ -46,7 +46,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
         Box::pin(Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
-            base_queue:         FullSyncBase::new(),
+            base_queue:         FullSyncMeta::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),

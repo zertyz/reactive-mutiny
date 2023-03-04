@@ -1,6 +1,5 @@
 //! Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
-//! full synchronization through an atomic flag.
-
+//! full synchronization through an atomic flag, with a clever & experimentally tuned efficient locking mechanism.
 
 use std::fmt::Debug;
 use std::future::Future;
@@ -12,7 +11,9 @@ use std::time::Duration;
 use crate::ogre_std::ogre_queues::meta_queue::MetaQueue;
 
 
-pub struct FullSyncBase<SlotType,
+/// to make the most of performance, let BUFFER_SIZE be a power of 2 (so that 'i % BUFFER_SIZE' modulus will be optimized)
+// #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
+pub struct FullSyncMeta<SlotType,
                         const BUFFER_SIZE: usize> {
 
     /// locked when the queue is full, unlocked when it is no longer full
@@ -31,7 +32,7 @@ pub struct FullSyncBase<SlotType,
 impl<SlotType:          Unpin + Debug,
      const BUFFER_SIZE: usize>
 MetaQueue<SlotType> for
-FullSyncBase<SlotType,
+FullSyncMeta<SlotType,
              BUFFER_SIZE> {
 
     fn new() -> Self {
@@ -156,7 +157,7 @@ FullSyncBase<SlotType,
         let full_guard = full_guard.load(Relaxed);
         let concurrency_guard = concurrency_guard.load(Relaxed);
         let empty_guard = empty_guard.load(Relaxed);
-        format!("ogre_queues::full_sync_base's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
+        format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
                 self.len(),
                 unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));

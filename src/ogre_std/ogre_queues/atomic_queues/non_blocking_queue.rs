@@ -4,7 +4,8 @@
 use super::super::super::{
     ogre_queues::{
         OgreQueue,
-        atomic_queues::atomic_base::AtomicBase,
+        meta_queue::MetaQueue,
+        atomic_queues::atomic_base::AtomicMeta,
     },
     container_instruments::ContainerInstruments,
 };
@@ -28,7 +29,7 @@ pub struct NonBlockingQueue<SlotType:          Copy+Debug,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         AtomicBase<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicMeta<SlotType, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,
@@ -74,7 +75,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         Box::pin(Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
-            base_queue:         AtomicBase::new(),
+            base_queue:         AtomicMeta::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),
@@ -116,7 +117,8 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|| {
+        self.base_queue.dequeue(|slot| *slot,
+                       || {
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' DEQUEUE: queue is empty when attempting to dequeue an element", self.queue_name);
                                     }
@@ -146,7 +148,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     }
 
     fn max_size(&self) -> usize {
-        self.base_queue.buffer_size()
+        self.base_queue.max_size()
     }
 
     fn debug_enabled(&self) -> bool {

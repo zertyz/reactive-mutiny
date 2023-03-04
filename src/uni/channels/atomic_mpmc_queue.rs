@@ -1,4 +1,7 @@
-use crate::ogre_std::ogre_queues::atomic_queues::atomic_base::AtomicBase;
+use crate::ogre_std::ogre_queues::{
+    meta_queue::MetaQueue,
+    atomic_queues::atomic_base::AtomicMeta,
+};
 use std::{
     time::Duration,
     sync::atomic::AtomicU32,
@@ -19,7 +22,7 @@ pub struct AtomicMPMCQueue<ItemType:          Clone + Send + Sync + Debug,
                            const MAX_STREAMS: usize> {
     /// General atomic & non-blocking queue allowing to report back on the number of retained elements after enqueueing,
     /// so to work optimally with our round-robin stream-awaking algorithm
-    queue:                  AtomicBase<ItemType, BUFFER_SIZE>,
+    queue:                  AtomicMeta<ItemType, BUFFER_SIZE>,
     created_streams_count:  AtomicU32,
     wakers:                 [Option<Waker>; MAX_STREAMS],
     keep_streams_running:   bool,
@@ -70,7 +73,8 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the `consumer_stream()`, so `mutable_self` is guaranteed to be valid
             },
             move |cx| {
-                let next = match mutable_self.queue.dequeue(|| false, |_| {}) {
+                let item = mutable_self.queue.dequeue(|item| item.clone(), || false, |_| {});
+                let next = match item {
                     Some(item) => {
                         empty_retry_count = 0;
                         Poll::Ready(Some(item))
@@ -144,7 +148,7 @@ impl<ItemType:          Copy+Send+Sync+Debug + 'static,
 for*/ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     pub fn new() -> Arc<Pin<Box<Self>>> {
-        let queue = AtomicBase::<ItemType, BUFFER_SIZE>::new();
+        let queue = AtomicMeta::<ItemType, BUFFER_SIZE>::new();
         Arc::new(Box::pin(Self {
             queue,
             created_streams_count: AtomicU32::new(0),
