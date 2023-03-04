@@ -14,7 +14,7 @@ use std::{
 
 
 /// Although not exposed, this struct defines the fields and types we compute.\
-/// Sadly, we're limited to 32 bits per variable as of Rust 1.63, as AtomicU128 is not present in x86_64
+/// Sadly, we're limited to 32 bits per variable as, as of Rust 1.63, AtomicU128 is not available in x86_64
 /// and we're denied from using 'cmpxchg16b' in stable. Things may soon change, 'though:
 /// -- see https://github.com/rust-lang/rust/issues/98253
 ///        https://www.reddit.com/r/rust/comments/s7b009/comment/htbf5fj/?utm_source=share&utm_medium=web2x&context=3

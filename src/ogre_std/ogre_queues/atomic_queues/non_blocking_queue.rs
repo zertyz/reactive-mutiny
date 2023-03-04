@@ -91,7 +91,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                  },
@@ -102,7 +102,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.queue_full_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     // TODO 20221003: the current `atomic_base.rs` algorithm has some kind of bug that causes the enqueuer_tail to be greater than buffer
@@ -124,7 +124,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.queue_empty_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     false
@@ -136,7 +136,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                 })

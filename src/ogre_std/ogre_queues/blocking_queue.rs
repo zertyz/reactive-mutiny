@@ -358,6 +358,7 @@ mod tests {
         test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
+    #[test]
     fn basic_queue_use_cases_non_blocking() {
         let queue = Queue::<i32, 16, false, false, 1000>::new("'basic_use_cases' test queue".to_string());
         test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::Blocking, queue.max_size(), |e| queue.try_enqueue(e), || queue.try_dequeue(), || queue.len());
@@ -411,7 +412,7 @@ mod tests {
             assert_blocking(|| queue.enqueue(999), false, "  Blocking on full (again)");
             assert_non_blocking(|| queue.try_enqueue(999), "  Non-Blocking 'try_enqueue()'");
 
-            assert_non_blocking(|| for i in 0..QUEUE_SIZE {
+            assert_non_blocking(|| for _i in 0..QUEUE_SIZE {
                 queue.dequeue();
             }, "  Blocking dequeueing (won't block as there are elements)");
         }
@@ -438,7 +439,7 @@ mod tests {
         fn assert_non_blocking<R: PartialEq+Debug>(op: impl Fn() -> R, msg: &str) {
             print!("{}:  ", msg); std::io::stdout().flush().unwrap();
             let start = SystemTime::now();
-            let result = op();
+            let _result = op();
             let elapsed = start.elapsed().unwrap();
             println!("{:?}", elapsed);
             assert!((elapsed.as_millis() as i32).abs() < TOLERANCE_MILLIS as i32,

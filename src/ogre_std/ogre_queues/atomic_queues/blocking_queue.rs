@@ -64,7 +64,7 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         if ContainerInstruments::from(INSTRUMENTS).metrics() {
             self.queue_empty_count.fetch_add(1, Relaxed);
         }
-        if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+        if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
             self.metrics_diagnostics();
         }
         self.empty_guard.try_lock();
@@ -107,7 +107,7 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         if ContainerInstruments::from(INSTRUMENTS).metrics() {
             self.queue_full_count.fetch_add(1, Relaxed);
         }
-        if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+        if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
             self.metrics_diagnostics();
         }
         self.full_guard.try_lock();
@@ -192,7 +192,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                 },
@@ -213,7 +213,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     if len == BUFFER_SIZE as i32 - 1 {
@@ -275,7 +275,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                  },
@@ -286,7 +286,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.queue_full_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     false
@@ -305,7 +305,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.queue_empty_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     false
@@ -317,7 +317,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     if len == BUFFER_SIZE as i32 - 1 {

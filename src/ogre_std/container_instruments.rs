@@ -100,7 +100,7 @@ mod tests {
         for variant in all_variants {
             let number = variant.into();
             let reconverted = ContainerInstruments::from(number);
-            println!("variant: {:?} -- usize: {}; reconverted to variant: {:?} -- .metrics()={}; .metricsDiagnostics()={}; .tracing()={}",
+            println!("variant: {:?} -- usize: {}; reconverted to variant: {:?} -- .metrics()={}; .metrics_diagnostics()={}; .tracing()={}",
                      variant, number, reconverted,
                      variant.metrics(), variant.metrics_diagnostics(), variant.tracing());
             assert_eq!(reconverted, variant, ".into() / .from() failed -- intermediary number is {}", number);
