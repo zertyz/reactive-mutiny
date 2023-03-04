@@ -7,14 +7,23 @@ use crate::{
 use std::{
     pin::Pin,
     task::{Context, Poll},
+    fmt::Debug,
+    mem::{MaybeUninit},
+    ops::Deref,
+    sync::Arc,
 };
-use std::fmt::Debug;
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::ops::Deref;
-use std::sync::Arc;
-use futures::{
-    stream::{Stream}
-};
+use futures::stream::Stream;
+
+
+#[derive(Copy, Clone, Debug)]
+pub enum MultiInstruments {
+    /// count work done: processed events, untreated_failures
+    Counters   = 1,
+    /// avg_buffer_depth, max_depth
+    Saturation = 2,
+    /// time measurements (min, max, average) for good & failed events
+    Profiling  = 4,
+}
 
 
 pub struct MutinyStream<ItemType> {
@@ -61,8 +70,8 @@ MultiPayload<InnerType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl<'a, InnerType:         Clone + Unpin + Send + Sync + Debug,
-    const BUFFER_SIZE: usize,
-    const MAX_STREAMS: usize>
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
 Deref for
 MultiPayload<InnerType, BUFFER_SIZE, MAX_STREAMS> {
 
