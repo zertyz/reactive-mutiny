@@ -1,0 +1,34 @@
+[package]
+name = "reactive-mutiny"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[features]
+dox = ["ctor", "simple_logger"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log         = "0.4"
+tokio       = { version = "1", features = ["full", "rt-multi-thread"] }
+futures     = "0.3"     # brings in "Streams" / async iterators
+minstant    = "0.1"     # as fast as possible time measurements on X86_64 using TSC / RDTSC instructions -- avoiding system calls & context switches
+indexmap    = "1.9"     # hashmaps as fast as vectors to traverse through values (preserves the insertion order in a vector)
+atomic_enum = "0.2"
+async-trait = "0.1"     # non-zero-cost async traits
+parking_lot = "0.12"    # way faster than std mutex (and tokio mutexes as well)
+crossbeam   = "0.8"     # scoped threads
+
+
+# doc dependencies
+ctor          = { version = "0.1", optional = true }
+simple_logger = { version = "2.3", optional = true }
+
+
+[dev-dependencies]
+ctor          = "0.1"    # setup and teardown for modules
+simple_logger = "4.0"    # a dirty console logger
+log           = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
+
