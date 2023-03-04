@@ -1,17 +1,13 @@
 use crate::ogre_std::{
     ogre_stacks::OgreStack,
-    ogre_queues::{
-        OgreQueue,
-        full_sync_queues::NonBlockingQueue,
-    },
+    ogre_queues::OgreQueue,
 };
 use std::{
     fmt::Debug,
     sync::atomic::{AtomicU16,AtomicU32,Ordering},
-    mem::MaybeUninit,
+    mem::{MaybeUninit, ManuallyDrop},
+    pin::Pin,
 };
-use std::mem::ManuallyDrop;
-use std::pin::Pin;
 use log::error;
 
 /// the basis for a "reference counted buffered allocator"

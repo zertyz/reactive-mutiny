@@ -12,8 +12,7 @@ use super::super::super::{
 use std::{
     pin::Pin,
     fmt::Debug,
-    sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
-    mem::MaybeUninit,
+    sync::atomic::{AtomicU64,Ordering::Relaxed},
 };
 use std::time::Duration;
 use log::trace;
@@ -263,8 +262,8 @@ impl<SlotType:                  Copy+Debug,
      const INSTRUMENTS:         usize>
 OgreBlockingQueue<'_, SlotType>
 for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
-    fn set_empty_guard_ref(&mut self, empty_guard_ref: &'_ RawMutex) {
-        todo!("no longer used method. fix")
+    fn set_empty_guard_ref(&mut self, _empty_guard_ref: &'_ RawMutex) {
+        todo!("no longer used method. remove as soon as it is guaranteed to be useless")
     }
 
     fn try_enqueue(&self, element: SlotType) -> bool {
@@ -333,8 +332,6 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 mod tests {
     //! Unit tests for [atomic_base](super) module
 
-    use std::io::Write;
-    use std::time::SystemTime;
     use super::*;
     use super::super::super::super::test_commons::{self,ContainerKind,Blocking};
 

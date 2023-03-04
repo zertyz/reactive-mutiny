@@ -1,4 +1,4 @@
-//! provides common code used by tests which are also useful for determining the best stack to use at runtime
+//! provides common code used by tests which are also useful for determining the best stack & queue to use at runtime
 
 use std::{
     time::{SystemTime,Duration},

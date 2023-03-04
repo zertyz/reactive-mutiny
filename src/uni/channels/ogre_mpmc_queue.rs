@@ -1,23 +1,20 @@
 use crate::ogre_std::ogre_queues::{
     full_sync_queues::full_sync_meta::FullSyncMeta,
+    meta_queue::MetaQueue
 };
 use std::{
     time::Duration,
-    sync::atomic::AtomicU32,
+    sync::atomic::{AtomicU32, AtomicBool, Ordering::Relaxed},
     pin::Pin,
     fmt::Debug,
     task::{Poll, Waker},
     sync::Arc,
-    mem
+    mem::{self, ManuallyDrop, MaybeUninit},
+    hint::spin_loop,
+    ops::Deref
 };
-use std::hint::spin_loop;
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::ops::Deref;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use futures::{Stream};
 use minstant::Instant;
-use crate::ogre_std::ogre_queues::meta_queue::MetaQueue;
 
 
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
@@ -258,11 +255,3 @@ fn unlock(flag: &AtomicBool) {
     flag.store(false, Relaxed);
 }
 
-
-/// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni](self) module
-#[cfg(any(test, feature = "dox"))]
-mod tests {
-    use super::*;
-
-
-}

@@ -8,10 +8,9 @@ use std::{
     pin::Pin,
     fmt::Debug,
     task::{Poll, Waker},
-    sync::Arc,
+    sync::{Arc, atomic::Ordering::{Relaxed}},
     mem
 };
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use futures::{Stream};
 use minstant::Instant;
 
@@ -83,7 +82,7 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                         if mutable_self.keep_streams_running {
                             // share the waker the first time this runs, so producers may wake this task up when an item is ready
                             let _ = mutable_self.wakers[stream_number as usize].insert(cx.waker().clone());
-                            std::sync::atomic::fence(Release);
+                            std::sync::atomic::fence(Relaxed);
                             empty_retry_count += 1;
                             if empty_retry_count < EMPTY_RETRIES {
                                 std::hint::spin_loop();
@@ -126,7 +125,7 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn wake_stream(&self, stream_id: u32) {
         if stream_id < MAX_STREAMS as u32 {
-            std::sync::atomic::fence(Acquire);
+            std::sync::atomic::fence(Relaxed);
             match &self.wakers[stream_id as usize] {
                 Some(waker) => waker.wake_by_ref(),
                 None => {
@@ -208,14 +207,5 @@ for*/ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     pub fn pending_items_count(&self) -> u32 {
         self.queue.len() as u32
     }
-
-}
-
-
-/// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni](self) module
-#[cfg(any(test, feature = "dox"))]
-mod tests {
-    use super::*;
-
 
 }

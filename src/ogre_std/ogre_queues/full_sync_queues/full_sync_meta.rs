@@ -1,14 +1,16 @@
 //! Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
 //! full synchronization through an atomic flag, with a clever & experimentally tuned efficient locking mechanism.
 
-use std::fmt::Debug;
-use std::future::Future;
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::ops::Deref;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
-use crate::ogre_std::ogre_queues::meta_queue::MetaQueue;
+use super::super::meta_queue::MetaQueue;
+use std::{
+    fmt::Debug,
+    mem::{ManuallyDrop, MaybeUninit},
+    ops::Deref,
+    sync::atomic::{
+        AtomicBool,
+        Ordering::Relaxed,
+    },
+};
 
 
 /// to make the most of performance, let BUFFER_SIZE be a power of 2 (so that 'i % BUFFER_SIZE' modulus will be optimized)
@@ -150,7 +152,7 @@ FullSyncMeta<SlotType,
     }
 
     fn debug_info(&self) -> String {
-        let Self {full_guard, concurrency_guard, tail, buffer, head, empty_guard} = self;
+        let Self {full_guard, concurrency_guard, tail, buffer: _, head, empty_guard} = self;
         let full_guard = full_guard.load(Relaxed);
         let concurrency_guard = concurrency_guard.load(Relaxed);
         let empty_guard = empty_guard.load(Relaxed);

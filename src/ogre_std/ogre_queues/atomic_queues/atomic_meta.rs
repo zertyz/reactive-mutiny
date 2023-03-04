@@ -2,14 +2,12 @@
 //! allowing enqueueing syncing to be (almost) fully detached from the dequeueing syncing
 
 use super::super::{
-    OgreQueue,
     meta_queue::MetaQueue,
 };
 use std::{
     fmt::Debug,
-    sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
+    sync::atomic::{AtomicU32,Ordering::Relaxed},
     mem::MaybeUninit,
-    pin::Pin,
 };
 
 
@@ -218,11 +216,12 @@ AtomicMeta<SlotType,
     }
 
     fn debug_info(&self) -> String {
-        let Self {enqueuer_tail, concurrent_enqueuers, buffer, head, dequeuer_tail} = self;
+        let Self {enqueuer_tail, concurrent_enqueuers, buffer: _, head, dequeuer_tail} = self;
         let enqueuer_tail = enqueuer_tail.load(Relaxed);
         let head = head.load(Relaxed);
         let dequeuer_tail = dequeuer_tail.load(Relaxed);
-        format!("ogre_queues::atomic_meta's state: {{head: {head}, enqueuer_tail: {enqueuer_tail}, dequeuer_tail: {dequeuer_tail}, (len: {}), elements: {{{}}}'}}",
+        let concurrent_enqueuers = concurrent_enqueuers.load(Relaxed);
+        format!("ogre_queues::atomic_meta's state: {{head: {head}, enqueuer_tail: {enqueuer_tail}, dequeuer_tail: {dequeuer_tail}, (len: {}), concurrent_enqueuers: {concurrent_enqueuers}, elements: {{{}}}'}}",
                 self.len(),
                 unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));

@@ -10,11 +10,10 @@ use super::super::super::{
 use std::{
     pin::Pin,
     fmt::Debug,
-    sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
-    mem::MaybeUninit,
+    sync::atomic::{AtomicU64,Ordering::Relaxed},
+    mem::{MaybeUninit, ManuallyDrop},
+    ops::Deref,
 };
-use std::mem::ManuallyDrop;
-use std::ops::Deref;
 use log::trace;
 
 

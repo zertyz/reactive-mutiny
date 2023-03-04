@@ -12,8 +12,7 @@ use super::super::super::{
 use std::{
     pin::Pin,
     fmt::Debug,
-    sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
-    mem::MaybeUninit,
+    sync::atomic::{AtomicU64,Ordering::Relaxed},
 };
 use std::time::Duration;
 use log::trace;

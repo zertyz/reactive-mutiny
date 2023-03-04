@@ -1,7 +1,5 @@
 //! Resting place for the (rather internal) [MetaQueue] trait
 
-use crate::ogre_std::ogre_queues::blocking_queue;
-
 
 /// Dictates the API for "base" queues and how they should work.\
 /// Base queues are meta-queues (not proper queues yet). They become queues when
@@ -25,7 +23,6 @@ pub trait MetaQueue<SlotType> {
     ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call;
     ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
     ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
-    #[inline(always)]
     fn enqueue<SetterFn:                   FnOnce(&mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
@@ -43,7 +40,6 @@ pub trait MetaQueue<SlotType> {
     ///   1) The caller must ensure the `getter_fn()` operation returns as soon as possible, or else the whole queue is likely to hang. If so, one sould consider to pass in a `getter_fn()`
     ///      that would clone/copy the value and release the queue as soon as possible.
     ///   2) Note the `getter_fn()` is not `FnOnce()`. Some implementors might require calling this function more than once, on contention scenarios.
-    #[inline(always)]
     fn dequeue<GetterReturnType,
                GetterFn:                   Fn(&SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
@@ -55,7 +51,6 @@ pub trait MetaQueue<SlotType> {
               -> Option<GetterReturnType>;
 
     /// Possibly returns the number of elements in this meta-queue at the moment of the call -- not synchronized.
-    #[inline(always)]
     fn len(&self) -> usize;
 
     /// Returns the maximum number of elements this queue can hold -- fixed if the implementer uses a ring-buffer
@@ -84,7 +79,6 @@ pub trait MetaQueue<SlotType> {
     ///   for peeked_reference in queue.peek_all().iter().flat_map(|&slice| slice) {
     ///       println!("your_logic_goes_here: {:#?}", *peeked_reference);
     ///   }
-    #[inline(always)]
     unsafe fn peek_all(&self) -> [&[SlotType];2];
 
     /// Returns a string that might be useful to debug or assert algorithms when writing automated tests

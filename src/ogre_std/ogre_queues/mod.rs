@@ -6,7 +6,6 @@ pub mod blocking_queue;
 pub mod non_blocking_parking_lot_queue;
 pub mod atomic_queues;
 pub mod full_sync_queues;
-pub mod async_queues;
 
 
 /// multi-producer / multi-consumer queue

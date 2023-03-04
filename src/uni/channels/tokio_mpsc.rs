@@ -1,15 +1,16 @@
 use std::{
     pin::Pin,
+    fmt::Debug,
+    sync::Arc,
+    task::Poll,
+    time::Duration,
 };
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::task::Poll;
-use std::time::Duration;
-use tokio::sync::mpsc::{Sender, Receiver};
+use tokio::sync::{
+    mpsc::{Sender, Receiver, error::TrySendError},
+    Mutex,
+};
 use futures::{Stream, stream};
 use minstant::Instant;
-use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::Mutex;
 
 
 pub struct TokioMPSC<ItemType, const BUFFER_SIZE: usize> {
@@ -108,14 +109,5 @@ impl<ItemType: Debug, const BUFFER_SIZE: usize> /*UniChannel<ItemType> for*/ Tok
     pub fn pending_items_count(&self) -> u32 {
         (BUFFER_SIZE - self.tx.capacity()) as u32
     }
-
-}
-
-
-/// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni](self) module
-#[cfg(any(test, feature = "dox"))]
-mod tests {
-    use super::*;
-
 
 }

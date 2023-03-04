@@ -202,7 +202,7 @@ for Queue<'a, SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
         let mut instance = Box::pin(Self {
             buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
             _empty_guard:         RawMutex::INIT,
-            empty_guard_ref:      unsafe { &*std::ptr::null() as &RawMutex },     // TODO may changing it by mem init with zeroes solve the warning?
+            empty_guard_ref:      unsafe { &*std::ptr::null() as &RawMutex },     // TODO implement interior mutability to get rid of this annoying warning
             full_guard:           RawMutex::INIT,
             concurrency_guard:    RawMutex::INIT,
             head:                 0,
@@ -334,7 +334,7 @@ for Queue<'a, SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
 impl <SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const DEBUG: bool, const LOCK_TIMEOUT_MILLIS: usize>
      Queue<'_, SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
 
-    pub fn debug(&self) {
+    pub fn _debug(&self) {
         eprintln!("========================= QUEUE DEBUG ===========================");
         eprintln!("||  head:                 {}", self.head);
         eprintln!("||  Tail:                 {}", self.tail);
@@ -345,11 +345,13 @@ impl <SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const
 mod tests {
     //! Unit tests for [queue](super) module
 
-    use std::io::Write;
     use super::*;
-    use std::time::{SystemTime,Duration};
     use super::super::super::test_commons::{self,ContainerKind,Blocking};
-
+    use std::{
+        time::SystemTime,
+        io::Write,
+    };
+    
     #[test]
     fn basic_queue_use_cases_blocking() {
         let queue = Queue::<i32, 16, false, false, 1000>::new("'basic_use_cases' test queue".to_string());
