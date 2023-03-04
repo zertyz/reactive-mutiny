@@ -109,9 +109,6 @@ FullSyncMeta<SlotType,
             }
         }
 
-        // let mut moved_value = MaybeUninit::<SlotType>::uninit();
-        // unsafe { std::ptr::copy_nonoverlapping(self.buffer[self.head as usize % BUFFER_SIZE].deref() as *const SlotType, moved_value.as_mut_ptr(), 1) }
-        // let moved_value = unsafe { moved_value.assume_init() };
         let ret_val = getter_fn(self.buffer[self.head as usize % BUFFER_SIZE].deref());
         mutable_self.head = self.head.overflowing_add(1).0;
 

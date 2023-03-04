@@ -5,7 +5,7 @@ use super::super::super::{
     ogre_queues::{
         OgreQueue,
         meta_queue::MetaQueue,
-        atomic_queues::atomic_base::AtomicMeta,
+        atomic_queues::atomic_meta::AtomicMeta,
     },
     container_instruments::ContainerInstruments,
 };

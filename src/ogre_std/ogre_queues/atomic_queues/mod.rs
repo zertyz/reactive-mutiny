@@ -1,4 +1,4 @@
-pub mod atomic_base;
+pub mod atomic_meta;
 
 mod non_blocking_queue;
 pub use non_blocking_queue::*;

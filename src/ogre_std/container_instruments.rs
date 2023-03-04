@@ -60,7 +60,7 @@ impl ContainerInstruments {
         }
     }
 
-    /// returns true operations should be traced
+    /// returns true if operations should be traced
     pub const fn tracing(self) -> bool {
         match self {
             ContainerInstruments::OperationsTracing => true,

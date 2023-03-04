@@ -6,7 +6,7 @@ use super::super::super::{
         OgreQueue,
         meta_queue::MetaQueue,
         OgreBlockingQueue,
-        atomic_queues::atomic_base::AtomicMeta,
+        atomic_queues::atomic_meta::AtomicMeta,
     },
 };
 use std::{
@@ -271,7 +271,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         self.base_queue.enqueue(|slot| {
                                     *slot = element;
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' non-blockingly enqueued element '{:?}'", self.queue_name, element);
+                                        trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);
                                     }
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
@@ -282,7 +282,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                  },
                                 || {
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' is full when non-blockingly enqueueing element '{:?}'", self.queue_name, element);
+                                        trace!("### QUEUE '{}' is full when enqueueing element '{:?}' in non-blocking mode", self.queue_name, element);
                                     }
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.queue_full_count.fetch_add(1, Relaxed);
@@ -301,7 +301,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         self.base_queue.dequeue(|slot| *slot,
                                 || {
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' is empty when non-blockingly dequeueing an element", self.queue_name);
+                                        trace!("### QUEUE '{}' is empty when dequeueing an element in non-blocking mode", self.queue_name);
                                     }
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.queue_empty_count.fetch_add(1, Relaxed);
@@ -313,7 +313,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                 },
                                 |len| {
                                     if ContainerInstruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' non-blockingly dequeued an element", self.queue_name);
+                                        trace!("### QUEUE '{}' dequeued an element in non-blocking mode", self.queue_name);
                                     }
                                     if ContainerInstruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);

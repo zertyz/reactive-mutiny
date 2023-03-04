@@ -1,6 +1,6 @@
 use crate::ogre_std::ogre_queues::{
     meta_queue::MetaQueue,
-    atomic_queues::atomic_base::AtomicMeta,
+    atomic_queues::atomic_meta::AtomicMeta,
 };
 use std::{
     time::Duration,

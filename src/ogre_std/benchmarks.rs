@@ -8,7 +8,7 @@ use std::{
 
 /// wraps queues and stacks in a single trait so we can have the same benchmarking code for both
 pub trait BenchmarkableContainer<SlotType> {
-    fn buffer_size(&self) -> usize;
+    fn max_size(&self) -> usize;
     fn add(&self, item: SlotType) -> bool;
     fn remove(&self) -> Option<SlotType>;
     fn implementation_name(&self) -> &str;
@@ -20,7 +20,7 @@ pub trait BenchmarkableContainer<SlotType> {
 /// operations per second (each individual push or pop is considered an operation)
 pub fn all_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
 
-    let container_size = container.buffer_size();
+    let container_size = container.max_size();
     let mut iterations: u64 = 0;
 
     // loop until 'deadline' elapses
@@ -74,7 +74,7 @@ pub fn single_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize
 /// operations per second (each individual push or pop is considered an operation, as long as they succeed)
 pub fn single_producer_multiple_consumers_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
 
-    let container_size = container.buffer_size();
+    let container_size = container.max_size();
     let consumer_threads = threads-1;
 
     let keep_running = AtomicBool::new(true);
@@ -127,7 +127,7 @@ pub fn single_producer_multiple_consumers_benchmark(container: &(dyn Benchmarkab
 /// operations per second (each individual push or pop is considered an operation, as long as they succeed)
 pub fn multiple_producers_single_consumer_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
 
-    let container_size = container.buffer_size();
+    let container_size = container.max_size();
     let producer_threads = threads-1;
 
     let keep_running = AtomicBool::new(true);
@@ -219,7 +219,7 @@ fn iterate(start: usize, finish: usize, step: usize, callback: impl Fn(u32) -> (
 
 #[cfg(any(test, feature="dox"))]
 mod benchmark_stacks {
-    //! Benchmarks all known queues & stacks
+    //! Benchmarks all known stacks
 
     use std::fmt::Debug;
     use super::*;
@@ -233,10 +233,10 @@ mod benchmark_stacks {
     //     ...
     // }
 
-    macro_rules! impl_bookmarkable_container_for {
+    macro_rules! impl_benchmarkable_container_for {
         ($stack_type: ty) => {
             impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $stack_type {
-                fn buffer_size(&self) -> usize {
+                fn max_size(&self) -> usize {
                     OgreStack::<SlotType>::buffer_size(self)
                 }
                 fn add(&self, item: SlotType) -> bool {
@@ -252,7 +252,7 @@ mod benchmark_stacks {
         }
     }
 
-    impl_bookmarkable_container_for!(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<SlotType, BUFFER_SIZE, false, false>);
+    impl_benchmarkable_container_for!(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<SlotType, BUFFER_SIZE, false, false>);
 
     #[test]
     #[ignore]
@@ -299,7 +299,7 @@ mod benchmark_stacks {
 
 #[cfg(any(test, feature="dox"))]
 mod benchmark_queues {
-    //! Benchmarks all known queues & stacks
+    //! Benchmarks all known queues
 
     use super::*;
     use super::super::{
@@ -311,10 +311,10 @@ mod benchmark_queues {
         pin::Pin,
     };
 
-    macro_rules! impl_bookmarkable_container_for {
+    macro_rules! impl_benchmarkable_container_for {
         ($queue_type: ty) => {
             impl<SlotType: Copy+Unpin+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
-                fn buffer_size(&self) -> usize {
+                fn max_size(&self) -> usize {
                     OgreQueue::max_size(self)
                 }
                 fn add(&self, item: SlotType) -> bool {
@@ -330,9 +330,10 @@ mod benchmark_queues {
         }
     }
 
-    impl_bookmarkable_container_for!(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {ContainerInstruments::NoInstruments.into()}>);
-    impl_bookmarkable_container_for!(super::super::ogre_queues::blocking_queue::Queue::<'static, SlotType, BUFFER_SIZE, false, false, 1>);
-    impl_bookmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, false, false>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {ContainerInstruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, {ContainerInstruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::blocking_queue::Queue::<'static, SlotType, BUFFER_SIZE, false, false, 1>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, false, false>);
 
     #[test]
     #[ignore]
