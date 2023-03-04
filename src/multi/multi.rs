@@ -13,7 +13,7 @@ use tokio::{
 };
 
 
-/// this is the fastest [MultiChannel], as revealed in performance tests
+/// this is the fastest [MultiChannel] for general use, as revealed in performance tests
 type MultiChannelType<ItemType,
                       const BUFFER_SIZE: usize,
                       const MAX_STREAMS: usize> = channels::ogre_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;

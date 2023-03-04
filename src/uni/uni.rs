@@ -15,7 +15,7 @@ use futures::{Stream};
 use minstant::Instant;
 
 
-/// this is the fastest [UniChannel], as revealed in performance tests
+/// this is the fastest [UniChannel] for general use, as revealed in performance tests
 type UniChannelType<ItemType,
                     const BUFFER_SIZE: usize,
                     const MAX_STREAMS: usize> = channels::ogre_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;

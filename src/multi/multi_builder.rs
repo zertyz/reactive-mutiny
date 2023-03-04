@@ -1,30 +1,19 @@
-//! Builders for Multi
+//! Builders for [Multi], responsible for creating the executors and creating the producers.\
+//! For more, see [super]
 
 use super::{
     multi::{Multi},
     super::types::*,
+    super::stream_executor::StreamExecutor,
 };
 use std::{
     fmt::Debug,
     future::Future,
-    marker::PhantomData,
     sync::Arc,
     time::Duration,
 };
-use futures::future::BoxFuture;
 use futures::Stream;
-use crate::stream_executor::StreamExecutor;
 
-
-#[derive(Copy, Clone, Debug)]
-pub enum MultiInstruments {
-    /// count work done: processed events, untreated_failures
-    Counters   = 1,
-    /// avg_buffer_depth, max_depth
-    Saturation = 2,
-    /// time measurements (min, max, average) for good & failed events
-    Profiling  = 4,
-}
 
 /// this will simply be ripped off...
 /// pub type OnMultiCloseFnType = Box<dyn Fn(Arc<StreamExecutor<true, true>>) -> BoxFuture<'static, ()> + Send + Sync + 'static>;

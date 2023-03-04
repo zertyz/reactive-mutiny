@@ -1,4 +1,5 @@
-//! Builders for Multi
+//! Builders for [Uni], responsible for creating the executor and creating the producers.\
+//! For more, see [super]
 
 use super::{
     super::stream_executor::StreamExecutor,
@@ -15,16 +16,6 @@ use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
 use crate::types::*;
 
-
-#[derive(Copy, Clone, Debug)]
-pub enum MultiInstruments {
-    /// count work done: processed events, untreated_failures
-    Counters   = 1,
-    /// avg_buffer_depth, max_depth
-    Saturation = 2,
-    /// time measurements (min, max, average) for good & failed events
-    Profiling  = 4,
-}
 
 pub struct UniBuilder<InType:              Unpin + Send + Sync + 'static,
                       OnStreamCloseFnType: Fn(Arc<StreamExecutor<LOG, METRICS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
