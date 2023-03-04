@@ -11,12 +11,13 @@ use std::{
     mem
 };
 use std::hint::spin_loop;
-use std::mem::ManuallyDrop;
+use std::mem::{ManuallyDrop, MaybeUninit};
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use futures::{Stream};
 use minstant::Instant;
+use crate::ogre_std::ogre_queues::meta_queue::MetaQueue;
 
 
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
@@ -78,7 +79,14 @@ OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the `consumer_stream()`, so `mutable_self` is guaranteed to be valid
             },
             move |cx| {
-                let next = match mutable_self.queue.dequeue(|| false, |_| {}) {
+                let element = mutable_self.queue.dequeue(|item| {
+                                                                        let mut moved_value = MaybeUninit::<ItemType>::uninit();
+                                                                        unsafe { std::ptr::copy_nonoverlapping(item as *const ItemType, moved_value.as_mut_ptr(), 1) }
+                                                                        unsafe { moved_value.assume_init() }
+                                                                    },
+                                                                    || false,
+                                                                    |_| {});
+                let next = match element {
                     Some(item) => Poll::Ready(Some(item)),
                     None => {
                         if mutable_self.keep_streams_running {

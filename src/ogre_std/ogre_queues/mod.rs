@@ -1,11 +1,12 @@
 use std::pin::Pin;
 use parking_lot::RawMutex;
 
+pub mod meta_queue;
+pub mod blocking_queue;
+pub mod non_blocking_parking_lot_queue;
 pub mod atomic_queues;
 pub mod full_sync_queues;
 pub mod async_queues;
-pub mod blocking_queue;
-pub mod non_blocking_parking_lot_queue;
 
 
 /// multi-producer / multi-consumer queue
@@ -19,7 +20,7 @@ pub trait OgreQueue<SlotType> {
     fn dequeue(&self) -> Option<SlotType>;
     /// tells how many elements are awaiting on the queue
     fn len(&self) -> usize;
-    fn buffer_size(&self) -> usize;
+    fn max_size(&self) -> usize;
     fn debug_enabled(&self) -> bool;
     fn metrics_enabled(&self) -> bool;
     fn queue_name(&self) -> &str;

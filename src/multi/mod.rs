@@ -769,7 +769,7 @@ mod tests {
 
         As of Sept, 22th (after using multi-threaded tokio tests):
 
-        RUSTFLAGS="-C target-cpu=native" cargo test --release -p ogre-events performance_measurements -- --test-threads 1 --nocapture
+        RUSTFLAGS="-C target-cpu=native" cargo test --release performance_measurements -- --test-threads 1 --nocapture
 
         test mutiny::multi::tests::performance_measurements ...
         metricfull_non_futures_non_fallible_multi:     1062998.22/s -- 1048576 items processed in 986.432507ms

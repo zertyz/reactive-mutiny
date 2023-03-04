@@ -99,7 +99,7 @@ OgreQueue<SlotType> for Queue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
         self.tail.overflowing_sub(self.head).0 as usize
     }
 
-    fn buffer_size(&self) -> usize {
+    fn max_size(&self) -> usize {
         BUFFER_SIZE
     }
 
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn basic_queue_use_cases() {
         let queue = Queue::<i32, 16, false, false>::new("'basic_use_cases' test queue".to_string());
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = Queue::<u32, 102400, false, false>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]

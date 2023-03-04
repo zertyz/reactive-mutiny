@@ -145,7 +145,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         self.base_queue.len()
     }
 
-    fn buffer_size(&self) -> usize {
+    fn max_size(&self) -> usize {
         self.base_queue.buffer_size()
     }
 
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn basic_queue_use_cases() {
         let queue = NonBlockingQueue::<i32, 16, {ContainerInstruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = NonBlockingQueue::<u32, 102400, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]

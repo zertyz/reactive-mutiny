@@ -315,7 +315,7 @@ mod benchmark_queues {
         ($queue_type: ty) => {
             impl<SlotType: Copy+Unpin+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
                 fn buffer_size(&self) -> usize {
-                    OgreQueue::buffer_size(self)
+                    OgreQueue::max_size(self)
                 }
                 fn add(&self, item: SlotType) -> bool {
                     self.enqueue(item)

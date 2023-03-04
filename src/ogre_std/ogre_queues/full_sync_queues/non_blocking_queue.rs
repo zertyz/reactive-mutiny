@@ -3,6 +3,7 @@
 use super::super::super::{
     ogre_queues::{
         OgreQueue,
+        meta_queue::MetaQueue,
         full_sync_queues::full_sync_base::FullSyncBase,
     },
 };
@@ -79,7 +80,12 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
 
     #[inline(always)]
     fn dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|| {
+        self.base_queue.dequeue(|slot| {
+                                    let mut moved_value = MaybeUninit::<SlotType>::uninit();
+                                    unsafe { std::ptr::copy_nonoverlapping(slot as *const SlotType, moved_value.as_mut_ptr(), 1) }
+                                    unsafe { moved_value.assume_init() }
+                                },
+                                || {
                                 if DEBUG {
                                     trace!("### '{}' DEQUEUE: queue is empty when attempting to dequeue an element", self.queue_name);
                                 }
@@ -102,8 +108,8 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
         self.base_queue.len()
     }
 
-    fn buffer_size(&self) -> usize {
-        self.base_queue.buffer_size()
+    fn max_size(&self) -> usize {
+        self.base_queue.max_size()
     }
 
     fn debug_enabled(&self) -> bool {
@@ -133,9 +139,9 @@ impl<SlotType:          Unpin + Debug,
      const DEBUG:       bool>
 NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
 
-    /// See [FullSyncBase::peek_all()]
+    /// See [MetaQueue::peek_all()]
     #[inline(always)]
-    pub fn peek_all(&self) -> [&[SlotType];2] {
+    pub unsafe fn peek_all(&self) -> [&[SlotType];2] {
         self.base_queue.peek_all()
     }
 
@@ -152,7 +158,7 @@ mod tests {
     #[test]
     fn basic_queue_use_cases() {
         let queue = NonBlockingQueue::<i32, 16, false, false>::new("'basic_use_cases' test queue");
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
@@ -170,7 +176,7 @@ mod tests {
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = NonBlockingQueue::<u32, 102400, false, false>::new("'multiple_producers_and_consumers_all_in_and_out' test queue");
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
@@ -189,7 +195,7 @@ mod tests {
         }
         let expected_sum = (1+16)*(16/2);
         let mut observed_sum = 0;
-        for item in queue.peek_all().iter().flat_map(|&slice| slice) {
+        for item in unsafe { queue.peek_all().iter().flat_map(|&slice| slice) } {
             observed_sum += item;
         }
         assert_eq!(observed_sum, expected_sum, "peeking elements from [&[0..n], &[]] didn't work");
@@ -203,7 +209,7 @@ mod tests {
         }
         let expected_sum = (9+9+16-1)*(16/2);
         let mut observed_sum = 0;
-        for item in queue.peek_all().iter().flat_map(|&slice| slice) {
+        for item in unsafe { queue.peek_all().iter().flat_map(|&slice| slice) } {
             observed_sum += item;
         }
         assert_eq!(observed_sum, expected_sum, "peeking elements from [&[8..n], &[0..8]] didn't work");

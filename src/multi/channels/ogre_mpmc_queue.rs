@@ -1,7 +1,10 @@
 use crate::{
     uni::MultiPayload,
     ogre_std::{
-        ogre_queues::full_sync_queues::NonBlockingQueue,
+        ogre_queues::{
+            meta_queue::MetaQueue,
+            full_sync_queues::NonBlockingQueue,
+        },
         reference_counted_buffer_allocator::{ReferenceCountedBufferAllocator, ReferenceCountedNonBlockingCustomQueueAllocator},
     },
     ogre_std::ogre_queues::{
@@ -106,7 +109,11 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
                     drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the upper method `listener_stream()`, so `mutable_self` is guaranteed to be valid while the stream executes
                 },
                 move |cx| {
-                    let next = match mutable_self.queues[stream_id as usize].dequeue(|| false, |_| {}) {
+                    let slot_id = mutable_self.queues[stream_id as usize].dequeue(|item| *item,
+                                                                                             || false,
+                                                                                             |_| {});
+
+                    let next = match slot_id {
                         Some(slot_id) => {
                             // TODO optimization: Stream<Item=&...> should be returned by this function instead, to allow the optimization of avoiding
                             //      copying the value over and over again. For this to work, the stream executor should accept a `post_item()` closure,
@@ -209,7 +216,7 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
     /// rebuilds the `used_streams` list based of the current `vacant_items`
     fn sync_vacant_and_used_streams(&self) {
         lock(&self.streams_lock);
-        let mut vacant = self.vacant_streams.peek_all().concat();
+        let mut vacant = unsafe { self.vacant_streams.peek_all().concat() };
         vacant.sort_unstable();
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         let mut vacant_iter = vacant.iter();
@@ -324,7 +331,7 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
                         break
                     }
                     self.queues[*stream_id as usize].enqueue(|e| *e = slot_id,
-                                                             || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full, but it should not be ahead of the Allocator, which was not full"),
+                                                             || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full (and it shouldn't be ahead of the Allocator, which was not full)"),
                                                              |len| if len <= 1 { self.wake_stream(*stream_id) });
                 }
                 true
@@ -371,7 +378,7 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
     pub async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
 
         // true if `stream_id` is not running
-        let is_vacant = || self.vacant_streams.peek_all().iter()
+        let is_vacant = || unsafe { self.vacant_streams.peek_all().iter() }
             .flat_map(|&slice| slice)
             .find(|&vacant_stream_id| *vacant_stream_id == stream_id)
             .is_some();

@@ -225,7 +225,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         self.base_queue.len()
     }
 
-    fn buffer_size(&self) -> usize {
+    fn max_size(&self) -> usize {
         self.base_queue.buffer_size()
     }
 
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn basic_queue_use_cases() {
         let queue = BlockingQueue::<i32, 16, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::Blocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = BlockingQueue::<u32, 102400, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::Blocking, queue.buffer_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
