@@ -44,7 +44,7 @@ If you're familiar with SmallRye's Mutiny, here are some key differences:
   - No Multi/Uni pipeline conversion and the corresponding plethora of functions -- they are simply not needed
   - No timeouts are set in the pipeline -- they are a matter for the executor, which will simply cancel events (that are `Future`s) that takes longer than the configured executor's maximum
     (SmallRye's Uni timeouts are attainable using Tokio's "futures" timeouts, just like one would do for any async function call)
-  - Incredibly faster: Rust's compiler makes your pipelines (and most of this library) behave as a zero-cost abstraction, when compiled in Release mode
+  - Incredibly faster: Rust's compiler makes your pipelines (and most of this library) behave as a zero-cost abstraction (when compiled in Release mode). Const generics play a great hole for such optimizations and zero-cost features as well.
   - To fully get the original Mutiny's behavior, you'll have to use:
     - Rust's `reactive-mutiny` (for reactive async event-processing)
     - `Tokio` (to get responses from Futures and to specify timeouts in async calls, async sleeps... saving a ton of APIs)

@@ -5,6 +5,7 @@ pub mod multi;
 pub mod stream_executor;
 
 mod types;
+mod instruments;
 mod incremental_averages;
 mod stream;
 

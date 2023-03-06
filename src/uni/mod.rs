@@ -33,14 +33,19 @@ mod channels;
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni](self) module
 #[cfg(any(test, feature = "dox"))]
 mod tests {
-    use std::future::Future;
     use super::*;
+    use super::super::{
+        types::*,
+        instruments::Instruments,
+    };
+
     use std::{
         sync::{
             Arc,
             atomic::{AtomicBool, AtomicU32, Ordering::Relaxed},
         },
-        time::Duration
+        time::Duration,
+        future::Future
     };
     use futures::{
         stream::{self, Stream, StreamExt}
@@ -57,7 +62,7 @@ mod tests {
                 .inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
                 .inspect(|message| println!("ZETA: Received a message: '{}'", message))
         }
-        let uni: Arc<Uni<&str, 1024, 1, true, true>> = UniBuilder::new()
+        let uni: Arc<Uni<&str, 1024, 1>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor("doc_test() Event", on_event);
         let producer = |item| uni.try_send(item);
@@ -76,7 +81,7 @@ mod tests {
         let observed_sum = Arc::new(AtomicU32::new(0));
 
         // this is the uni to work with our local variable
-        let uni: Arc<Uni<u32, 1024, 1, true, true>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 1024, 1>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor("simple_pipeline() Event", |stream: MutinyStream<u32>| {
                     let observed_sum = Arc::clone(&observed_sum);
@@ -134,7 +139,7 @@ mod tests {
                 // .buffer_unordered(4)
         };
 
-        let uni: Arc<Uni<u32, 1024, 1, true, true>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 1024, 1>> = UniBuilder::new()
             .concurrency_limit(PARTS.len() as u32)
             .futures_timeout(Duration::from_secs(2))
             .on_stream_close(|_| async {})
@@ -160,7 +165,7 @@ mod tests {
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
         // counters but no average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
-        let uni: Arc<Uni<String, 1024, 1, true, true>> = UniBuilder::new()
+        let uni: Arc<Uni<String, 1024, 1>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor(event_name, |stream| stream);
         let producer = |item| uni.try_send(item);
@@ -179,7 +184,7 @@ mod tests {
         // asserts spawn_executor() register statistics appropriately:
         // counters but no average futures resolution time measurements
         let event_name = "future & fallible event";
-        let uni: Arc<Uni<String, 1024, 1, true, true>> = UniBuilder::new()
+        let uni: Arc<Uni<String, 1024, 1>> = UniBuilder::new()
             .futures_timeout(Duration::from_millis(150))
             .on_stream_close(|_| async {})
             .spawn_executor(event_name, |stream: MutinyStream<String>| {
@@ -235,7 +240,7 @@ mod tests {
                 six_fire_count_ref.fetch_add(1, Relaxed);
             })
         };
-        let six_uni: Arc<Uni<(), 1024, 1, true, true>> = UniBuilder::new()
+        let six_uni: Arc<Uni<(), 1024, 1>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor("SIX event", on_six_event);
         // assures we'll close SIX only once
@@ -284,7 +289,7 @@ mod tests {
                 six_closer_for_two().await;
             }
         };
-        let two_uni: Arc<Uni<u32, 1024, 1, true, true>> = UniBuilder::new()
+        let two_uni: Arc<Uni<u32, 1024, 1, {Instruments::LogsWithMetrics.into()}>> = UniBuilder::new()
             .on_stream_close(on_two_close)
             .spawn_non_futures_non_fallible_executor("TWO event", on_two_event);
         let two_producer = |item| two_uni.try_send(item);
@@ -322,7 +327,7 @@ mod tests {
                 six_closer_for_four().await;
             }
         };
-        let four_uni: Arc<Uni<u32, 1024, 1, true, true>> = UniBuilder::new()
+        let four_uni: Arc<Uni<u32, 1024, 1, {Instruments::LogsWithMetrics.into()}>> = UniBuilder::new()
             .on_stream_close(on_four_close)
             .spawn_non_futures_non_fallible_executor("FOUR event", on_four_event);
         let four_producer = |item| four_uni.try_send(item);
@@ -396,7 +401,7 @@ mod tests {
                 })
         }
         let on_err_count_clone = Arc::clone(&on_err_count);
-        let uni: Arc<Uni<u32, 1024, 1, true, true>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 1024, 1>> = UniBuilder::new()
             .futures_timeout(Duration::from_millis(100))
             .on_stream_close(|_| async {})
             .spawn_executor("fallible event",
@@ -432,9 +437,8 @@ mod tests {
         /// measure how long it takes to stream a certain number of elements through the given `uni`
         async fn profile_uni<const BUFFER_SIZE: usize,
                              const MAX_STREAMS: usize,
-                             const LOG:         bool,
-                             const METRICS:     bool>
-                            (uni:            Arc<Uni<u32, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS>>,
+                             const INSTRUMENTS: usize>
+                            (uni:            Arc<Uni<u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>,
                              profiling_name: &str,
                              count:          u32) {
             let start = Instant::now();
@@ -460,26 +464,26 @@ mod tests {
         println!();
 
         let profiling_name = "metricfull_non_futures_non_fallible_uni:    ";
-        let uni: Arc<Uni<u32, 10240, 1, false, true>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor(profiling_name, |stream: MutinyStream<u32>| stream);
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_uni:    ";
-        let uni: Arc<Uni<u32, 10240, 1, false, false>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor(profiling_name, |stream: MutinyStream<u32>| stream);
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_uni:";
-        let uni: Arc<Uni<u32, 10240, 1, false, false>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .concurrency_limit(12)
             .on_stream_close(|_| async {})
             .spawn_non_futures_non_fallible_executor(profiling_name, |stream: MutinyStream<u32>| stream);
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_uni:            ";
-        let uni: Arc<Uni<u32, 10240, 1, false, true>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
                             |stream: MutinyStream<u32>| {
@@ -491,7 +495,7 @@ mod tests {
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_futures_fallible_uni:            ";
-        let uni: Arc<Uni<u32, 10240, 1, false, false>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
                             |stream: MutinyStream<u32>| {
@@ -503,7 +507,7 @@ mod tests {
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "timeoutable_metricfull_futures_fallible_uni:";
-        let uni: Arc<Uni<u32, 10240, 1, false, true>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = UniBuilder::new()
             .futures_timeout(Duration::from_millis(100))
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
@@ -516,7 +520,7 @@ mod tests {
         profile_uni(uni, profiling_name, 768*FACTOR).await;
 
         let profiling_name = "timeoutable_metricless_futures_fallible_uni:";
-        let uni: Arc<Uni<u32, 10240, 1, false, false>> = UniBuilder::new()
+        let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .futures_timeout(Duration::from_millis(100))
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,

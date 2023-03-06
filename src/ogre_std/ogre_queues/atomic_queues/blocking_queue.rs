@@ -1,7 +1,7 @@
 //! See [BlockingQueue]
 
 use super::super::super::{
-    container_instruments::ContainerInstruments,
+    instruments::Instruments,
     ogre_queues::{
         OgreQueue,
         meta_queue::MetaQueue,
@@ -61,25 +61,25 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     /// Notice, however, `true` may also be returned if the mutex is being tainted elsewhere ([interrupt()], for example)
     #[inline(always)]
     fn report_empty(&self) -> bool {
-        if ContainerInstruments::from(INSTRUMENTS).metrics() {
+        if Instruments::from(INSTRUMENTS).metrics() {
             self.queue_empty_count.fetch_add(1, Relaxed);
         }
-        if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+        if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
             self.metrics_diagnostics();
         }
         self.empty_guard.try_lock();
         // lock 'empty_guard' with a timeout (if applicable)
         if LOCK_TIMEOUT_MILLIS == 0 {
-            if ContainerInstruments::from(INSTRUMENTS).tracing() {
+            if Instruments::from(INSTRUMENTS).tracing() {
                 trace!("### QUEUE '{}' is empty. Waiting for a new element (indefinitely) so DEQUEUE may proceed...", self.queue_name);
             }
             self.empty_guard.lock();
         } else {
-            if ContainerInstruments::from(INSTRUMENTS).tracing() {
+            if Instruments::from(INSTRUMENTS).tracing() {
                 trace!("### QUEUE '{}' is empty. Waiting for a new element (for up to {}ms) so DEQUEUE may proceed...", self.queue_name, LOCK_TIMEOUT_MILLIS);
             }
             if !self.empty_guard.try_lock_for(Self::TRY_LOCK_DURATION) {
-                if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("Blocking QUEUE '{}', said to be empty, waited too much for an element to be available so it could be dequeued. Bailing out after waiting for ~{}ms", self.queue_name, LOCK_TIMEOUT_MILLIS);
                 }
                 return false;
@@ -92,7 +92,7 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     #[inline(always)]
     fn report_no_longer_empty(&self) {
         if !self.empty_guard.try_lock() {
-            if ContainerInstruments::from(INSTRUMENTS).tracing() {
+            if Instruments::from(INSTRUMENTS).tracing() {
                 trace!("Blocking QUEUE '{}' is said to have just come out of the EMPTY state...", self.queue_name);
             }
             unsafe { self.empty_guard.unlock() };
@@ -104,25 +104,25 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     /// Notice, however, `true` may also be returned if the mutex is being tainted elsewhere ([interrupt()], for example)
     #[inline(always)]
     fn report_full(&self) -> bool {
-        if ContainerInstruments::from(INSTRUMENTS).metrics() {
+        if Instruments::from(INSTRUMENTS).metrics() {
             self.queue_full_count.fetch_add(1, Relaxed);
         }
-        if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+        if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
             self.metrics_diagnostics();
         }
         self.full_guard.try_lock();
         // lock 'full_guard' with a timeout (if applicable)
         if LOCK_TIMEOUT_MILLIS == 0 {
-            if ContainerInstruments::from(INSTRUMENTS).tracing() {
+            if Instruments::from(INSTRUMENTS).tracing() {
                 trace!("### QUEUE '{}' is full. Waiting for a free slot (indefinitely) so ENQUEUE may proceed...", self.queue_name);
             }
             self.full_guard.lock();
         } else {
-            if ContainerInstruments::from(INSTRUMENTS).tracing() {
+            if Instruments::from(INSTRUMENTS).tracing() {
                 trace!("### QUEUE '{}' is full. Waiting for a free slot (for up to {}ms) so ENQUEUE may proceed...", self.queue_name, LOCK_TIMEOUT_MILLIS);
             }
             if !self.full_guard.try_lock_for(Self::TRY_LOCK_DURATION) {
-                if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("Blocking QUEUE '{}', said to be full, waited too much for a free slot to enqueue a new element. Bailing out after waiting for ~{}ms", self.queue_name, LOCK_TIMEOUT_MILLIS);
                 }
                 return false;
@@ -135,7 +135,7 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     #[inline(always)]
     fn report_no_longer_full(&self) {
         if !self.full_guard.try_lock() {
-            if ContainerInstruments::from(INSTRUMENTS).tracing() {
+            if Instruments::from(INSTRUMENTS).tracing() {
                 trace!("Blocking QUEUE '{}' is said to have just come out of the FULL state...", self.queue_name);
             }
             unsafe { self.full_guard.unlock() }
@@ -186,13 +186,13 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     fn enqueue(&self, element: SlotType) -> bool {
         self.base_queue.enqueue(|slot| {
                                     *slot = element;
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' enqueued element '{:?}'", self.queue_name, element);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                 },
@@ -207,13 +207,13 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         self.base_queue.dequeue(|slot| *slot,
                                 || self.report_empty(),
                                 |len| {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' dequeued an element", self.queue_name);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     if len == BUFFER_SIZE as i32 - 1 {
@@ -231,11 +231,11 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     fn debug_enabled(&self) -> bool {
-        ContainerInstruments::from(INSTRUMENTS).tracing()
+        Instruments::from(INSTRUMENTS).tracing()
     }
 
     fn metrics_enabled(&self) -> bool {
-        ContainerInstruments::from(INSTRUMENTS).metrics()
+        Instruments::from(INSTRUMENTS).metrics()
     }
 
     fn queue_name(&self) -> &str {
@@ -269,24 +269,24 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     fn try_enqueue(&self, element: SlotType) -> bool {
         self.base_queue.enqueue(|slot| {
                                     *slot = element;
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                  },
                                 || {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' is full when enqueueing element '{:?}' in non-blocking mode", self.queue_name, element);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.queue_full_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     false
@@ -299,25 +299,25 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     fn try_dequeue(&self) -> Option<SlotType> {
         self.base_queue.dequeue(|slot| *slot,
                                 || {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' is empty when dequeueing an element in non-blocking mode", self.queue_name);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.queue_empty_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     false
                                 },
                                 |len| {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' dequeued an element in non-blocking mode", self.queue_name);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     if len == BUFFER_SIZE as i32 - 1 {
@@ -337,31 +337,31 @@ mod tests {
 
     #[test]
     fn basic_queue_use_cases() {
-        let queue = BlockingQueue::<i32, 16, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
+        let queue = BlockingQueue::<i32, 16, 1000, {Instruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
         test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
     fn single_producer_multiple_consumers() {
-        let queue = BlockingQueue::<u32, 65536, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'single_producer_multiple_consumers' test queue".to_string());
+        let queue = BlockingQueue::<u32, 65536, 1000, {Instruments::NoInstruments.into()}>::new("'single_producer_multiple_consumers' test queue".to_string());
         test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     fn multiple_producers_single_consumer() {
-        let queue = BlockingQueue::<u32, 65536, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_single_consumer' test queue".to_string());
+        let queue = BlockingQueue::<u32, 65536, 1000, {Instruments::NoInstruments.into()}>::new("'multiple_producers_single_consumer' test queue".to_string());
         test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = BlockingQueue::<u32, 102400, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
+        let queue = BlockingQueue::<u32, 102400, 1000, {Instruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = BlockingQueue::<u32, 128, 1000, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
+        let queue = BlockingQueue::<u32, 128, 1000, {Instruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
     }
 
@@ -369,7 +369,7 @@ mod tests {
     fn test_blocking() {
         const TIMEOUT_MILLIS: usize = 100;
         const QUEUE_SIZE:     usize = 16;
-        let queue = BlockingQueue::<usize, QUEUE_SIZE, TIMEOUT_MILLIS, {ContainerInstruments::NoInstruments.into()}>::new("'test_blocking' queue".to_string());
+        let queue = BlockingQueue::<usize, QUEUE_SIZE, TIMEOUT_MILLIS, {Instruments::NoInstruments.into()}>::new("'test_blocking' queue".to_string());
 
         test_commons::blocking_behavior(QUEUE_SIZE,
                                         |e| queue.enqueue(e),

@@ -2,7 +2,10 @@
 //! For more, see [super]
 
 use super::{
-    super::stream_executor::StreamExecutor,
+    super::{
+        instruments::Instruments,
+        stream_executor::StreamExecutor,
+    },
     uni::{Uni},
 };
 use std::{
@@ -18,38 +21,36 @@ use crate::types::*;
 
 
 pub struct UniBuilder<InType:              Unpin + Send + Sync + 'static,
-                      OnStreamCloseFnType: Fn(Arc<StreamExecutor<LOG, METRICS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                      OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                       CloseVoidAsyncType:  Future<Output=()> + Send + 'static,
                       const BUFFER_SIZE:   usize = 1024,
                       const MAX_STREAMS:   usize = 1,
-                      const LOG:           bool  = true,
-                      const METRICS:       bool  = true> {
+                      const INSTRUMENTS:   usize = {Instruments::LogsWithMetrics.into()}> {
 
     pub on_stream_close_callback: Option<Arc<OnStreamCloseFnType>>,
     pub concurrency_limit:        u32,
     /// if Some, will cause the pipeline to be wrapped with [tokio::time::timeout] so that an Err will be produced whenever the pipeline takes too much time to process
     pub futures_timeout:          Duration,
-    /// bitmask of [MultiInstruments]
-    pub instruments:              u32,
+    /// Instrumentation this instance gathers / produces
+    pub instruments:              Instruments,
     // phantoms
-    _in_type:          PhantomData<&'static InType>,
+    _in_type:                     PhantomData<&'static InType>,
 
 }
 impl<InType:              Unpin + Send + Sync + Debug + 'static,
-     OnStreamCloseFnType: Fn(Arc<StreamExecutor<LOG, METRICS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
+     OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
      CloseVoidAsyncType:  Future<Output=()> + Send + 'static,
      const BUFFER_SIZE:   usize,
      const MAX_STREAMS:   usize,
-     const LOG:           bool,
-     const METRICS:       bool>
-UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
+     const INSTRUMENTS:   usize>
+UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub fn new() -> Self {
         Self {
             on_stream_close_callback: None,
             concurrency_limit:        1,
             futures_timeout:          Duration::ZERO,
-            instruments:              0,
+            instruments:              Instruments::from(INSTRUMENTS),
             _in_type:                 Default::default(),
         }
     }
@@ -69,11 +70,6 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
         self
     }
 
-    pub fn instrument_with(mut self, instruments: &[MultiInstruments]) -> Self {
-        self.instruments = instruments.iter().fold(0, |acc, instrument| acc & (*instrument as u32));
-        self
-    }
-
     pub fn spawn_executor<IntoString:             Into<String>,
                           OutItemType:            Send + Debug,
                           PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)         -> OutStreamType,
@@ -87,7 +83,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
                           pipeline_builder:          PipelineBuilderFnType,
                           on_err_callback:           OnErrFnType)
 
-                         -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS>> {
+                         -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
         let executor = StreamExecutor::with_futures_timeout(stream_name.into(), self.futures_timeout);
         let handle = Uni::new(Arc::clone(&executor));
@@ -121,7 +117,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
                                                    stream_name:              IntoString,
                                                    pipeline_builder:         PipelineBuilderFnType)
 
-                                                  -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS>> {
+                                                  -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
         let executor = StreamExecutor::new(stream_name.into());
         let handle = Uni::new(Arc::clone(&executor));

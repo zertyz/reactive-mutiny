@@ -15,17 +15,6 @@ use std::{
 use futures::stream::Stream;
 
 
-#[derive(Copy, Clone, Debug)]
-pub enum MultiInstruments {
-    /// count work done: processed events, untreated_failures
-    Counters   = 1,
-    /// avg_buffer_depth, max_depth
-    Saturation = 2,
-    /// time measurements (min, max, average) for good & failed events
-    Profiling  = 4,
-}
-
-
 pub struct MutinyStream<ItemType> {
     pub stream: Box<dyn Stream<Item=ItemType> + Send>,
 }

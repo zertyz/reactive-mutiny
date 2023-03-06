@@ -7,7 +7,7 @@ use super::super::super::{
         meta_queue::MetaQueue,
         atomic_queues::atomic_meta::AtomicMeta,
     },
-    container_instruments::ContainerInstruments,
+    instruments::Instruments,
 };
 use std::{
     pin::Pin,
@@ -85,24 +85,24 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     fn enqueue(&self, element: SlotType) -> bool {
         self.base_queue.enqueue(|slot| {
                                     *slot = element;
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                  },
                                 || {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' ENQUEUE: queue is full when attempting to enqueue element '{:?}'", self.queue_name, element);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.queue_full_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     // TODO 20221003: the current `atomic_base.rs` algorithm has some kind of bug that causes the enqueuer_tail to be greater than buffer
@@ -118,25 +118,25 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     fn dequeue(&self) -> Option<SlotType> {
         self.base_queue.dequeue(|slot| *slot,
                        || {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' DEQUEUE: queue is empty when attempting to dequeue an element", self.queue_name);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.queue_empty_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                     false
                                 },
                                 |_| {
-                                    if ContainerInstruments::from(INSTRUMENTS).tracing() {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' DEQUEUE: dequeued an element", self.queue_name);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics() {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
-                                    if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
                                 })
@@ -151,11 +151,11 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     }
 
     fn debug_enabled(&self) -> bool {
-        ContainerInstruments::from(INSTRUMENTS).tracing()
+        Instruments::from(INSTRUMENTS).tracing()
     }
 
     fn metrics_enabled(&self) -> bool {
-        ContainerInstruments::from(INSTRUMENTS).metrics()
+        Instruments::from(INSTRUMENTS).metrics()
     }
 
     fn queue_name(&self) -> &str {
@@ -181,31 +181,31 @@ mod tests {
 
     #[test]
     fn basic_queue_use_cases() {
-        let queue = NonBlockingQueue::<i32, 16, {ContainerInstruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
+        let queue = NonBlockingQueue::<i32, 16, {Instruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
         test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
     fn single_producer_multiple_consumers() {
-        let queue = NonBlockingQueue::<u32, 65536, {ContainerInstruments::NoInstruments.into()}>::new("'single_producer_multiple_consumers' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("'single_producer_multiple_consumers' test queue".to_string());
         test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     fn multiple_producers_single_consumer() {
-        let queue = NonBlockingQueue::<u32, 65536, {ContainerInstruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_single_consumer' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_single_consumer' test queue".to_string());
         test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 102400, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 102400, {Instruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 128, {ContainerInstruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 128, {Instruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
     }
 }

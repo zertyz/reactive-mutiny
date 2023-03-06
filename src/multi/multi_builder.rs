@@ -3,8 +3,11 @@
 
 use super::{
     multi::{Multi},
-    super::types::*,
-    super::stream_executor::StreamExecutor,
+    super::{
+        instruments::Instruments,
+        stream_executor::StreamExecutor,
+        types::*,
+    },
 };
 use std::{
     fmt::Debug,
@@ -22,20 +25,19 @@ use futures::Stream;
 pub struct MultiBuilder<InType:              Clone + Unpin + Send + Sync + Debug,
                         const BUFFER_SIZE:   usize = 1024,
                         const MAX_STREAMS:   usize = 1,
-                        const LOG:           bool  = true,
-                        const METRICS:       bool  = true> {
+                        const INSTRUMENTS:   usize = {Instruments::LogsWithMetrics.into()}> {
 
-    pub handle:                   Arc<Multi<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS>>,
+    pub handle:                   Arc<Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>,
 
 }
 impl<'a, InType:              Clone + Unpin + Send + Sync + Debug + 'static,
          const BUFFER_SIZE:   usize,
          const MAX_STREAMS:   usize,
-         const LOG:           bool,
-         const METRICS:       bool>
-MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
+         const INSTRUMENTS:   usize>
+MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
-    pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Arc<Self> {
+    pub fn new<IntoString: Into<String>>
+              (multi_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             handle:                   Multi::new(multi_name),
         })
@@ -43,12 +45,12 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
 
     pub async fn spawn_executor<IntoString:             Into<String>,
                                 OutItemType:            Send + Debug,
-                                PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)                  -> OutStreamType,
+                                PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)                 -> OutStreamType,
                                 OutStreamType:          Stream<Item=OutType> + Send + 'static,
                                 OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
                                 OnErrFnType:            Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
                                 ErrVoidAsyncType:       Future<Output=()> + Send + 'static,
-                                OnCloseFnType:          Fn(Arc<StreamExecutor<LOG, METRICS>>)        -> CloseVoidAsyncType + Send + Sync + 'static,
+                                OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)         -> CloseVoidAsyncType + Send + Sync + 'static,
                                 CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
                                (self:                      &'a Arc<Self>,
@@ -77,9 +79,9 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
 
     pub async fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                          OutItemType:            Send + Debug,
-                                                         PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)           -> OutStreamType,
+                                                         PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)          -> OutStreamType,
                                                          OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
-                                                         OnCloseFnType:          Fn(Arc<StreamExecutor<LOG, METRICS>>)  -> CloseVoidAsyncType + Send + Sync + 'static,
+                                                         OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)  -> CloseVoidAsyncType + Send + Sync + 'static,
                                                          CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
                                                         (self:                     &'a Arc<Self>,
@@ -111,7 +113,7 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
         self.handle.flush_and_cancel_executor(pipeline_name, timeout).await
     }
 
-    pub fn handle(self: &Arc<Self>) -> Arc<Multi<InType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS>> {
+    pub fn handle(self: &Arc<Self>) -> Arc<Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
         Arc::clone(&self.handle)
     }
 

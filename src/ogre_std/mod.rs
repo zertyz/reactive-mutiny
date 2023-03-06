@@ -5,7 +5,7 @@ pub mod ogre_queues;
 pub mod ogre_stacks;
 
 mod benchmarks;
-mod container_instruments;
+mod instruments;
 
 #[cfg(any(test, feature = "dox"))]
 mod test_commons;

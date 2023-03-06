@@ -1,12 +1,13 @@
 //! See [super]
 
-use indexmap::IndexMap;
+use super::super::instruments::Instruments;
 use std::{
     sync::Arc,
+    fmt::Debug,
+    pin::Pin,
+    time::Duration,
 };
-use std::fmt::Debug;
-use std::pin::Pin;
-use std::time::Duration;
+use indexmap::IndexMap;
 use futures::{Stream};
 use tokio::{
     sync::{RwLock},
@@ -24,19 +25,17 @@ type MultiChannelType<ItemType,
 pub struct Multi<ItemType:          Clone + Unpin + Send + Sync + Debug,
                  const BUFFER_SIZE: usize,
                  const MAX_STREAMS: usize,
-                 const LOG:         bool,
-                 const METRICS:     bool> {
+                 const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
     pub stream_name:    String,
     pub channel:        Arc<Pin<Box<MultiChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>>>,
-    pub executor_infos: RwLock<IndexMap<String, ExecutorInfo<LOG, METRICS>>>,
+    pub executor_infos: RwLock<IndexMap<String, ExecutorInfo<INSTRUMENTS>>>,
 }
 
 impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize,
-     const LOG:         bool,
-     const METRICS:     bool>
-Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
+     const INSTRUMENTS: usize>
+Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub fn new<IntoString: Into<String>>(stream_name: IntoString) -> Arc<Self> {
         Arc::new(Multi {
@@ -54,7 +53,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
         self.channel.listener_stream()
     }
 
-    pub async fn add_executor(&self, stream_executor: Arc<StreamExecutor<LOG, METRICS>>, stream_id: u32) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn add_executor(&self, stream_executor: Arc<StreamExecutor<INSTRUMENTS>>, stream_id: u32) -> Result<(), Box<dyn std::error::Error>> {
         let mut internal_multis = self.executor_infos.write().await;
         if internal_multis.contains_key(&stream_executor.executor_name()) {
             Err(Box::from(format!("Can't add a new pipeline to a Multi: an executor with the same name is already present: '{}'", stream_executor.executor_name())))
@@ -116,9 +115,8 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
 
 }
 
-pub struct ExecutorInfo<const LOG:     bool,
-                        const METRICS: bool> {
-    pub stream_executor: Arc<StreamExecutor<LOG, METRICS>>,
+pub struct ExecutorInfo<const INSTRUMENTS: usize> {
+    pub stream_executor: Arc<StreamExecutor<INSTRUMENTS>>,
     pub stream_id: u32,
 }
 

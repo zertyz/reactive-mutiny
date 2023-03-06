@@ -1,4 +1,4 @@
-//! Contains the logic for executing [Stream] pipelines on their own Tokio tasks, gathering stats,
+//! Contains the logic for executing [Stream] pipelines on their own Tokio tasks with zero-cost [Instruments] options for gathering stats,
 //! logging and so on.\
 //! Four executors are provided to attend to different Stream output item types:
 //!   1. Items that are non-futures & non-fallible. For instance, `Stream::Item = String`
@@ -18,6 +18,7 @@
 
 
 use super::{
+    instruments::Instruments,
     incremental_averages::AtomicIncrementalAverage64,
 };
 use std::{
@@ -47,7 +48,8 @@ use log::{trace,info,warn,error};
 use minstant::Instant;
 
 
-pub struct StreamExecutor<const LOG: bool, const METRICS: bool> {
+/// See [Instruments]
+pub struct StreamExecutor<const INSTRUMENTS: usize> {
     executor_name:                 String,
     futures_timeout:               Duration,
     creation_time:                 Instant,
@@ -85,7 +87,7 @@ pub struct StreamExecutor<const LOG: bool, const METRICS: bool> {
 macro_rules! on_executor_start {
     ($self: expr, $future: expr, $fallible: expr, $futures_timeout: expr) => {
         $self.register_execution_start();
-        if LOG {
+        if Instruments::from(INSTRUMENTS).logging() {
             info!("✓✓✓✓ Stream Executor '{}' started: {}Futures{} / {}Fallible Items & {}Metrics",
                   $self.executor_name,
                   if $future {""} else {"Non-"},
@@ -95,7 +97,7 @@ macro_rules! on_executor_start {
                       "".to_string()
                   },
                   if $fallible {""} else {"Non-"},
-                  if !METRICS {"NO "} else {""});
+                  if !Instruments::from(INSTRUMENTS).metrics() {"NO "} else {""});
         }
     }
 }
@@ -105,10 +107,10 @@ macro_rules! on_executor_start {
 ///   - `item`: the just yielded `Ok` item
 macro_rules! on_non_timed_ok_item {
     ($self: expr, $item: expr) => {
-        if METRICS {
+        if Instruments::from(INSTRUMENTS).cheap_profiling() {
             $self.ok_events_avg_future_duration.inc(-1.0);  // since there is no time measurement (item is non-future or METRICS=false), the convention is to use -1.0
         }
-        if LOG {
+        if Instruments::from(INSTRUMENTS).tracing() {
             trace!("✓✓✓✓ Executor '{}' yielded '{:?}'", $self.executor_name, $item);
         }
     }
@@ -120,12 +122,12 @@ macro_rules! on_non_timed_ok_item {
 ///   - `elapsed`: the `Duration` it took to resolve the this item's `Future`
 macro_rules! on_timed_ok_item {
     ($self: expr, $item: expr, $elapsed: expr) => {
-        if METRICS {
+        if Instruments::from(INSTRUMENTS).cheap_profiling() {
             $self.ok_events_avg_future_duration.inc($elapsed.as_secs_f32());
         } else {
-            panic!("\nThis macro can only be used if METRICS=true -- otherwise you should use `on_non_timed_ok_item!(...)` instead");
+            panic!("\nThis macro can only be used if at least one of the Instruments' PROFILING are enabled -- otherwise you should use `on_non_timed_ok_item!(...)` instead");
         }
-        if LOG {
+        if Instruments::from(INSTRUMENTS).tracing() {
             trace!("✓✓✓✓ Executor '{}' yielded '{:?}' in {:?}", $self.executor_name, $item, $elapsed);
         }
     }
@@ -136,10 +138,10 @@ macro_rules! on_timed_ok_item {
 ///   - `err`: the just yielded `Err` item
 macro_rules! on_non_timed_err_item {
     ($self: expr, $err: expr) => {
-        if METRICS {
+        if Instruments::from(INSTRUMENTS).cheap_profiling() {
             $self.failed_events_avg_future_duration.inc(-1.0);  // since there is no time measurement (item is non-future or METRICS=false), the convention is to use -1.0
         }
-        if LOG {
+        if Instruments::from(INSTRUMENTS).logging() {
             error!("✗✗✗✗ Executor '{}' yielded ERROR '{:?}'", $self.executor_name, $err);
         }
     }
@@ -151,12 +153,12 @@ macro_rules! on_non_timed_err_item {
 ///   - `elapsed`: the `Duration` it took to resolve the this item's `Future`
 macro_rules! on_timed_err_item {
     ($self: expr, $err: expr, $elapsed: expr) => {
-        if METRICS {
+        if Instruments::from(INSTRUMENTS).cheap_profiling() {
             $self.failed_events_avg_future_duration.inc($elapsed.as_secs_f32());
         } else {
-            panic!("This macro can only be used if METRICS=true -- otherwise you should use `on_non_timed_err_item!(...)` instead");
+            panic!("This macro can only be used if at least one of the Instruments' PROFILING are enabled -- otherwise you should use `on_non_timed_err_item!(...)` instead");
         }
-        if LOG {
+        if Instruments::from(INSTRUMENTS).logging() {
             error!("✗✗✗✗ Executor '{}' yielded ERROR '{:?}' in {:?}", $self.executor_name, $err, $elapsed);
         }
     }
@@ -176,7 +178,7 @@ macro_rules! on_executor_end {
         let (failed_counter, failed_avg_seconds) = $self.failed_events_avg_future_duration.probe();
         let execution_nanos = $self.execution_finish_delta_nanos.load(Relaxed) - $self.execution_start_delta_nanos.load(Relaxed);
         let execution_secs: f64 = Duration::from_nanos(execution_nanos).as_secs_f64() + f64::MIN_POSITIVE /* dirty way to avoid silly /0 divisions */;
-        if LOG && METRICS {
+        if Instruments::from(INSTRUMENTS).logging() && Instruments::from(INSTRUMENTS).cheap_profiling() {
             let ok_stats = if $future {
                                format!("ok: {} events; avg {:?} - {:.5}/sec", ok_counter, Duration::from_secs_f32(ok_avg_seconds), ok_counter as f64 / execution_secs)
                            } else {
@@ -201,7 +203,7 @@ macro_rules! on_executor_end {
                   ok_stats,
                   timed_out_stats,
                   failed_stats);
-        } else if LOG {
+        } else if Instruments::from(INSTRUMENTS).logging() {
             warn!("✓✓✓✓ {} '{}' ended after running for {:?} -- metrics were disabled",
                   if stream_ended {"Stream"} else {"Executor"},
                   $self.executor_name,
@@ -211,7 +213,7 @@ macro_rules! on_executor_end {
 }
 
 
-impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
+impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
 
     /// initializes an executor that should not timeout any futures returned by the `Stream`
     pub fn new<IntoString: Into<String>>(executor_name: IntoString) -> Arc<Self> {
@@ -233,13 +235,6 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
         })
     }
 
-    pub fn log_enabled(self: &Arc<Self>) -> bool {
-        LOG
-    }
-
-    pub fn metrics_enabled(self: &Arc<Self>) -> bool {
-        METRICS
-    }
 
     pub fn executor_name(self: &Arc<Self>) -> String {
         self.executor_name.clone()
@@ -277,7 +272,7 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                          (self:                  Arc<Self>,
                           concurrency_limit:     u32,
                           on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
-                          stream_ended_callback: impl Fn(Arc<StreamExecutor<LOG, METRICS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                          stream_ended_callback: impl Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                           stream:                impl Stream<Item=FutureItemType> + 'static + Send) {
         let cloned_self = Arc::clone(&self);
         let on_err_callback = Arc::new(on_err_callback);
@@ -294,12 +289,12 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                         let cloned_self = Arc::clone(&cloned_self);
                         let on_err_callback = Arc::clone(&on_err_callback);
                         async move {
-                            if METRICS {
+                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                 start = Instant::now();
                             }
                             match future_element.await {
                                 Ok(yielded_item) => {
-                                    if METRICS {
+                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                         let elapsed = start.elapsed();
                                         on_timed_ok_item!(cloned_self, yielded_item, elapsed);
                                     } else {
@@ -307,7 +302,7 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                                     }
                                 },
                                 Err(err) => {
-                                    if METRICS {
+                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                         let elapsed = start.elapsed();
                                         on_timed_err_item!(cloned_self, err, elapsed);
                                     } else {
@@ -337,13 +332,13 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                         let cloned_self = Arc::clone(&cloned_self);
                         let on_err_callback = Arc::clone(&on_err_callback);
                         async move {
-                            if METRICS {
+                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                 start = Instant::now();
                             }
                             match timeout(cloned_self.futures_timeout, future_element).await {
                                 Ok(non_timed_out_result) => match non_timed_out_result {
                                                                                           Ok(yielded_item) => {
-                                                                                              if METRICS {
+                                                                                              if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                                                                                   let elapsed = start.elapsed();
                                                                                                   on_timed_ok_item!(cloned_self, yielded_item, elapsed);
                                                                                               } else {
@@ -351,7 +346,7 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                                                                                               }
                                                                                           },
                                                                                           Err(err) => {
-                                                                                              if METRICS {
+                                                                                              if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                                                                                   let elapsed = start.elapsed();
                                                                                                   on_timed_err_item!(cloned_self, err, elapsed);
                                                                                               } else {
@@ -361,13 +356,13 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                                                                                           },
                                                                                       },
                                 Err(_time_out_err) => {
-                                    if METRICS {
+                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
                                         let elapsed = start.elapsed();
                                         cloned_self.timed_out_events_avg_future_duration.inc(elapsed.as_secs_f32());
-                                        if LOG {
+                                        if Instruments::from(INSTRUMENTS).logging() {
                                             error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT after {:?}", cloned_self.executor_name, elapsed);
                                         }
-                                    } else if LOG {
+                                    } else if Instruments::from(INSTRUMENTS).logging() {
                                         error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT", cloned_self.executor_name);
                                     }
                                 }
@@ -393,7 +388,7 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                                       VoidAsyncType: Future<Output=()> + Send + 'static>
                                      (self:                      Arc<Self>,
                                       concurrency_limit:         u32,
-                                      consumption_done_reporter: impl Fn(Arc<StreamExecutor<LOG, METRICS>>) -> VoidAsyncType + Send + Sync + 'static,
+                                      consumption_done_reporter: impl Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> VoidAsyncType + Send + Sync + 'static,
                                       stream:                    impl Stream<Item=Result<ItemType, Box<dyn std::error::Error + Send + Sync>>> + 'static + Send) {
         let cloned_self = Arc::clone(&self);
         tokio::spawn(async move {
@@ -429,7 +424,7 @@ impl<const LOG: bool, const METRICS: bool> StreamExecutor<LOG, METRICS> {
                                                    VoidAsyncType: Future<Output=()> + Send + 'static>
                                                   (self:                  Arc<Self>,
                                                    concurrency_limit:     u32,
-                                                   stream_ended_callback: impl FnOnce(Arc<StreamExecutor<LOG, METRICS>>) -> VoidAsyncType + Send + Sync + 'static,
+                                                   stream_ended_callback: impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>) -> VoidAsyncType + Send + Sync + 'static,
                                                    stream:                impl Stream<Item=OutItemType> + 'static + Send) {
 
         let cloned_self = Arc::clone(&self);
@@ -473,48 +468,47 @@ mod tests {
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_logs_and_metrics() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<true, true>::new("executor with logs & metrics")).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_metrics_and_no_logs() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<false, true>::new("executor with metrics & NO logs")).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_logs_and_no_metrics() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<true, false>::new("executor with logs & NO metrics")).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_no_logs_and_no_metrics() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<false, false>::new("executor with NO logs & NO metrics")).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_logs_and_metrics() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<true, true>::with_futures_timeout("executor with logs & metrics", Duration::from_millis(100))).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::with_futures_timeout("executor with logs & metrics", Duration::from_millis(100))).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_metrics_and_no_logs() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<false, true>::with_futures_timeout("executor with metrics & NO logs", Duration::from_millis(100))).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::with_futures_timeout("executor with metrics & NO logs", Duration::from_millis(100))).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_logs_and_no_metrics() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<true, false>::with_futures_timeout("executor with logs & NO metrics", Duration::from_millis(100))).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::with_futures_timeout("executor with logs & NO metrics", Duration::from_millis(100))).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_no_logs_and_no_metrics() {
-        assert_spawn_futures_fallible_executor(StreamExecutor::<false, false>::with_futures_timeout("executor with NO logs & NO metrics", Duration::from_millis(100))).await;
+        assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::with_futures_timeout("executor with NO logs & NO metrics", Duration::from_millis(100))).await;
     }
 
     /// executes assertions on the given `executor` by spawning the executor and adding futures / fallible elements to it.\
-    async fn assert_spawn_futures_fallible_executor<const LOG: bool,
-                                                    const METRICS: bool>
-                                                    (executor: Arc<StreamExecutor<LOG, METRICS>>) {
+    async fn assert_spawn_futures_fallible_executor<const INSTRUMENTS: usize>
+                                                    (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
 
         async fn to_future(item: Result<u32, Box<dyn Error + Send + Sync>>) -> Result<u32, Box<dyn Error + Send + Sync>> {
             // OK items > 100 will sleep for a while -- intended to cause a timeout, provided the given executor is appropriately configured
@@ -548,28 +542,27 @@ mod tests {
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_logs_and_metrics() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<true, true>::new("executor with logs & metrics")).await;
+        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_metrics_and_no_logs() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<false, true>::new("executor with metrics & NO logs")).await;
+        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_logs_and_no_metrics() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<true, false>::new("executor with logs & NO metrics")).await;
+        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
     }
 
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_no_logs_and_no_metrics() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<false, false>::new("executor with NO logs & NO metrics")).await;
+        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
     }
 
     /// executes assertions on the given `executor` by spawning the executor and adding non-futures / non-fallible elements to it
-    async fn assert_spawn_non_futures_non_fallible_executor<const LOG: bool,
-                                                            const METRICS: bool>
-                                                           (executor: Arc<StreamExecutor<LOG, METRICS>>) {
+    async fn assert_spawn_non_futures_non_fallible_executor<const INSTRUMENTS: usize>
+                                                           (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
         let (mut tx, mut rx) = mpsc::channel::<bool>(10);
         let cloned_executor = Arc::clone(&executor);
         executor.spawn_non_futures_non_fallible_executor(1, move |_| async move {tx.send(true).await.unwrap()}, stream::iter(vec![17, 19]));
@@ -579,14 +572,14 @@ mod tests {
     }
 
     /// apply assertions on metrics for the given `executor`
-    fn assert_metrics<const LOG: bool,
-                      const METRICS: bool>
-                     (executor: Arc<StreamExecutor<LOG, METRICS>>,
+    fn assert_metrics<const INSTRUMENTS: usize>
+                     (executor: Arc<StreamExecutor<INSTRUMENTS>>,
                       expected_ok_counter:         u32,
                       expected_timed_out_counter:  u32,
                       expected_failed_counter:     u32) {
 
-        println!("### Stats assertions for Stream pipeline executor named '{}' (Logs? {}; Metrics? {}) ####", executor.executor_name, executor.log_enabled(), executor.metrics_enabled());
+        println!("### Stats assertions for Stream pipeline executor named '{}' (Logs? {}; Metrics? {}) ####",
+                 executor.executor_name, Instruments::from(INSTRUMENTS).logging(), Instruments::from(INSTRUMENTS).metrics());
         let creation_duration = executor.creation_time.elapsed();
         let execution_start_delta_nanos = executor.execution_start_delta_nanos.load(Relaxed);
         let execution_finish_delta_nanos = executor.execution_finish_delta_nanos.load(Relaxed);
@@ -597,20 +590,20 @@ mod tests {
         println!("Execution Start:  {:?} after creation", Duration::from_nanos(execution_start_delta_nanos));
         println!("Execution Finish: {:?} after creation", Duration::from_nanos(execution_finish_delta_nanos));
         println!("OK elements count: {ok_counter}; OK elements average Future resolution time: {ok_average}s{}{}",
-                 if METRICS {""} else {" -- metrics are DISABLED"},
-                 if LOG {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
+                 if Instruments::from(INSTRUMENTS).metrics() {""} else {" -- metrics are DISABLED"},
+                 if Instruments::from(INSTRUMENTS).logging() {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
         println!("TIMED OUT elements count: {timed_out_counter}; TIMED OUT elements average Future resolution time: {timed_out_average}s{}{}",
-                 if METRICS {""} else {" -- metrics are DISABLED"},
-                 if LOG {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
+                 if Instruments::from(INSTRUMENTS).metrics() {""} else {" -- metrics are DISABLED"},
+                 if Instruments::from(INSTRUMENTS).logging() {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
         println!("FAILED elements count: {failed_counter}; FAILED elements average Future resolution time: {failed_average}s{}{}",
-                 if METRICS {""} else {" -- metrics are DISABLED"},
-                 if LOG {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
+                 if Instruments::from(INSTRUMENTS).metrics() {""} else {" -- metrics are DISABLED"},
+                 if Instruments::from(INSTRUMENTS).logging() {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
 
         assert!(execution_start_delta_nanos  > 0, "'execution_start_delta_nanos' wasn't set");
         assert!(execution_finish_delta_nanos > 0, "'execution_finish_delta_nanos' wasn't set");
         assert!(execution_finish_delta_nanos >= execution_start_delta_nanos, "INSTRUMENTATION ERROR: 'execution_start_delta_nanos' was set after 'execution_finish_delta_nanos'");
 
-        if executor.metrics_enabled() {
+        if Instruments::from(INSTRUMENTS).metrics() {
             assert_eq!(ok_counter,        expected_ok_counter,        "OK elements counter doesn't match -- Metrics are ENABLED");
             assert_eq!(timed_out_counter, expected_timed_out_counter, "TIMED OUT elements counter doesn't match -- Metrics are ENABLED");
             assert_eq!(failed_counter,    expected_failed_counter,    "FAILED elements counter doesn't match -- Metrics are ENABLED");

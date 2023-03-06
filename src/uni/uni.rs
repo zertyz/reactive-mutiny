@@ -2,15 +2,14 @@
 
 use super::super::{
     stream_executor::StreamExecutor,
+    instruments::Instruments,
 };
 use std::{
-    sync::Arc,
+    fmt::Debug,
+    pin::Pin,
+    time::Duration,
+    sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}},
 };
-use std::fmt::Debug;
-use std::pin::Pin;
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
 use futures::{Stream};
 use minstant::Instant;
 
@@ -25,22 +24,20 @@ type UniChannelType<ItemType,
 pub struct Uni<ItemType:          Unpin + Send + Sync + Debug,
                const BUFFER_SIZE: usize,
                const MAX_STREAMS: usize,
-               const LOG:         bool,
-               const METRICS:     bool> {
+               const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
     pub uni_channel:              Arc<Pin<Box<UniChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>>>,
-    pub stream_executor:          Arc<StreamExecutor<LOG, METRICS>>,
+    pub stream_executor:          Arc<StreamExecutor<INSTRUMENTS>>,
     pub finished_executors_count: AtomicU32,
 }
 
 impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize,
-     const LOG:         bool,
-     const METRICS:     bool>
-Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, LOG, METRICS> {
+     const INSTRUMENTS: usize>
+Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     /// creates & returns a pair (`Uni`, `UniStream`)
-    pub fn new(stream_executor: Arc<StreamExecutor<LOG, METRICS>>) -> Arc<Self> {
+    pub fn new(stream_executor: Arc<StreamExecutor<INSTRUMENTS>>) -> Arc<Self> {
         Arc::new(Uni {
             uni_channel:              UniChannelType::<ItemType, BUFFER_SIZE, MAX_STREAMS>::new(),
             stream_executor,
