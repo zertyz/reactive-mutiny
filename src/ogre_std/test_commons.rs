@@ -304,7 +304,7 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
                         let observed_successful_productions = observed_successful_productions.load(Relaxed);
                         let observed_successful_consumptions = observed_successful_consumptions.load(Relaxed);
                         if observed_successful_productions == expected_successful_productions && observed_successful_consumptions != expected_successful_consumptions {
-                            eprintln!("Producing already stopped but we are no longer consuming anything. So far, {}; wanted: {}", observed_successful_consumptions, expected_successful_consumptions)
+                            eprintln!("Producing already completed, but we are no longer consuming anything. So far, {}; wanted: {}", observed_successful_consumptions, expected_successful_consumptions)
                         }
                     },
                     Some(element) => {
@@ -340,15 +340,15 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
         }
         // // uncomment if this test hangs -- will bring some light into the queue's internal state
         // scope.spawn(|_| {
-        //     for _ in 0..3 {
+        //     for _ in 0..5 {
         //         std::thread::sleep(std::time::Duration::from_secs(2));
         //         println!("###Not done yet????");
         //         println!("    PRODUCTION:   {:12} successful, {:12} reported queue was full",
-        //                  observed_successful_productions.load(Ordering::Relaxed),
-        //                  observed_productions.load(Ordering::Relaxed) - observed_successful_productions.load(Ordering::Relaxed));
+        //                  observed_successful_productions.load(Relaxed),
+        //                  observed_productions.load(Relaxed) - observed_successful_productions.load(Relaxed));
         //         println!("    CONSUMPTION:  {:12} successful, {:12} reported queue was empty",
-        //                  observed_successful_consumptions.load(Ordering::Relaxed),
-        //                  observed_consumptions.load(Ordering::Relaxed) - observed_successful_consumptions.load(Ordering::Relaxed));
+        //                  observed_successful_consumptions.load(Relaxed),
+        //                  observed_consumptions.load(Relaxed) - observed_successful_consumptions.load(Relaxed));
         //         //queue.debug();
         //     }
         // });

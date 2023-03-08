@@ -3,6 +3,7 @@
 use std::{
     time::{SystemTime,Duration},
     sync::atomic::{AtomicBool, Ordering},
+    io::Write,
 };
 
 
@@ -21,26 +22,17 @@ pub trait BenchmarkableContainer<SlotType> {
 pub fn all_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
 
     let container_size = container.max_size();
-    let mut iterations: u64 = 0;
 
-    // loop until 'deadline' elapses
-    let start_time = SystemTime::now();
-    loop {
-        // all-in (populate)
-        multi_threaded_iterate(0, container_size, threads, |i| { container.add(i as usize);});
-
-        // all-out (consume)
-        multi_threaded_iterate(0, container_size, threads, |_| { container.remove();});
-
-        match keep_looping_or_compute_operations_per_second(format!("all_in_and_out_benchmark('{}')", container.implementation_name()),
-                                                            &start_time,
-                                                            &mut iterations,
-                                                            &deadline,
-                                                            container_size as u64) {
-            Some(operations_per_second) => return operations_per_second,
-            None => (),
-        }
-    }
+    compute_operations_per_second(format!("all_in_and_out_benchmark('{}')", container.implementation_name()),
+                                  &deadline,
+                                  container_size as u64,
+                                  || {
+                                      // all-in (populate)
+                                      multi_threaded_iterate(0, container_size, threads, |i| { container.add(i as usize);});
+                              
+                                      // all-out (consume)
+                                      multi_threaded_iterate(0, container_size, threads, |_| { container.remove();});
+                                  })
 }
 
 /// Given a `container` and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in single-in / single-out mode --
@@ -49,24 +41,15 @@ pub fn all_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> +
 pub fn single_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
 
     let loops_per_iteration = 1<<16;
-    let mut iterations: u64 = 0;
-
-    // loop until 'deadline' elapses
-    let start_time = SystemTime::now();
-    loop {
-        multi_threaded_iterate(0, loops_per_iteration, threads, |i| {
-            container.add(i as usize);
-            container.remove();
-        });
-        match keep_looping_or_compute_operations_per_second(format!("single_in_and_out_benchmark(('{}')", container.implementation_name()),
-                                                            &start_time,
-                                                            &mut iterations,
-                                                            &deadline,
-                                                            loops_per_iteration as u64) {
-            Some(operations_per_second) => return operations_per_second,
-            None => (),
-        }
-    }
+    compute_operations_per_second(format!("single_in_and_out_benchmark(('{}')", container.implementation_name()),
+                                  &deadline,
+                                  loops_per_iteration as u64,
+                                  || {
+                                      multi_threaded_iterate(0, loops_per_iteration, threads, |i| {
+                                          container.add(i as usize);
+                                          container.remove();
+                                      });
+                                  })
 }
 
 /// Given a `container` and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in single producer / multi consumer mode --
@@ -79,9 +62,7 @@ pub fn single_producer_multiple_consumers_benchmark(container: &(dyn Benchmarkab
 
     let keep_running = AtomicBool::new(true);
 
-    let mut operations_per_second: f64 = 0.0;
-
-    let start_time = SystemTime::now();
+    let mut operations_per_second = -1.0;
 
     crossbeam::scope(|scope| {
         // start the multiple consumers
@@ -96,26 +77,17 @@ pub fn single_producer_multiple_consumers_benchmark(container: &(dyn Benchmarkab
         }
         // start the single producer, looping until 'deadline' elapses
         scope.spawn(|_| {
-            let mut iterations: u64 = 0;
-            loop {
-                for i in 0..container_size {
-                    while !container.add(i) {
-                        std::hint::spin_loop();
-                    }
-                }
-                match keep_looping_or_compute_operations_per_second(format!("single_producer_multiple_consumers_benchmark(('{}')", container.implementation_name()),
-                                                                    &start_time,
-                                                                    &mut iterations,
-                                                                    &deadline,
-                                                                    container_size as u64) {
-                    Some(_operations_per_second) => {
-                        operations_per_second = _operations_per_second;
-                        keep_running.store(false, Ordering::Relaxed);
-                        break;
-                    },
-                    None => (),
-                }
-            }
+            operations_per_second = compute_operations_per_second(format!("single_producer_multiple_consumers_benchmark(('{}')", container.implementation_name()),
+                                                                 &deadline,
+                                                                 container_size as u64,
+                                                                 || {
+                                                                     for i in 0..container_size {
+                                                                         while !container.add(i) {
+                                                                             std::hint::spin_loop();
+                                                                         }
+                                                                     }
+                                                                 });
+            keep_running.store(false, Ordering::Relaxed);
         });
     }).unwrap();
 
@@ -132,33 +104,22 @@ pub fn multiple_producers_single_consumer_benchmark(container: &(dyn Benchmarkab
 
     let keep_running = AtomicBool::new(true);
 
-    let mut operations_per_second: f64 = 0.0;
-
-    let start_time = SystemTime::now();
+    let mut operations_per_second = -1.0;
 
     crossbeam::scope(|scope| {
         // start the single consumer, looping until 'deadline' elapses
         scope.spawn(|_| {
-            let mut iterations: u64 = 0;
-            loop {
-                for _ in 0..container_size {
-                    if container.remove().is_none() {
-                        std::hint::spin_loop();
-                    }
-                }
-                match keep_looping_or_compute_operations_per_second(format!("multiple_producers_single_consumer_benchmark(('{}')", container.implementation_name()),
-                                                                    &start_time,
-                                                                    &mut iterations,
-                                                                    &deadline,
-                                                                    container_size as u64) {
-                    Some(_operations_per_second) => {
-                        operations_per_second = _operations_per_second;
-                        keep_running.store(false, Ordering::Relaxed);
-                        break;
-                    },
-                    None => (),
-                }
-            }
+            operations_per_second = compute_operations_per_second(format!("multiple_producers_single_consumer_benchmark(('{}')", container.implementation_name()),
+                                                                  &deadline,
+                                                                  container_size as u64,
+                                                                  || {
+                                                                      for _ in 0..container_size {
+                                                                          if container.remove().is_none() {
+                                                                              std::hint::spin_loop();
+                                                                          }
+                                                                      }
+                                                                  });
+            keep_running.store(false, Ordering::Relaxed);
         });
         // start the multiple producers
         for _ in 0..producer_threads {
@@ -182,15 +143,39 @@ pub fn multiple_producers_single_consumer_benchmark(container: &(dyn Benchmarkab
 // auxiliary functions
 //////////////////////
 
-fn keep_looping_or_compute_operations_per_second(benchmark_name: String, start_time: &SystemTime, iterations: &mut u64, deadline: &Duration, loops_per_iteration: u64) -> Option<f64> {
+// TODO: IMPROVE FEEDBACK & DIAGNOSTICS FOR HALTING TESTS: copy the method to "keep_looping", then refactor this method to
+// "compute_operations_per_second" -- which should print (and flush) the "running" feedback, then hand over to
+// "keep_looping", then output the final measurement
+// --> Verify that aotmic_queue::BlockingQueue (introduced in 19e8091) is hanging... Verify that
+// the other queues are OK after my several changes and fix the new queue from there.
+fn compute_operations_per_second(benchmark_name:      String,
+                                 deadline:            &Duration,
+                                 loops_per_iteration: u64,
+                                 mut operation:       impl FnMut()) -> f64 {
+    print!("    ... running '{}': ", benchmark_name);
+    std::io::stdout().flush().unwrap();
+    let mut iterations: u64 = 0;
+    let start_time = SystemTime::now();
+    // loop until 'deadline' elapses
+    loop {
+        operation();
+        if let Some(operations_per_second) = keep_looping(&start_time, &mut iterations, &deadline, loops_per_iteration) {
+            println!("{:12.4} ops/s", operations_per_second);
+            return operations_per_second
+        }
+    }
+}
+
+/// benchmarking function... to exceute until the `deadline`.
+/// Returns Some(operations_per_second) when it is time to stop looping
+fn keep_looping(start_time: &SystemTime, iterations: &mut u64, deadline: &Duration, loops_per_iteration: u64) -> Option<f64> {
     const MICROS_IN_ONE_SECOND: f64 = 10e6;
     *iterations += 1;
     let elapsed = start_time.elapsed().unwrap();
     if elapsed >= *deadline {
         let elapsed_micros = elapsed.as_micros();
-        let operations = 2 * *iterations * loops_per_iteration;  // 2 is 1 for add + 1 for remove
+        let operations = 2 * *iterations * loops_per_iteration;  // 2 comes from adding an element + removing it
         let operations_per_second = MICROS_IN_ONE_SECOND * (operations as f64 / elapsed_micros as f64);
-        println!("    ... running '{}': {:12.4} ops/s", benchmark_name, operations_per_second);
         return Some(operations_per_second);
     } else {
         None
@@ -221,9 +206,9 @@ fn iterate(start: usize, finish: usize, step: usize, callback: impl Fn(u32) -> (
 mod benchmark_stacks {
     //! Benchmarks all known stacks
 
-    use std::fmt::Debug;
     use super::*;
     use super::super::ogre_stacks::OgreStack;
+    use std::fmt::Debug;
 
 
     // implementation note: doing something like bellow for both queues & stacks is not an option,
@@ -304,7 +289,7 @@ mod benchmark_queues {
     use super::*;
     use super::super::{
         instruments::Instruments,
-        ogre_queues::OgreQueue,
+        ogre_queues::{OgreQueue,OgreBlockingQueue}
     };
     use std::{
         fmt::Debug,
@@ -330,8 +315,31 @@ mod benchmark_queues {
         }
     }
 
+    macro_rules! impl_benchmarkable_container_for_blocking {
+        ($queue_type: ty) => {
+            impl<SlotType: Copy+Unpin+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
+                fn max_size(&self) -> usize {
+                    OgreQueue::max_size(self)
+                }
+                fn add(&self, item: SlotType) -> bool {
+                    self.try_enqueue(item)
+                }
+                fn remove(&self) -> Option<SlotType> {
+                    self.try_dequeue()
+                }
+                fn implementation_name(&self) -> &str {
+                    OgreQueue::implementation_name(self)
+                }
+            }
+        }
+    }
+
+    // Implementation of bookmark ability for queues
+    ////////////////////////////////////////////////
+    // NOTE: blocking queues should be tested without lock timeouts
+
     impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
-    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);    // TODO 2023-03-08: the need to add "1" timeout here signals the algorithm have a problem
     impl_benchmarkable_container_for!(super::super::ogre_queues::blocking_queue::Queue::<'static, SlotType, BUFFER_SIZE, false, false, 1>);
     impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, false, false>);
 
@@ -342,7 +350,7 @@ mod benchmark_queues {
         for n_threads in 1..=4 {
             println!("{n_threads} threads:");
             all_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             unsafe {all_in_and_out_benchmark(Pin::into_inner_unchecked(super::super::ogre_queues::blocking_queue::Queue::<'static, usize, 65536, false, false, 1>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));}
             all_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, false, false>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
         }
@@ -355,7 +363,7 @@ mod benchmark_queues {
         for n_threads in 1..=4 {
             println!("{n_threads} threads:");
             single_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             unsafe {single_in_and_out_benchmark(Pin::into_inner_unchecked(super::super::ogre_queues::blocking_queue::Queue::<'static, usize, 65536, false, false, 1>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));}
             single_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, false, false>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
         }
@@ -368,7 +376,7 @@ mod benchmark_queues {
         for n_threads in 2..=5 {
             println!("{n_threads} threads:");
             single_producer_multiple_consumers_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             unsafe {single_producer_multiple_consumers_benchmark(Pin::into_inner_unchecked(super::super::ogre_queues::blocking_queue::Queue::<'static, usize, 65536, false, false, 1>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));}
             single_producer_multiple_consumers_benchmark(Pin::into_inner(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, false, false>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
         }
@@ -381,7 +389,7 @@ mod benchmark_queues {
         for n_threads in 2..=5 {
             println!("{n_threads} threads:");
             multiple_producers_single_consumer_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             unsafe {multiple_producers_single_consumer_benchmark(Pin::into_inner_unchecked(super::super::ogre_queues::blocking_queue::Queue::<'static, usize, 65536, false, false, 1>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));}
             multiple_producers_single_consumer_benchmark(Pin::into_inner(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, false, false>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
         }

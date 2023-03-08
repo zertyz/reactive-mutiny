@@ -47,7 +47,7 @@ NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         let queue_full_count      = self.queue_full_count.load(Relaxed);
         let dequeue_count         = self.dequeue_count.load(Relaxed);
         let queue_empty_count     = self.queue_empty_count.load(Relaxed);
-        let len                  = self.len();
+        let len                 = self.len();
         let concurrent_enqueuers  = self.base_queue.concurrent_enqueuers.load(Relaxed);
         let head                  = self.base_queue.head.load(Relaxed);
         let enqueuer_tail         = self.base_queue.enqueuer_tail.load(Relaxed);
@@ -108,7 +108,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                     // TODO 20221003: the current `atomic_base.rs` algorithm has some kind of bug that causes the enqueuer_tail to be greater than buffer
                                     //                when enqueueing conteition is very high -- 48 dedicated threads showed the behavior. The sleep bellow makes the test pass.
                                     //                The algorithm should be fully reviewed or dropped completely if favor of `full_sync_base.rs` -- which is, btw, faster.
-                                    std::thread::sleep(Duration::from_millis(10));
+                                    std::thread::sleep(Duration::from_millis(1));
                                     false
                                 },
                                 |_| {})

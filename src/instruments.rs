@@ -41,8 +41,12 @@ impl Instruments {
     /// -- from the moment they were *produced* to the moment their *consumption* completes\
     /// (causes an increase in the payload due to the addition of the `u64` *start_time* field)
     const EXPENSIVE_PROFILING: usize = 8;
-    /// metrics: computes percentiles for [Instruments::CHEAP_PROFILING] & [Instruments::EXPENSIVE_PROFILING], if enabled.\
-    /// provides: `futures_percentiles` && `duration_percentiles`
+    /// metrics: computes counters of logarithmic decreasing precision of processing times for [Instruments::CHEAP_PROFILING] & [Instruments::EXPENSIVE_PROFILING], if enabled
+    /// -- useful for computing processing/response time percentiles.\
+    /// The map is in the form:\
+    ///     `counters := {[time] = count, ...}`\
+    /// where *time* increase with the power of 2 and counts all requests whose times are between the previous *time* and the current one.\
+    /// provides: `futures_times` && `duration_times`
     const PERCENTILES:         usize = 16;
     /// outputs `INFO` on stream's execution start & finish
     const LOG:                 usize = 32;

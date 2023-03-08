@@ -12,6 +12,12 @@ use std::{
 
 
 /// to make the most of performance, let BUFFER_SIZE be a power of 2 (so that 'i % BUFFER_SIZE' modulus will be optimized)
+/// TODO 2023-03-07: this algorithm has the following problems:
+///      - concurrency (see the comments on the [BlockingQueue] & [NonBlockingQueue] using this)
+///      - assimetry: the enqueue/dequeue operations goes through almost two different algorithms. A redesign would use a pair of pointers for the enqueuer and another for the dequeuer (on a different cache line)
+///        with our "split pointers". The rationale is that the enqueuer and dequeuer may work independent from one another until the enqueuer finds itself to be full (then it will sync with dequeues) or deququer
+///        finds itself empty (and it will try to sync to enqueuers)
+///      - To explore: a third pair: head and tail, where both enqueuers and dequeuers will sync after they are done; enqueuers will simply inc their tail; dequeuers will inc their heads; cmpexch will sync to the 3rd pair.
 // #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
 pub struct AtomicMeta<SlotType,
                       const BUFFER_SIZE: usize> {
