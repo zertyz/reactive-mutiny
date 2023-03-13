@@ -198,10 +198,6 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     }
                                 },
                                 || {
-                                    // TODO 20221003: the current `atomic_base.rs` algorithm has some kind of bug that causes the enqueuer_tail to be greater than buffer
-                                    //                when enqueueing conteition is very high -- 48 dedicated threads showed the behavior. The sleep bellow makes the test pass.
-                                    //                The algorithm should be fully reviewed or dropped completely if favor of `full_sync_base.rs` -- which is, btw, faster.
-                                    std::thread::sleep(Duration::from_millis(1));
                                     self.report_full()
                                 },
                                 |len| if len == 1 {
@@ -298,10 +294,6 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
-                                    // TODO 20221003: the current `atomic_base.rs` algorithm has some kind of bug that causes the enqueuer_tail to be greater than buffer
-                                    //                when enqueueing conteition is very high -- 48 dedicated threads showed the behavior. The sleep bellow makes the test pass.
-                                    //                The algorithm should be fully reviewed or dropped completely if favor of `full_sync_base.rs` -- which is, btw, faster.
-                                    std::thread::sleep(Duration::from_millis(1));
                                     self.full_guard.try_lock();
                                     false
                                 },

@@ -48,15 +48,15 @@ NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         let dequeue_count         = self.dequeue_count.load(Relaxed);
         let queue_empty_count     = self.queue_empty_count.load(Relaxed);
         let len                 = self.len();
-        let concurrent_enqueuers  = self.base_queue.concurrent_enqueuers.load(Relaxed);
         let head                  = self.base_queue.head.load(Relaxed);
+        let tail                  = self.base_queue.head.load(Relaxed);
+        let dequeuer_head         = self.base_queue.dequeuer_head.load(Relaxed);
         let enqueuer_tail         = self.base_queue.enqueuer_tail.load(Relaxed);
-        let dequeuer_tail         = self.base_queue.dequeuer_tail.load(Relaxed);
 
         if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % 1024000 == 0 {
             println!("Atomic BlockingQueue '{}'", self.queue_name);
-            println!("    STATE:        head: {:8}, enqueuer_tail: {:8}, dequeuer_tail: {:8} ", head, enqueuer_tail, dequeuer_tail);
-            println!("    CONTENTS:     {:12} elements,   {:12} buffer -- concurrent_enqueuers: {}", len, BUFFER_SIZE, concurrent_enqueuers);
+            println!("    STATE:        head: {:8}, tail: {:8}, dequeuer_head: {:8}, enqueuer_tail: {:8} ", head, tail, dequeuer_head, enqueuer_tail);
+            println!("    CONTENTS:     {:12} elements,   {:12} buffer", len, BUFFER_SIZE);
             println!("    PRODUCTION:   {:12} successful, {:12} reported queue was full",  enqueue_count, queue_full_count);
             println!("    CONSUMPTION:  {:12} successful, {:12} reported queue was empty", dequeue_count, queue_empty_count);
         }
@@ -105,10 +105,6 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                     if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
-                                    // TODO 20221003: the current `atomic_base.rs` algorithm has some kind of bug that causes the enqueuer_tail to be greater than buffer
-                                    //                when enqueueing conteition is very high -- 48 dedicated threads showed the behavior. The sleep bellow makes the test pass.
-                                    //                The algorithm should be fully reviewed or dropped completely if favor of `full_sync_base.rs` -- which is, btw, faster.
-                                    std::thread::sleep(Duration::from_millis(1));
                                     false
                                 },
                                 |_| {})
@@ -181,31 +177,31 @@ mod tests {
 
     #[test]
     fn basic_queue_use_cases() {
-        let queue = NonBlockingQueue::<i32, 16, {Instruments::NoInstruments.into()}>::new("'basic_use_cases' test queue".to_string());
+        let queue = NonBlockingQueue::<i32, 16, {Instruments::NoInstruments.into()}>::new("basic_use_cases' test queue".to_string());
         test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
     fn single_producer_multiple_consumers() {
-        let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("'single_producer_multiple_consumers' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("single_producer_multiple_consumers' test queue".to_string());
         test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     fn multiple_producers_single_consumer() {
-        let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_single_consumer' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("multiple_producers_single_consumer' test queue".to_string());
         test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 102400, {Instruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, {1024*64}, {Instruments::NoInstruments.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 128, {Instruments::NoInstruments.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
+        let queue = NonBlockingQueue::<u32, 128, {Instruments::NoInstruments.into()}>::new("multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
     }
 }

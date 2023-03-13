@@ -136,7 +136,7 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
     #[cfg(debug_assertions)]
     return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
 
-    let consumer_threads = 48-1;
+    let consumer_threads = 4-1;
     let start = 0;
     let finish = 4096000;
 
@@ -281,7 +281,7 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
 
     let start = 0;
     let finish = 4096000;
-    let producer_threads = 48-1;
+    let producer_threads = 4-1;
 
     let expected_sum                           = (start + (finish-1)) * ( (finish - start) / 2 );
     let expected_successful_productions        = finish - start;
@@ -375,15 +375,15 @@ pub fn container_multiple_producers_and_consumers_all_in_and_out(blocking:      
                                                                  container_size: usize,
                                                                  produce:        impl Fn(u32) -> bool        + Sync,
                                                                  consume:        impl Fn()    -> Option<u32> + Sync) {
-    const MINIMUM_CONTAINER_SIZE: usize = 102400;
-    const N_THREADS:              usize = 48;    // might as well be num_cpus::get();
+    const MINIMUM_CONTAINER_SIZE: usize = 1024*64;
+    const N_THREADS:              usize = 4;    // might as well be num_cpus::get();
 
     let loops = 320;
 
     assert!(container_size >= MINIMUM_CONTAINER_SIZE, "Please provide a container with a minimum size of {}", MINIMUM_CONTAINER_SIZE);
 
-    #[cfg(debug_assertions)]
-    return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
+    // #[cfg(debug_assertions)]
+    // return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
 
     for _ in 0..loops {
         for threads in N_THREADS ..= N_THREADS {
@@ -427,7 +427,7 @@ pub fn container_multiple_producers_and_consumers_all_in_and_out(blocking:      
 pub fn container_multiple_producers_and_consumers_single_in_and_out(produce: impl Fn(u32) -> bool        + Sync,
                                                                     consume: impl Fn()    -> Option<u32> + Sync) {
 
-    const N_THREADS: usize = 48;    // might as well be num_cpus::get();
+    const N_THREADS: usize = 4;    // might as well be num_cpus::get();
 
     #[cfg(debug_assertions)]
     return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");

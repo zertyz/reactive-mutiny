@@ -339,7 +339,7 @@ mod benchmark_queues {
     // NOTE: blocking queues should be tested without lock timeouts
 
     impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
-    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);    // TODO 2023-03-08: the need to add "1" timeout here signals the algorithm have a problem
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);
     impl_benchmarkable_container_for!(super::super::ogre_queues::blocking_queue::Queue::<'static, SlotType, BUFFER_SIZE, false, false, 1>);
     impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, false, false>);
 

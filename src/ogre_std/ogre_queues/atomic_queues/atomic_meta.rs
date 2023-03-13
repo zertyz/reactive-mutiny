@@ -11,29 +11,22 @@ use std::{
 };
 
 
-/// to make the most of performance, let BUFFER_SIZE be a power of 2 (so that 'i % BUFFER_SIZE' modulus will be optimized)
-/// TODO 2023-03-07: this algorithm has the following problems:
-///      - concurrency (see the comments on the [BlockingQueue] & [NonBlockingQueue] using this)
-///      - assimetry: the enqueue/dequeue operations goes through almost two different algorithms. A redesign would use a pair of pointers for the enqueuer and another for the dequeuer (on a different cache line)
-///        with our "split pointers". The rationale is that the enqueuer and dequeuer may work independent from one another until the enqueuer finds itself to be full (then it will sync with dequeues) or deququer
-///        finds itself empty (and it will try to sync to enqueuers)
-///      - To explore: a third pair: head and tail, where both enqueuers and dequeuers will sync after they are done; enqueuers will simply inc their tail; dequeuers will inc their heads; cmpexch will sync to the 3rd pair.
+/// BUFFER_SIZE mut be a power of 2
 // #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
 pub struct AtomicMeta<SlotType,
                       const BUFFER_SIZE: usize> {
-    /// where to enqueue the next element -- we'll enforce this won't overlap with 'head'\
-    /// -- after increasing this field, the enqueuer must still write the value (until so, it is
-    ///    not yet ready for dequeue)
-    pub(crate) enqueuer_tail: AtomicU32,
-    /// used by enqueer to control when 'dequeuer_tail' should be set to 'enqueuer_tail'
-    pub(crate) concurrent_enqueuers: AtomicU32,
-    /// holder for the elements
-    pub(crate) buffer: [SlotType; BUFFER_SIZE],
-    /// used by the *enqueuer* to check if the queue is full;\
-    /// used by the *dequeuer* to get where from to dequeue the next element -- provided it is checked against 'dequeuer_tail'
+    /// marks the first element of the queue, ready for dequeue -- increasing when dequeues are complete
     pub(crate) head: AtomicU32,
-    /// informs dequeuers up to which 'tail' is safe to dequeue
-    pub(crate) dequeuer_tail: AtomicU32,
+    /// increase-before-load field, marking where the next element should be retrieved from
+    /// -- may receed if it gets ahead of the published `tail`
+    pub(crate) dequeuer_head: AtomicU32,
+    /// holder for the queue elements
+    pub(crate) buffer: [SlotType; BUFFER_SIZE],
+    /// marks the last element of the queue, ready for dequeue -- increasing when enqueues are complete
+    pub(crate) tail: AtomicU32,
+    /// increase-before-load field, marking where the next element should be written to
+    /// -- may receed if exceeded the buffer capacity
+    pub(crate) enqueuer_tail: AtomicU32,
 }
 
 impl<SlotType:          Clone + Debug,
@@ -45,9 +38,9 @@ AtomicMeta<SlotType,
     fn new() -> Self {
         Self {
             head:                 AtomicU32::new(0),
+            tail:                 AtomicU32::new(0),
+            dequeuer_head:        AtomicU32::new(0),
             enqueuer_tail:        AtomicU32::new(0),
-            dequeuer_tail:        AtomicU32::new(0),
-            concurrent_enqueuers: AtomicU32::new(0),
             buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
         }
     }
@@ -67,7 +60,6 @@ AtomicMeta<SlotType,
             let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
             &mut *mut_ptr
         };
-        self.concurrent_enqueuers.fetch_add(1, Relaxed);
         let mut slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
         let mut len_before;
         loop {
@@ -86,43 +78,43 @@ AtomicMeta<SlotType,
 //         println!("## current_enqueuer_tail: {current_enqueuer_tail}; current_dequeuer_tail: {current_dequeuer_tail}; concurrent_enqueuers: {concurrent_enqueuers}");
 //     }
 // }
-                if self.enqueuer_tail.compare_exchange(slot_id + 1, slot_id, Relaxed, Relaxed).is_ok() {
-                    self.concurrent_enqueuers.fetch_sub(1, Relaxed);
-                    // report the queue is full, allowing a retry if recovered from the condition
-                    if !report_full_fn() {
-                        return false;
-                    } else {
-                        self.concurrent_enqueuers.fetch_add(1, Relaxed);
-                        slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
-                    }
-                } else {
-                    // a resync is needed -- other enqueuers ran & queue may not be full any longer for us: try again
-                    std::hint::spin_loop();
+                // queue is full: restabilish the correct `enqueuer_tail` (receeding it to its original value)
+                match self.enqueuer_tail.compare_exchange(slot_id + 1, slot_id, Relaxed, Relaxed) {
+                    Ok(_) => {
+                        // report the queue is full, allowing a retry, if the method says we recovered from the condition
+                        if !report_full_fn() {
+                            return false;
+                        } else {
+                            slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
+                        }
+                    },
+                    Err(reloaded_enqueuer_tail) => {
+                        if reloaded_enqueuer_tail > slot_id {
+                            // a new cmp_exch will be attempted due to concurrent modification of the variable
+                            // we'll relax the cpu proportional to our position in the "concurrent modification order"
+                            relaxed_wait::<SlotType>(reloaded_enqueuer_tail - slot_id);
+                        } else {
+                            panic!(" SHOULD NOT HAPPEN ");
+                        }
+                    },
                 }
             }
         }
 
         setter_fn(&mut mutable_buffer[slot_id as usize % BUFFER_SIZE]);
 
-        // recede 'concurrent_enqueuers' & advance 'enqueuer_tail', attempting to get 'dequeuer_tail' as close to 'enqueuer_tail' as possible,
-        // if fully syncing them is not a possibility
-        let remaining_concurrent_enqueuers = self.concurrent_enqueuers.fetch_sub(1, Relaxed);
-        if remaining_concurrent_enqueuers == 1 {
-            // we were the last concurrent enqueuer -- attempt to sync tails
-            // (sync might not be complete if 'enqueuer_tail' has been increased since last load (some lines above),
-            // so dequeuers will always try to sync again when empty queue is detected
-            let dequeuer_tail = self.dequeuer_tail.load(Relaxed);
-            if slot_id >= dequeuer_tail {
-                let _ = self.dequeuer_tail.compare_exchange(dequeuer_tail, slot_id+1, Relaxed, Relaxed);
+        // strong sync tail
+        loop {
+            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
+                Ok(_) => break,
+                Err(reloaded_tail) => {
+                    if slot_id > reloaded_tail {
+                        relaxed_wait::<SlotType>(slot_id - reloaded_tail)
+                    }
+                },
             }
-        } else {
-            // we were not the last enqueuer running concurrently. Anyway,
-            // attempt to inform the next dequeuer, as soon as possible, that another element is ready for dequeueing
-            // (even if there are still other enqueuers running).
-            // this will take effect when enqueuers end their execution in the order in which they started
-            let _ = self.dequeuer_tail.compare_exchange(slot_id, slot_id+1, Relaxed, Relaxed);
         }
-        report_len_after_enqueueing_fn(len_before + 1);
+        report_len_after_enqueueing_fn(len_before+1);
         true
     }
 
@@ -137,62 +129,54 @@ AtomicMeta<SlotType,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
-        let mut head = self.head.load(Relaxed);
-        let mut tail = self.dequeuer_tail.load(Relaxed);
+        let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
         let mut len_before;
 
-        // loop until we get an element or are sure to be empty -- syncing along the way
         loop {
-            // sync `head` & `tail`
-            loop {
-                len_before = tail.overflowing_sub(head).0 as i32;
-                // is queue empty? Attempt to sync tails if there are no enqueuers running
-                if len_before <= 0 {   // head can be > than tail if an enqueuer is currently running, found that the queue was full and had to decrease the tail
-                    let enqueuer_tail_before = self.enqueuer_tail.load(Relaxed);
-                    if self.concurrent_enqueuers.load(Relaxed) == 0 {
-                        let enqueuer_tail_after = self.enqueuer_tail.load(Relaxed);
-                        if enqueuer_tail_before == enqueuer_tail_after {    // assures no enqueuer ran between the atomic loads (or else we won't know on which one to trust)
-                            let enqueuer_tail = enqueuer_tail_before;
-                            if enqueuer_tail != tail {
-                                match self.dequeuer_tail.compare_exchange(tail, enqueuer_tail, Relaxed, Relaxed) {
-                                    Ok(_) => tail = enqueuer_tail,
-                                    Err(reloaded_val) => tail = reloaded_val,
-                                };
-                                std::hint::spin_loop();
-                                head = self.head.load(Relaxed);
-                                continue;
-                            }
+            let tail = self.tail.load(Relaxed);
+            len_before = tail.overflowing_sub(slot_id).0 as i32;
+            // is queue empty?
+            if len_before > 0 {
+                break
+            } else {
+                // queue is empty: restabilish the correct `dequeuer_head` (receeding it to its original value)
+                match self.dequeuer_head.compare_exchange(slot_id + 1, slot_id, Relaxed, Relaxed) {
+                    Ok(_) => {
+                        if !report_empty_fn() {
+                            return None;
+                        } else {
+                            slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
+                        }
+                    },
+                    Err(reloaded_dequeuer_head) => {
+                        if reloaded_dequeuer_head > slot_id {
+                            relaxed_wait::<SlotType>(reloaded_dequeuer_head - slot_id);
                         }
                     }
-                    // report the queue is empty, allowing a retry if recovered from the condition
-                    if !report_empty_fn() {
-                        return None;
-                    } else {
-                        continue;
-                    }
-                }
-                break;
-            }
-
-            // return the value if we were the one to increase 'head'
-            let slot_value = &self.buffer[head as usize % BUFFER_SIZE];
-            let ret_val = getter_fn(slot_value);
-            match self.head.compare_exchange(head, head+1, Relaxed, Relaxed) {
-                Ok(_) => {
-                    report_len_after_dequeueing_fn(len_before-1);
-                    return Some(ret_val);
-                },
-                Err(reloaded_val) => {
-                    head = reloaded_val;
-                    tail = self.dequeuer_tail.load(Relaxed);
-                    // somebody dequeued our head -- redo the dequeueing attempt from scratch
                 }
             }
         }
+
+        let slot_value = &self.buffer[slot_id as usize % BUFFER_SIZE];
+        let ret_val = getter_fn(slot_value);
+
+        // strong sync head
+        loop {
+            match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
+                Ok(_) => break,
+                Err(reloaded_head) => {
+                    if slot_id > reloaded_head {
+                        relaxed_wait::<SlotType>(slot_id - reloaded_head);
+                    }
+                }
+            }
+        }
+        report_len_after_dequeueing_fn(len_before-1);
+        Some(ret_val)
     }
 
     fn len(&self) -> usize {
-        self.enqueuer_tail.load(Relaxed).overflowing_sub(self.head.load(Relaxed)).0 as usize
+        self.tail.load(Relaxed).overflowing_sub(self.head.load(Relaxed)).0 as usize
     }
 
     fn max_size(&self) -> usize {
@@ -201,8 +185,8 @@ AtomicMeta<SlotType,
 
     unsafe fn peek_all(&self) -> [&[SlotType]; 2] {
         let head_index = self.head.load(Relaxed) as usize % BUFFER_SIZE;
-        let tail_index = self.dequeuer_tail.load(Relaxed) as usize % BUFFER_SIZE;
-        if self.head.load(Relaxed) == self.dequeuer_tail.load(Relaxed) {
+        let tail_index = self.tail.load(Relaxed) as usize % BUFFER_SIZE;
+        if self.head.load(Relaxed) == self.tail.load(Relaxed) {
             [&[],&[]]
         } else if head_index < tail_index {
             unsafe {
@@ -222,16 +206,29 @@ AtomicMeta<SlotType,
     }
 
     fn debug_info(&self) -> String {
-        let Self {enqueuer_tail, concurrent_enqueuers, buffer: _, head, dequeuer_tail} = self;
-        let enqueuer_tail = enqueuer_tail.load(Relaxed);
+        let Self {head, tail, dequeuer_head, enqueuer_tail, buffer: _} = self;
         let head = head.load(Relaxed);
-        let dequeuer_tail = dequeuer_tail.load(Relaxed);
-        let concurrent_enqueuers = concurrent_enqueuers.load(Relaxed);
-        format!("ogre_queues::atomic_meta's state: {{head: {head}, enqueuer_tail: {enqueuer_tail}, dequeuer_tail: {dequeuer_tail}, (len: {}), concurrent_enqueuers: {concurrent_enqueuers}, elements: {{{}}}'}}",
+        let tail = tail.load(Relaxed);
+        let dequeuer_head = dequeuer_head.load(Relaxed);
+        let enqueuer_tail = enqueuer_tail.load(Relaxed);
+        format!("ogre_queues::atomic_meta's state: {{head: {head}, tail: {tail}, dequeuer_head: {dequeuer_head}, enqueuer_tail: {enqueuer_tail}, (len: {}), elements: {{{}}}'}}",
                 self.len(),
                 unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));
                     acc
                 }))
     }
+}
+
+// NOTE: spin_loop instruction disabled for now, as Tokio is faster without it (frees the CPU to do other tasks)
+// /// relax the cpu for a time proportional to how much we are expected to wait for the concurrent CAS operation to succeed
+// /// (5x * number of bytes to be set * wait_factor)
+#[inline(always)]
+fn relaxed_wait<SlotType>(wait_factor: u32) {
+    // for _ in 0..wait_factor {
+    //     // subject to loop unrolling optimization
+    //     for _ in 0..std::mem::size_of::<SlotType>() {
+    //         std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+    //     }
+    // }
 }
