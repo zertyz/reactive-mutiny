@@ -39,7 +39,7 @@ pub type OgreMPMCQueue<ItemType,
                                 MAX_STREAMS>;
 
 
-type AllocatorType<ItemType, const BUFFER_SIZE: usize> = ReferenceCountedNonBlockingCustomQueueAllocator<ItemType, NonBlockingQueue<u32, BUFFER_SIZE, false, false>, BUFFER_SIZE>;
+type AllocatorType<ItemType, const BUFFER_SIZE: usize> = ReferenceCountedNonBlockingCustomQueueAllocator<ItemType, NonBlockingQueue<u32, BUFFER_SIZE>, BUFFER_SIZE>;
 
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct InternalOgreMPMCQueue<ItemType:          Clone + Unpin + Send + Sync + Debug,
@@ -47,24 +47,26 @@ pub struct InternalOgreMPMCQueue<ItemType:          Clone + Unpin + Send + Sync 
                                  const BUFFER_SIZE: usize,
                                  const MAX_STREAMS: usize> {
     pub (crate) buffer:     AllocatorType,
-    /// General non-blocking full sync queues allowing to report back on the number of retained elements after enqueueing,
-    /// so to work optimally with our round-robin stream-awaking algorithm
+    /// General non-blocking full sync queues -- one for each Multi
     queues:                 [FullSyncMeta<u32, BUFFER_SIZE>; MAX_STREAMS],
+    /// simple metrics
     created_streams_count:  AtomicU32,
-    /// the id # of streams that can be created are stored here -- for the purposes of accessing its `waker[]`.\
-    /// synced with `used_streams` so creating & dropping streams occurs as fast as possible, as well as enqueueing elements
-    vacant_streams:         Pin<Box<NonBlockingQueue<u32, MAX_STREAMS, false, false>>>,
+    /// simple metrics
+    finished_streams_count: AtomicU32,
+    /// used to coordinate syncing between `vacant_streams` and `used_streams`
+    streams_lock:           AtomicBool,
+    /// the id # of streams that can be created are stored here.\
+    /// synced with `used_streams`, so creating & dropping streams occurs as fast as possible, as well as enqueueing elements
+    vacant_streams:         Pin<Box<NonBlockingQueue<u32, MAX_STREAMS>>>,
     /// this is synced with `vacant_streams` to be its counter-part -- so enqueueing is optimized:
     /// it holds the stream ids that are active, `u32::MAX` being used to indicate a premature end of the list
     used_streams:           [u32; MAX_STREAMS],
-    /// holds wakers for each stream id #
-    wakers:                 [Option<Waker>; MAX_STREAMS],
-    finished_streams_count: AtomicU32,
-    keep_stream_running:    [bool; MAX_STREAMS],
-    /// used to coordinate syncing between `vacant_streams` and `used_streams`
-    streams_lock:           AtomicBool,
     /// coordinates writes to the wakers
     wakers_lock:            AtomicBool,
+    /// holds wakers for each stream id #
+    wakers:                 [Option<Waker>; MAX_STREAMS],
+    /// signals for Streams to end or to continue waiting for elements
+    keep_stream_running:    [bool; MAX_STREAMS],
     // phantoms
     _item_type:             PhantomData<ItemType>,
 }
@@ -74,8 +76,8 @@ impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
      const MAX_STREAMS: usize>
 InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS> {
 
-    /// Returns as many streams as requested, provided the specified limit [MAX_STREAMS] is respected
-    /// -- each stream will see all payloads sent through this channel.\
+    /// Returns a `Stream` -- may create as many streams as requested, provided the specified limit [MAX_STREAMS] is respected.\
+    /// Each stream will see all payloads sent through this channel.
     pub fn listener_stream(self: &Arc<Pin<Box<Self>>>) -> (impl Stream<Item=ItemType>, u32) {
         // safety: Unwraps the Arc to return the required Pin<Self> to Stream::next(),
         //         which is guaranteed not to mutate Self (our queue don't require it) or to do it
@@ -117,7 +119,7 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
                             // TODO optimization: Stream<Item=&...> should be returned by this function instead, to allow the optimization of avoiding
                             //      copying the value over and over again. For this to work, the stream executor should accept a `post_item()` closure,
                             //      in which I'd `.ref_dec()` the reference
-                            // TODO 20221010: the above attempt wasn't fully tried. An alternative, using Arc, has shitty performance. New solution:
+                            // TODO 20221010: the above attempt wasn't fully tryed. An alternative, using Arc, has shitty performance. New solution:
                             //                1) A new type will be created: `MultiPayload<ItemType>`, which will have a custom `Drop()`
                             //                2) That drop will simply `.ref_dec()` from the slot, making it free
                             //                3) It will implement `Deref` -- giving a reference to the buffer, as well as an unsafe `copy_unchecked()` method -- retuning a droppable copy of the underlying type
@@ -134,7 +136,7 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
                                     let moved = unsafe { moved.assume_init() };
                                     Some(moved)
                                 }) {
-                                    None                => slot.clone(),      // other streams will still take this element... clone it
+                                    None                 => slot.clone(),     // other streams will still take this element... clone it
                                     Some(slot) => slot,             // this is the last stream -- return the original item
                                 };
                                 Poll::Ready(Some(opaque_slot))
@@ -147,7 +149,7 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
                         },
                         None => {
                             if mutable_self.keep_stream_running[stream_id as usize] {
-                                // share the waker the first time this runs, so producers may wake this task up when an item is ready
+                                // share the waker the first time this runs, so producers may wake this task up (when an item is ready)
                                 if let None = &mutable_self.wakers[stream_id as usize] {
                                     // try again, syncing
                                     lock(&mutable_self.wakers_lock);
@@ -169,23 +171,6 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
             stream_id
         )
     }
-
-    // TODO 20220924: this method imposes a Copy -- therefore we should refactor our queues into its constituint operations so we may do whatever is
-    //                necessary to acquire a slot, then move the value just once, then proceed to the rest of the operation...
-    //                or rename the methods to try_enqueue() (returning bool) and enqueue() (waiting for a free slot)
-    /// development note: OUT-OF-TRAIT [UniChannel] implementation. Once Rust allows zero-cost async traits, this should be moved there
-    // #[inline(always)]
-    // pub async fn send(&self, item: ItemType) {
-    //     let closure = |slot: &mut ItemType| *slot = item;
-    //     loop {
-    //         if unsafe { self.zero_copy_try_send(closure) } {
-    //             break;
-    //         } else {
-    //             self.wake_all_streams();
-    //             tokio::task::yield_now().await;
-    //         }
-    //     }
-    // }
 
     #[inline(always)]
     fn wake_all_streams(&self) {
@@ -266,7 +251,7 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
                                      },
             created_streams_count:  AtomicU32::new(0),
             vacant_streams:         {
-                                        let vacant_streams = NonBlockingQueue::<u32, MAX_STREAMS, false, false>::new("vacant streams for an OgreMPMCQueue Multi channel");
+                                        let vacant_streams = NonBlockingQueue::<u32, MAX_STREAMS>::new("vacant streams for an OgreMPMCQueue Multi channel");
                                         for stream_id in 0..MAX_STREAMS as u32 {
                                             vacant_streams.enqueue(stream_id);
                                         }
@@ -302,7 +287,7 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
                 break
             }
             self.queues[*stream_id as usize].enqueue(|e| *e = slot_id,
-                                                     || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full, but it should not be ahead of the Allocator, which was not full"),
+                                                     || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full, but it should never be ahead of the Allocator, which was not full"),
                                                      |len| if len <= 1 { self.wake_stream(*stream_id) });
         }
     }
@@ -330,7 +315,7 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
                         break
                     }
                     self.queues[*stream_id as usize].enqueue(|e| *e = slot_id,
-                                                             || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full (and it shouldn't be ahead of the Allocator, which was not full)"),
+                                                             || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full (but it shouldn't be ahead of the Allocator, which was not full)"),
                                                              |len| if len <= 1 { self.wake_stream(*stream_id) });
                 }
                 true
