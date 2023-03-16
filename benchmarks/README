@@ -1,0 +1,1 @@
+mkdir -p domlap oldlap analap ogre pinklap; D='/tmp/benchmarks'; echo domlap...; cp -a $D/* domlap/; echo analap...; rsync -PaS luiz@192.168.1.70:$D/ analap/; echo oldlap...; rsync -PaS root@192.168.1.5:$D/ oldlap/; echo ogre...; rsync -e 'ssh -p 993' -PaSx root@OgreBot1:$D/ ogre/; echo pinklap...; rsync -e 'ssh -p 993' -PaSx root@192.168.1.10:$D/ pinklap/

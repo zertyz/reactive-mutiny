@@ -1,0 +1,245 @@
+   Compiling reactive-mutiny v0.1.0 (/tmp/reactive-mutiny)
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+  --> src/ogre_std/ogre_queues/atomic_queues/non_blocking_queue.rs:94:80
+   |
+94 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+   |                                                                  ^^^^^^^^^^^^^^^^^^
+   |
+  ::: src/ogre_std/container_instruments.rs:11:1
+   |
+11 | pub enum ContainerInstruments {
+   | ----------------------------- method `metricsDiagnostics` not found for this enum
+   |
+help: there is a variant with a similar name
+   |
+94 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+   |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+   |
+94 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+   |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/non_blocking_queue.rs:105:80
+    |
+105 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+105 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+105 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/non_blocking_queue.rs:127:80
+    |
+127 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+127 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+127 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/non_blocking_queue.rs:139:80
+    |
+139 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+139 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+139 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+  --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:67:52
+   |
+67 |         if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+   |                                                    ^^^^^^^^^^^^^^^^^^
+   |
+  ::: src/ogre_std/container_instruments.rs:11:1
+   |
+11 | pub enum ContainerInstruments {
+   | ----------------------------- method `metricsDiagnostics` not found for this enum
+   |
+help: there is a variant with a similar name
+   |
+67 |         if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+   |                                                    ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+   |
+67 |         if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+   |                                                    ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:110:52
+    |
+110 |         if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                    ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+110 |         if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                    ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+110 |         if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                    ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:195:80
+    |
+195 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+195 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+195 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:216:80
+    |
+216 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+216 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+216 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:278:80
+    |
+278 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+278 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+278 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:289:80
+    |
+289 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+289 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+289 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:308:80
+    |
+308 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+308 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+308 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+error[E0599]: no method named `metricsDiagnostics` found for enum `ContainerInstruments` in the current scope
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:320:80
+    |
+320 | ...                   if ContainerInstruments::from(INSTRUMENTS).metricsDiagnostics() {
+    |                                                                  ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src/ogre_std/container_instruments.rs:11:1
+    |
+11  | pub enum ContainerInstruments {
+    | ----------------------------- method `metricsDiagnostics` not found for this enum
+    |
+help: there is a variant with a similar name
+    |
+320 |                                     if ContainerInstruments::from(INSTRUMENTS).MetricsWithDiagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~~~~
+help: there is a method with a similar name
+    |
+320 |                                     if ContainerInstruments::from(INSTRUMENTS).metrics_diagnostics() {
+    |                                                                                ~~~~~~~~~~~~~~~~~~~
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `reactive-mutiny` due to 12 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `reactive-mutiny` due to 12 previous errors
