@@ -2,7 +2,6 @@ use std::pin::Pin;
 use parking_lot::RawMutex;
 
 pub mod meta_queue;
-pub mod blocking_queue;
 pub mod non_blocking_parking_lot_queue;
 pub mod atomic_queues;
 pub mod full_sync_queues;

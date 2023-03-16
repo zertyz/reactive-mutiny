@@ -224,7 +224,7 @@ AtomicMeta<SlotType,
 // /// relax the cpu for a time proportional to how much we are expected to wait for the concurrent CAS operation to succeed
 // /// (5x * number of bytes to be set * wait_factor)
 #[inline(always)]
-fn relaxed_wait<SlotType>(wait_factor: u32) {
+fn relaxed_wait<SlotType>(_wait_factor: u32) {
     // for _ in 0..wait_factor {
     //     // subject to loop unrolling optimization
     //     for _ in 0..std::mem::size_of::<SlotType>() {

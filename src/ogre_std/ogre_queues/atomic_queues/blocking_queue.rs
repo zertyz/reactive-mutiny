@@ -22,7 +22,7 @@ use parking_lot::{
         RawMutexTimed,
     },
 };
-use log::{trace, info};
+use log::{trace};
 
 
 /// Multiple producer / multiple consumer lock-free / blocking queue --
@@ -168,7 +168,7 @@ OgreQueue<SlotType>
 for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized {
-        let mut instance = Box::pin(Self {
+        let instance = Box::pin(Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             full_guard:         RawMutex::INIT,

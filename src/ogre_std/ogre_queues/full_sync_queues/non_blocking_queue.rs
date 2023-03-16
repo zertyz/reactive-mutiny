@@ -1,6 +1,7 @@
 //! See [NonBlockingQueue]
 
 use super::super::super::{
+    instruments::Instruments,
     ogre_queues::{
         OgreQueue,
         meta_queue::MetaQueue,
@@ -21,8 +22,7 @@ use log::trace;
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct NonBlockingQueue<SlotType:          Unpin + Debug,
                             const BUFFER_SIZE: usize,
-                            const METRICS:     bool = false,
-                            const DEBUG:       bool = false> {
+                            const INSTRUMENTS: usize = 0> {
     // metrics for enqueue
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
@@ -36,10 +36,9 @@ pub struct NonBlockingQueue<SlotType:          Unpin + Debug,
 }
 impl<SlotType:          Unpin + Debug,
      const BUFFER_SIZE: usize,
-     const METRICS:     bool,
-     const DEBUG:       bool>
+     const INSTRUMENTS: usize>
 OgreQueue<SlotType>
-for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
+for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized {
         Box::pin(Self {
@@ -56,20 +55,20 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
     fn enqueue(&self, element: SlotType) -> bool {
         let element = ManuallyDrop::new(element);       // ensure it won't be dropped when this function ends, since it will be "moved"
         self.base_queue.enqueue(|slot| {
-                                    if DEBUG {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
                                     }
-                                    if METRICS {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.enqueue_count.fetch_add(1, Relaxed);
                                     }
                                     // moves `element` to the buffer -- it won't be dropped after this function ends since it has been wrapped into a `ManuallyDrop`
                                     unsafe { std::ptr::copy_nonoverlapping(element.deref() as *const SlotType, (slot as *const SlotType) as *mut SlotType, 1) }
                                  },
                                 || {
-                                    if DEBUG {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' ENQUEUE: queue is full when attempting to enqueue element '{:?}'", self.queue_name, element);
                                     }
-                                    if METRICS {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.queue_full_count.fetch_add(1, Relaxed);
                                     }
                                     false
@@ -85,19 +84,19 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
                                     unsafe { moved_value.assume_init() }
                                 },
                                 || {
-                                if DEBUG {
+                                if Instruments::from(INSTRUMENTS).tracing() {
                                     trace!("### '{}' DEQUEUE: queue is empty when attempting to dequeue an element", self.queue_name);
                                 }
-                                if METRICS {
+                                if Instruments::from(INSTRUMENTS).metrics() {
                                     self.queue_empty_count.fetch_add(1, Relaxed);
                                 }
                                     false
                                 },
                                 |_| {
-                                    if DEBUG {
+                                    if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' DEQUEUE: dequeued an element", self.queue_name);
                                     }
-                                    if METRICS {
+                                    if Instruments::from(INSTRUMENTS).metrics() {
                                         self.dequeue_count.fetch_add(1, Relaxed);
                                     }
                                 })
@@ -112,11 +111,11 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
     }
 
     fn debug_enabled(&self) -> bool {
-        DEBUG
+        Instruments::from(INSTRUMENTS).tracing()
     }
 
     fn metrics_enabled(&self) -> bool {
-        METRICS
+        Instruments::from(INSTRUMENTS).metrics()
     }
 
     fn queue_name(&self) -> &str {
@@ -134,9 +133,8 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
 
 impl<SlotType:          Unpin + Debug,
      const BUFFER_SIZE: usize,
-     const METRICS:     bool,
-     const DEBUG:       bool>
-NonBlockingQueue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
+     const INSTRUMENTS: usize>
+NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     /// See [MetaQueue::peek_all()]
     #[inline(always)]
@@ -156,37 +154,37 @@ mod tests {
 
     #[test]
     fn basic_queue_use_cases() {
-        let queue = NonBlockingQueue::<i32, 16, false, false>::new("'basic_use_cases' test queue");
+        let queue = NonBlockingQueue::<i32, 16, {Instruments::MetricsWithDiagnostics.into()}>::new("'basic_use_cases' test queue");
         test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[test]
     fn single_producer_multiple_consumers() {
-        let queue = NonBlockingQueue::<u32, 65536, false, false>::new("'single_producer_multiple_consumers' test queue");
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'single_producer_multiple_consumers' test queue");
         test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     fn multiple_producers_single_consumer() {
-        let queue = NonBlockingQueue::<u32, 65536, false, false>::new("'multiple_producers_single_consumer' test queue");
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_single_consumer' test queue");
         test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 102400, false, false>::new("'multiple_producers_and_consumers_all_in_and_out' test queue");
+        let queue = NonBlockingQueue::<u32, 102400, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue");
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 128, false, false>::new("'multiple_producers_and_consumers_single_in_and_out' test queue");
+        let queue = NonBlockingQueue::<u32, 128, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue");
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[test]
     pub fn peek_test() {
-        let queue = NonBlockingQueue::<u32, 16, false, false>::new("'peek_test' queue");
+        let queue = NonBlockingQueue::<u32, 16, {Instruments::MetricsWithDiagnostics.into()}>::new("'peek_test' queue");
 
         // tests peeking [&[0..n], &[]]
         for i in 1..=16 {
