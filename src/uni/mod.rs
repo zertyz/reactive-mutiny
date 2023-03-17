@@ -426,7 +426,7 @@ mod tests {
     }
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread"))]
+    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn performance_measurements() {
 
         #[cfg(not(debug_assertions))]
@@ -445,11 +445,7 @@ mod tests {
             //let producer = uni.producer_closure();
             for e in 0..count {
                 while !uni.try_send(e) {
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+                    std::hint::spin_loop();
                 };
             }
             uni.close(Duration::from_secs(5)).await;

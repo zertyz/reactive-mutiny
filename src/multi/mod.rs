@@ -82,9 +82,9 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "zeta receiver", zeta_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "earth snapper", earth_on_event, |_| async {}).await?
             .handle();
-        let producer = |item| multi.try_send(item);
-        producer("I've just arrived!".to_string());
-        producer("Nothing really interesting here... heading back home!".to_string());
+        let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+        producer("I've just arrived!");
+        producer("Nothing really interesting here... heading back home!");
         multi.close(Duration::ZERO).await;
         Ok(())
     }
@@ -115,7 +115,7 @@ mod tests {
                                                       },
                                                      |_| async {}).await?
             .handle();
-        let producer = |item| while !multi.try_send(item) { std::hint::spin_loop(); };
+        let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
 
         // produces some events concurrently -- they will be shared with all executable pipelines
         let shared_producer = &producer;
@@ -181,7 +181,7 @@ mod tests {
             .expect("Single instance of PIPELINE_2 should have been created");
 
         let multi: Arc<Multi<u32, 1024, 2>> = multi_builder.handle();
-        while !multi.try_send(97) { std::hint::spin_loop(); };
+        while !multi.zero_copy_try_send(|slot| *slot = 97) { std::hint::spin_loop(); };
         multi.close(Duration::ZERO).await;
 
         assert_eq!(*last_message.try_lock().unwrap(), 97, "event didn't complete");
@@ -256,7 +256,7 @@ mod tests {
             .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), "Stream Pipeline #2", pipeline2_builder, |_| async {}, |_| async {}).await?
             .handle();
 
-        let producer = |item| while !multi.try_send(item) { std::hint::spin_loop(); };
+        let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
 
         let shared_producer = &producer;
         stream::iter(PARTS)
@@ -284,8 +284,8 @@ mod tests {
             multi_builder.spawn_non_futures_non_fallible_executor(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
         }
         let multi = multi_builder.handle();
-        let producer = |item| multi.try_send(item);
-        producer("'only count successes' payload".to_string());
+        let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+        producer("'only count successes' payload");
         multi.close(Duration::ZERO).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
         for (i, executor_info) in multi.executor_infos.read().await.values().enumerate() {
@@ -324,12 +324,12 @@ mod tests {
             ).await?;
         }
         let multi = multi_builder.handle();
-        let producer = |item| multi.try_send(item);
+        let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
         // for this test, produce each event twice
         for _ in 0..2 {
-            producer("'successful' payload".to_string());
-            producer("'unsuccessful' payload".to_string());
-            producer("'timeout' payload".to_string());
+            producer("'successful' payload");
+            producer("'unsuccessful' payload");
+            producer("'timeout' payload");
         }
         multi.close(Duration::ZERO).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
@@ -398,7 +398,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(2, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                while !six_multi.try_send(true) { std::hint::spin_loop(); }
+                                while !six_multi.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
                             }
                         } else if payload == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -422,7 +422,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_two_event, on_two_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_two_event, on_two_close_builder()).await?
             .handle();
-        let two_producer = |item| while !two_multi.try_send(item) { std::hint::spin_loop(); };
+        let two_producer = |item| while !two_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
 
         // FOUR event
         let on_four_event = |stream: MutinyStream<u32>| {
@@ -440,7 +440,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(4, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                while !six_multi.try_send(true) { std::hint::spin_loop(); }
+                                while !six_multi.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
                             }
                         } else if payload == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -464,7 +464,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_four_event, on_four_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_four_event, on_four_close_builder()).await?
             .handle();
-        let four_producer = |item| while !four_multi.try_send(item) { std::hint::spin_loop(); };
+        let four_producer = |item| while !four_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
         //       so we can test race conditions for the 'close producer' functions
@@ -564,7 +564,7 @@ mod tests {
                             |_| async {}
             ).await?
             .handle();
-        let producer = |item| while !multi.try_send(item) { std::hint::spin_loop(); };
+        let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
         producer(0);
         producer(1);
         producer(2);
@@ -602,7 +602,7 @@ mod tests {
                                                      },
                                                      |_| async {}).await?
             .handle();
-        let simple_producer = |item| while !simple_multi.try_send(item) { std::hint::spin_loop(); };
+        let simple_producer = |item| while !simple_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
 
         // 1) Measure the time to produce & consume a SIMPLE event -- No other multi tokio tasks are available
         simple_producer(SystemTime::now());
@@ -627,7 +627,7 @@ mod tests {
                                                                   |_| async {}).await?;
         }
         let bloated_multi = bloated_multi.handle();
-        let bloated_producer = |item| while !bloated_multi.try_send(item) { std::hint::spin_loop(); };
+        let bloated_producer = |item| while !bloated_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
 
         // 2) Bloat the Tokio Runtime with a lot of tasks -- multi executors in our case -- verifying all of them will run once
         bloated_producer(SystemTime::now());
@@ -663,7 +663,7 @@ mod tests {
     }
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread"))]
+    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn performance_measurements() -> Result<(), Box<dyn std::error::Error>> {
 
         #[cfg(not(debug_assertions))]
@@ -680,12 +680,8 @@ mod tests {
                                count: u32) {
             let start = Instant::now();
             for e in 0..count {
-                while !multi.try_send(e) {
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+                while !multi.zero_copy_try_send(|slot| *slot = e) {
+                    std::hint::spin_loop();
                 };
             }
             multi.close(Duration::from_secs(5)).await;
