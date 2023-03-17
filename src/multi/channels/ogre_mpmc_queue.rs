@@ -13,19 +13,17 @@ use crate::{
 };
 use std::{
     time::Duration,
-    sync::atomic::AtomicU32,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, AtomicBool, Ordering::{Relaxed}},
+    },
     pin::Pin,
     fmt::Debug,
     task::{Poll, Waker},
-    sync::Arc,
-    mem
+    mem::{self, MaybeUninit},
+    hint::spin_loop,
+    marker::PhantomData,
 };
-use std::hint::spin_loop;
-use std::marker::PhantomData;
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::ops::Deref;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::{Relaxed};
 use futures::{Stream};
 use minstant::Instant;
 
@@ -269,71 +267,41 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
     }
 
     #[inline(always)]
-    pub async unsafe fn zero_copy_send(&self, item_builder: impl Fn(&mut ItemType)) {
+    pub async fn zero_copy_send(&self, item_builder: impl Fn(&mut ItemType)) {
         // time to sleep between retry attempts, if the channel is full
         const FULL_WAIT_TIME: Duration = Duration::from_millis(1);
         // loop until there is an allocation
-        let slot = loop {
-            let used_streams_count = (MAX_STREAMS - self.vacant_streams.len()) as u32;
-            match self.buffer.allocate(used_streams_count) {
-                Some(slot) => break slot,
-                None                     => tokio::time::sleep(FULL_WAIT_TIME).await,
+        loop {
+            if self.zero_copy_try_send(&item_builder) {
+                break
+            } else {
+                tokio::time::sleep(FULL_WAIT_TIME).await;
             }
-        };
-        item_builder(slot);
-        let slot_id = self.buffer.slot_id_from_slot(slot);
+        }
+    }
+
+    #[inline(always)]
+    pub fn zero_copy_try_send(&self, item_builder: &impl Fn(&mut ItemType)) -> bool {
+        let mut slot_id = None;
         for stream_id in self.used_streams.iter() {
             if *stream_id == u32::MAX {
                 break
             }
-            self.queues[*stream_id as usize].enqueue(|e| *e = slot_id,
-                                                     || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full, but it should never be ahead of the Allocator, which was not full"),
-                                                     |len| if len <= 1 { self.wake_stream(*stream_id) });
-        }
-    }
-
-    #[inline(always)]
-    pub async fn send(&self, item: ItemType) {
-        let item = ManuallyDrop::new(item);       // ensure it won't be dropped when this function ends, since it will be "moved"
-        unsafe {
-            self.zero_copy_send(|slot| {
-                // move `item` to `slot`
-                std::ptr::copy_nonoverlapping(item.deref() as *const ItemType, (slot as *const ItemType) as *mut ItemType, 1);
-            }).await
-        }
-    }
-
-    #[inline(always)]
-    pub unsafe fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
-        let used_streams_count = (MAX_STREAMS - self.vacant_streams.len()) as u32;
-        match self.buffer.allocate(used_streams_count) {
-            Some(slot) => {
-                item_builder(slot);
-                let slot_id = self.buffer.slot_id_from_slot(slot);
-                for stream_id in self.used_streams.iter() {
-                    if *stream_id == u32::MAX {
-                        break
-                    }
-                    self.queues[*stream_id as usize].enqueue(|e| *e = slot_id,
-                                                             || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full (but it shouldn't be ahead of the Allocator, which was not full)"),
-                                                             |len| if len <= 1 { self.wake_stream(*stream_id) });
+            if let None = slot_id {
+                let used_streams_count = (MAX_STREAMS - self.vacant_streams.len()) as u32;
+                if let Some(slot) = self.buffer.allocate(used_streams_count) {
+                    slot_id = Some(self.buffer.slot_id_from_slot(slot));
+                    item_builder(slot);
+                } else {
+                    self.wake_all_streams();
+                    return false;
                 }
-                true
-            },
-            None => false
+            }
+            self.queues[*stream_id as usize].enqueue(|e| *e = slot_id.unwrap(),
+                                                        || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full (but it shouldn't be ahead of the Allocator, which was not full)"),
+                                                        |len| if len == 1 { self.wake_stream(*stream_id) });
         }
-    }
-
-    #[inline(always)]
-    pub fn try_send(&self, item: ItemType) -> bool {
-        let item = ManuallyDrop::new(item);       // ensure it won't be dropped when this function ends, since it will be "moved"
-        unsafe {
-            self.zero_copy_try_send(|slot| {
-                // move `item` to `slot`
-                std::ptr::copy_nonoverlapping(item.deref() as *const ItemType, (slot as *const ItemType) as *mut ItemType, 1);
-            })
-        }
-
+        true
     }
 
     pub async fn flush(&self, timeout: Duration) -> u32 {
@@ -436,6 +404,7 @@ fn unlock(flag: &AtomicBool) {
 #[cfg(any(test, feature = "dox"))]
 mod tests {
     use super::*;
+    use std::io::Write;
     use futures::{stream, StreamExt};
 
 
@@ -444,7 +413,7 @@ mod tests {
     async fn doc_test() {
         let channel = OgreMPMCQueue::<&str>::new();
         let (mut stream, _stream_id) = channel.listener_stream();
-        channel.try_send("a");
+        channel.zero_copy_send(|slot| *slot = "a").await;
         println!("received: {}", stream.next().await.unwrap());
     }
 
@@ -457,7 +426,7 @@ mod tests {
             assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
             let (mut stream, _stream_id) = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
-            channel.try_send("a");
+            channel.zero_copy_send(|slot| *slot = "a").await;
             drop(channel);  // dropping the channel will decrease the Arc reference count by 1
             println!("received: {}", stream.next().await.unwrap());
         }
@@ -470,11 +439,11 @@ mod tests {
             assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
             let (mut stream, _stream_id) = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
-            channel.try_send("a");
+            channel.zero_copy_send(|slot| *slot = "a").await;
             drop(channel);  // dropping the channel will decrease the Arc reference count by 1
             println!("received: {}", stream.next().await.unwrap());
         }
-        // print!("Lazy check with stupid amount of creations and destructions... watch out the process for memory: ");
+        // print!("Brute-force check with stupid amount of creations and destructions... watch out the process for memory!");
         // for i in 0..1234567 {
         //     let channel = OgreMPMCQueue::<&str>::new();
         //     let mut stream = channel.consumer_stream();
@@ -484,7 +453,7 @@ mod tests {
         //     drop(channel);
         //     stream.next().await.unwrap();
         // }
-        // println!("Done. Sleeping for 30 seconds. Go watch the heap!");
+        // println!("Done. Sleeping for 30 seconds. Go watch the heap! ... or rerun this test with `/sbin/time -v ...`");
         // tokio::time::sleep(Duration::from_secs(30)).await;
     }
 
@@ -498,7 +467,7 @@ mod tests {
         let message = "to `stream1` and `stream2`".to_string();
         let (stream1, _stream1_id) = channel.listener_stream();
         let (stream2, _stream2_id) = channel.listener_stream();
-        channel.try_send(message.clone());
+        channel.zero_copy_send(|slot| *slot = message.clone()).await;
         assert_received(stream1, message.clone(), "`stream1` didn't receive the right message").await;
         assert_received(stream2, message.clone(), "`stream2` didn't receive the right message").await;
 
@@ -510,7 +479,7 @@ mod tests {
         for i in 0..10240 {
             let message = format!("gremling #{}", i);
             let (gremlin_stream, _gremlin_stream_id) = channel.listener_stream();
-            channel.try_send(message.clone());
+            channel.zero_copy_send(|slot| *slot = message.clone()).await;
             assert_received(gremlin_stream, message, "`gremling_stream` didn't receive the right message").await;
         }
 
@@ -550,7 +519,7 @@ mod tests {
 
         // send
         for i in 0..PARALLEL_STREAMS as u32 {
-            while !channel.try_send(i) {
+            while !channel.zero_copy_try_send(&|slot| *slot = i) {
                 spin_loop();
             };
         }
@@ -634,14 +603,14 @@ mod tests {
         const PAYLOAD_TEXT: &str = "A shareable playload";
         let channel = OgreMPMCQueue::<Option<Arc<String>>>::new();
         let (mut stream, _stream_id) = channel.listener_stream();
-        channel.try_send(Some(Arc::new(String::from(PAYLOAD_TEXT))));
+        channel.zero_copy_send(|slot| *slot = Some(Arc::new(String::from(PAYLOAD_TEXT)))).await;
         let payload = stream.next().await.unwrap();
         assert_eq!(payload.as_ref().unwrap().as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
         assert_eq!(Arc::strong_count(&payload.unwrap()), 1, "A payload doing the round trip (being sent by the channel and received by the stream) should have been cloned just once -- so, when dropped, all resources would be freed");
     }
 
-        /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread"))]
+    /// assures performance won't be degraded when we make changes
+    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn performance_measurements() {
         #[cfg(not(debug_assertions))]
         const FACTOR: u32 = 1024;
@@ -654,9 +623,13 @@ mod tests {
                 let profiling_name = $profiling_name;
                 let count = $count;
                 let (mut stream, _stream_id) = channel.listener_stream();
+
+                print!("{} (same task / same thread): ", profiling_name);
+                std::io::stdout().flush().unwrap();
+
                 let start = Instant::now();
                 for e in 0..count {
-                    channel.try_send(e);
+                    channel.zero_copy_try_send(&|slot| *slot = e);
                     if let Some(consumed_e) = stream.next().await {
                         assert_eq!(consumed_e, e, "{profiling_name}: produced and consumed items differ");
                     } else {
@@ -664,8 +637,8 @@ mod tests {
                     }
                 }
                 let elapsed = start.elapsed();
-                println!("{} (same task / same thread): {:10.2}/s -- {} items processed in {:?}",
-                         profiling_name,
+
+                println!("{:10.2}/s -- {} items processed in {:?}",
                          count as f64 / elapsed.as_secs_f64(),
                          count,
                          elapsed);
@@ -678,16 +651,11 @@ mod tests {
                 let profiling_name = $profiling_name;
                 let count = $count;
                 let (mut stream, _stream_id) = channel.listener_stream();
-                let start = Instant::now();
 
                 let sender_future = async {
                     for e in 0..count {
-                        while !channel.try_send(e) {
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
+                        while !channel.zero_copy_try_send(&|slot| *slot = e) {
+                            tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                         }
                     }
                     channel.end_all_streams(Duration::from_secs(1)).await;
@@ -701,11 +669,14 @@ mod tests {
                     }
                 };
 
-                tokio::join!(sender_future, receiver_future);
+                print!("{} (different task / same thread): ", profiling_name);
+                std::io::stdout().flush().unwrap();
 
+                let start = Instant::now();
+                tokio::join!(sender_future, receiver_future);
                 let elapsed = start.elapsed();
-                println!("{} (different task / same thread): {:10.2}/s -- {} items processed in {:?}",
-                         profiling_name,
+
+                println!("{:10.2}/s -- {} items processed in {:?}",
                          count as f64 / elapsed.as_secs_f64(),
                          count,
                          elapsed);
@@ -718,17 +689,11 @@ mod tests {
                 let profiling_name = $profiling_name;
                 let count = $count;
                 let (mut stream, _stream_id) = channel.listener_stream();
-                let start = Instant::now();
 
                 let sender_task = tokio::spawn(async move {
                     for e in 0..count {
-                        while !channel.try_send(e) {
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            tokio::task::yield_now().await;     // when running in dev mode with --test-threads 1, this is needed or else we'll hang here
+                        while !channel.zero_copy_try_send(&|slot| *slot = e) {
+                            std::hint::spin_loop(); tokio::task::yield_now().await;
                         }
                     }
                     channel.end_all_streams(Duration::from_secs(5)).await;
@@ -742,13 +707,16 @@ mod tests {
                     }
                 });
 
+                print!("{} (different task / different thread): ", profiling_name);
+                std::io::stdout().flush().unwrap();
+
+                let start = Instant::now();
                 let (sender_result, receiver_result) = tokio::join!(sender_task, receiver_task);
                 receiver_result.expect("receiver task");
                 sender_result.expect("sender task");
-
                 let elapsed = start.elapsed();
-                println!("{} (different task / different thread): {:10.2}/s -- {} items processed in {:?}",
-                         profiling_name,
+
+                println!("{:10.2}/s -- {} items processed in {:?}",
                          count as f64 / elapsed.as_secs_f64(),
                          count,
                          elapsed);

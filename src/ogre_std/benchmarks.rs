@@ -289,7 +289,7 @@ mod benchmark_queues {
     use super::*;
     use super::super::{
         instruments::Instruments,
-        ogre_queues::{OgreQueue,OgreBlockingQueue}
+        ogre_queues::{OgreQueue}
     };
     use std::{
         fmt::Debug,
@@ -315,7 +315,7 @@ mod benchmark_queues {
         }
     }
 
-    macro_rules! impl_benchmarkable_container_for_blocking {
+    macro_rules! _impl_benchmarkable_container_for_blocking {
         ($queue_type: ty) => {
             impl<SlotType: Copy+Unpin+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
                 fn max_size(&self) -> usize {

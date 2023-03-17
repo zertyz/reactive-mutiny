@@ -278,7 +278,7 @@ mod tests {
 
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread"))]
+    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn performance_measurements() {
         #[cfg(not(debug_assertions))]
         const FACTOR: u32 = 1024;
@@ -320,11 +320,7 @@ mod tests {
                 let sender_future = async {
                     for e in 0..count {
                         while !channel.try_send(e) {
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
-                            tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await; tokio::task::yield_now().await;
+                            tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                         }
                     }
                     channel.end_all_streams(Duration::from_secs(1)).await;
@@ -363,12 +359,7 @@ if counter == count {
                 let sender_task = tokio::spawn(async move {
                     for e in 0..count {
                         while !channel.try_send(e) {
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                            tokio::task::yield_now().await;     // when running in dev mode with --test-threads 1, this is needed or else we'll hang here
+                            std::hint::spin_loop();
                         }
                     }
                     channel.end_all_streams(Duration::from_secs(5)).await;

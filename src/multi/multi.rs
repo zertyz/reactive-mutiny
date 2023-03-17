@@ -93,8 +93,8 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     }
 
     #[inline(always)]
-    pub fn try_send(&self, message: ItemType) -> bool {
-        self.channel.try_send(message)
+    pub fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
+        self.channel.zero_copy_try_send(&item_builder)
     }
 
     // pub async fn report_executor_ended(&self, _executor: &Arc<StreamExecutor<LOG, METRICS>>) {
