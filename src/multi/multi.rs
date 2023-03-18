@@ -38,10 +38,11 @@ impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
 Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub fn new<IntoString: Into<String>>(stream_name: IntoString) -> Arc<Self> {
+        let stream_name = stream_name.into();
         Arc::new(Multi {
-            stream_name: stream_name.into(),
-            channel:     MultiChannelType::<ItemType, BUFFER_SIZE, MAX_STREAMS>::new(),
-            executor_infos:   RwLock::new(IndexMap::new()),
+            stream_name:    stream_name.clone(),
+            channel:        MultiChannelType::<ItemType, BUFFER_SIZE, MAX_STREAMS>::new(stream_name.clone()),
+            executor_infos: RwLock::new(IndexMap::new()),
         })
     }
 
@@ -49,7 +50,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
         &self.stream_name
     }
 
-    pub fn listener_stream(&self) -> (impl Stream<Item=ItemType>, u32) {
+    pub fn listener_stream(&self) -> (impl Stream<Item=Arc<ItemType>>, u32) {
         self.channel.listener_stream()
     }
 
@@ -93,8 +94,18 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     }
 
     #[inline(always)]
-    pub fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
-        self.channel.zero_copy_try_send(&item_builder)
+    pub fn send(&self, item: ItemType) {
+        self.channel.send(item);
+    }
+
+    #[inline(always)]
+    pub fn buffer_size(&self) -> u32 {
+        BUFFER_SIZE as u32
+    }
+
+    #[inline(always)]
+    pub fn pending_items_count(&self) -> u32 {
+        self.channel.pending_items_count()
     }
 
     // pub async fn report_executor_ended(&self, _executor: &Arc<StreamExecutor<LOG, METRICS>>) {

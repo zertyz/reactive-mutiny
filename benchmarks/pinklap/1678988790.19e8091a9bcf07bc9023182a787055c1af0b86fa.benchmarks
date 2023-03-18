@@ -1,0 +1,28 @@
+2023-03-16T18:10:06.795Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 8 tests
+test ogre_std::benchmarks::benchmark_queues::all_in_and_out_benchmarks ... 
+1 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')': 320997872.4519 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')': 260245231.9182 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 281280005.6960 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 399996304.3274 ops/s
+2 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')': 287665539.9936 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')': 245938069.3769 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 171299483.5302 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 284974604.2156 ops/s
+3 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')': 276195815.8949 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')': 232283405.2262 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 182353060.4058 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 294957232.4513 ops/s
+4 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')': 267471957.5641 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')': 223949436.6720 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 181249078.7856 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 266231704.8254 ops/s
+ok
+test ogre_std::benchmarks::benchmark_queues::multiple_producers_single_consumer_benchmarks ... 
+2 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Non-Blocking Queue')': 476056387.6913 ops/s

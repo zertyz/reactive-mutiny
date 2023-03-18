@@ -41,7 +41,7 @@ pub trait MetaQueue<SlotType> {
     ///      that would clone/copy the value and release the queue as soon as possible.
     ///   2) Note the `getter_fn()` is not `FnOnce()`. Some implementors might require calling this function more than once, on contention scenarios.
     fn dequeue<GetterReturnType,
-               GetterFn:                   Fn(&SlotType) -> GetterReturnType,
+               GetterFn:                   Fn(&mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
               (&self,

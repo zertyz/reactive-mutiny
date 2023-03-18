@@ -45,7 +45,7 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub async fn spawn_executor<IntoString:             Into<String>,
                                 OutItemType:            Send + Debug,
-                                PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)                 -> OutStreamType,
+                                PipelineBuilderFnType:  FnOnce(MutinyStream<Arc<InType>>)            -> OutStreamType,
                                 OutStreamType:          Stream<Item=OutType> + Send + 'static,
                                 OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
                                 OnErrFnType:            Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
@@ -79,7 +79,7 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub async fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                          OutItemType:            Send + Debug,
-                                                         PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)          -> OutStreamType,
+                                                         PipelineBuilderFnType:  FnOnce(MutinyStream<Arc<InType>>)     -> OutStreamType,
                                                          OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
                                                          OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)  -> CloseVoidAsyncType + Send + Sync + 'static,
                                                          CloseVoidAsyncType:     Future<Output=()> + Send + 'static>

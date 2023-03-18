@@ -1,0 +1,423 @@
+warning: unused import: `super::*`
+   --> src/uni/channels/tokio_mpsc.rs:118:9
+    |
+118 |     use super::*;
+    |         ^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `super::*`
+   --> src/uni/channels/atomic_mpmc_queue.rs:214:9
+    |
+214 |     use super::*;
+    |         ^^^^^^^^
+
+warning: unused imports: `Acquire`, `Release`
+  --> src/uni/channels/ogre_mpmc_queue.rs:17:35
+   |
+17 | use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+   |                                   ^^^^^^^           ^^^^^^^
+
+warning: unused import: `super::*`
+   --> src/uni/channels/ogre_mpmc_queue.rs:265:9
+    |
+265 |     use super::*;
+    |         ^^^^^^^^
+
+warning: unused import: `marker::PhantomData`
+  --> src/multi/multi_builder.rs:10:5
+   |
+10 |     marker::PhantomData,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `futures::future::BoxFuture`
+  --> src/multi/multi_builder.rs:14:5
+   |
+14 | use futures::future::BoxFuture;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `uni::MultiPayload`
+ --> src/multi/channels/ogre_mpmc_queue.rs:2:5
+  |
+2 |     uni::MultiPayload,
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ManuallyDrop`
+  --> src/types.rs:12:16
+   |
+12 | use std::mem::{ManuallyDrop, MaybeUninit};
+   |                ^^^^^^^^^^^^
+
+warning: unused import: `full_sync_queues::NonBlockingQueue`
+ --> src/ogre_std/reference_counted_buffer_allocator.rs:5:9
+  |
+5 |         full_sync_queues::NonBlockingQueue,
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::ogre_std::ogre_queues::blocking_queue`
+ --> src/ogre_std/ogre_queues/meta_queue.rs:3:5
+  |
+3 | use crate::ogre_std::ogre_queues::blocking_queue;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Duration`
+   --> src/ogre_std/ogre_queues/blocking_queue.rs:350:32
+    |
+350 |     use std::time::{SystemTime,Duration};
+    |                                ^^^^^^^^
+
+warning: unused import: `AtomicU64`
+ --> src/ogre_std/ogre_queues/atomic_queues/atomic_base.rs:6:30
+  |
+6 |     sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
+  |                              ^^^^^^^^^
+
+warning: unused import: `std::pin::Pin`
+ --> src/ogre_std/ogre_queues/atomic_queues/atomic_base.rs:9:5
+  |
+9 | use std::pin::Pin;
+  |     ^^^^^^^^^^^^^
+
+warning: unused imports: `AtomicU32`, `mem::MaybeUninit`
+  --> src/ogre_std/ogre_queues/atomic_queues/non_blocking_queue.rs:14:20
+   |
+14 |     sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
+   |                    ^^^^^^^^^
+15 |     mem::MaybeUninit,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `AtomicU32`, `mem::MaybeUninit`
+  --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:14:20
+   |
+14 |     sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
+   |                    ^^^^^^^^^
+15 |     mem::MaybeUninit,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::io::Write`
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:333:9
+    |
+333 |     use std::io::Write;
+    |         ^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::SystemTime`
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:334:9
+    |
+334 |     use std::time::SystemTime;
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::future::Future`
+ --> src/ogre_std/ogre_queues/full_sync_queues/full_sync_base.rs:6:5
+  |
+6 | use std::future::Future;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::Duration`
+  --> src/ogre_std/ogre_queues/full_sync_queues/full_sync_base.rs:11:5
+   |
+11 | use std::time::Duration;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `AtomicU32`
+  --> src/ogre_std/ogre_queues/full_sync_queues/non_blocking_queue.rs:13:20
+   |
+13 |     sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
+   |                    ^^^^^^^^^
+
+warning: unused imports: `AtomicU32`, `mem::MaybeUninit`
+  --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:12:20
+   |
+12 |     sync::atomic::{AtomicU32,AtomicU64,Ordering::Relaxed},
+   |                    ^^^^^^^^^
+13 |     mem::MaybeUninit,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: `#[inline]` is ignored on function prototypes
+  --> src/ogre_std/ogre_queues/meta_queue.rs:28:5
+   |
+28 |     #[inline(always)]
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_attributes)]` on by default
+
+warning: `#[inline]` is ignored on function prototypes
+  --> src/ogre_std/ogre_queues/meta_queue.rs:45:5
+   |
+45 |     #[inline(always)]
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: `#[inline]` is ignored on function prototypes
+  --> src/ogre_std/ogre_queues/meta_queue.rs:57:5
+   |
+57 |     #[inline(always)]
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: `#[inline]` is ignored on function prototypes
+  --> src/ogre_std/ogre_queues/meta_queue.rs:86:5
+   |
+86 |     #[inline(always)]
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `OgreQueue`
+ --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:5:9
+  |
+5 |         OgreQueue,
+  |         ^^^^^^^^^
+
+warning: unused import: `super::super::OgreQueue`
+ --> src/ogre_std/ogre_queues/atomic_queues/atomic_base.rs:3:5
+  |
+3 | use super::super::OgreQueue;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `i`
+   --> src/ogre_std/ogre_queues/blocking_queue.rs:412:40
+    |
+412 |             assert_non_blocking(|| for i in 0..QUEUE_SIZE {
+    |                                        ^ help: if this is intentional, prefix it with an underscore: `_i`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `result`
+   --> src/ogre_std/ogre_queues/blocking_queue.rs:439:17
+    |
+439 |             let result = op();
+    |                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_result`
+
+warning: unused variable: `empty_guard_ref`
+   --> src/ogre_std/ogre_queues/atomic_queues/blocking_queue.rs:264:39
+    |
+264 |     fn set_empty_guard_ref(&mut self, empty_guard_ref: &'_ RawMutex) {
+    |                                       ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_empty_guard_ref`
+
+warning: unused variable: `buffer`
+   --> src/ogre_std/ogre_queues/full_sync_queues/full_sync_base.rs:155:56
+    |
+155 |         let Self {full_guard, concurrency_guard, tail, buffer, head, empty_guard} = self;
+    |                                                        ^^^^^^ help: try ignoring the field: `buffer: _`
+
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:58:18
+   |
+58 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `zero_copy_try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:75:15
+   |
+75 |     unsafe fn zero_copy_try_send(&self, _item_builder: impl FnOnce(&mut ItemType)) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `reset` is never used
+  --> src/incremental_averages.rs:82:8
+   |
+82 |     fn reset(&self, weight: u32) {
+   |        ^^^^^
+
+warning: associated function `split` is never used
+  --> src/incremental_averages.rs:87:8
+   |
+87 |     fn split(&self) -> &IncrementalAveragePair32 {
+   |        ^^^^^
+
+warning: associated function `atomic` is never used
+  --> src/incremental_averages.rs:92:8
+   |
+92 |     fn atomic(&self) -> &AtomicU64 {
+   |        ^^^^^^
+
+warning: type alias `ReferenceCountedBlockingAllocator` is never used
+  --> src/ogre_std/reference_counted_buffer_allocator.rs:55:10
+   |
+55 | pub type ReferenceCountedBlockingAllocator<SlotType, USlots, const STACK_SIZE: usize> = ReferenceCountedNonBlockingCustomStackAllocator<S...
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `debug` is never used
+   --> src/ogre_std/ogre_queues/blocking_queue.rs:337:12
+    |
+337 |     pub fn debug(&self) {
+    |            ^^^^^
+
+warning: function `basic_queue_use_cases_non_blocking` is never used
+   --> src/ogre_std/ogre_queues/blocking_queue.rs:359:8
+    |
+359 |     fn basic_queue_use_cases_non_blocking() {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `AsyncBase` is never constructed
+  --> src/ogre_std/ogre_queues/async_queues/async_base.rs:12:12
+   |
+12 | pub struct AsyncBase<SlotType,
+   |            ^^^^^^^^^
+
+warning: function `lock` is never used
+   --> src/ogre_std/ogre_queues/async_queues/async_base.rs:134:10
+    |
+134 | async fn lock(raw_mutex: &AtomicBool) {
+    |          ^^^^
+
+warning: function `unlock` is never used
+   --> src/ogre_std/ogre_queues/async_queues/async_base.rs:163:4
+    |
+163 | fn unlock(raw_mutex: &AtomicBool) {
+    |    ^^^^^^
+
+warning: associated function `new` is never used
+  --> src/ogre_std/ogre_queues/async_queues/async_base.rs:39:12
+   |
+39 |     pub fn new() -> Self {
+   |            ^^^
+
+warning: associated function `enqueue` is never used
+  --> src/ogre_std/ogre_queues/async_queues/async_base.rs:51:18
+   |
+51 |     pub async fn enqueue<SetterFn:                         Fn(&mut SlotType),
+   |                  ^^^^^^^
+
+warning: associated function `dequeue` is never used
+  --> src/ogre_std/ogre_queues/async_queues/async_base.rs:88:18
+   |
+88 |     pub async fn dequeue<ReportEmptyFn:                    Fn() -> ReportEmptyFnFuture,
+   |                  ^^^^^^^
+
+warning: associated function `len` is never used
+   --> src/ogre_std/ogre_queues/async_queues/async_base.rs:121:12
+    |
+121 |     pub fn len(&self) -> usize {
+    |            ^^^
+
+warning: associated function `buffer_size` is never used
+   --> src/ogre_std/ogre_queues/async_queues/async_base.rs:125:12
+    |
+125 |     pub fn buffer_size(&self) -> usize {
+    |            ^^^^^^^^^^^
+
+warning: struct `NonBlockingQueue` is never constructed
+  --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:20:12
+   |
+20 | pub struct NonBlockingQueue<SlotType:          Copy+Debug,
+   |            ^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:42:8
+   |
+42 |     fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized {
+   |        ^^^
+
+warning: associated function `enqueue` is never used
+  --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:54:18
+   |
+54 |     pub async fn enqueue(&self, element: SlotType) -> bool {
+   |                  ^^^^^^^
+
+warning: associated function `dequeue` is never used
+  --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:77:18
+   |
+77 |     pub async fn dequeue(&self) -> Option<SlotType> {
+   |                  ^^^^^^^
+
+warning: associated function `len` is never used
+  --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:97:12
+   |
+97 |     pub fn len(&self) -> usize {
+   |            ^^^
+
+warning: associated function `buffer_size` is never used
+   --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:101:12
+    |
+101 |     pub fn buffer_size(&self) -> usize {
+    |            ^^^^^^^^^^^
+
+warning: associated function `debug_enabled` is never used
+   --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:105:12
+    |
+105 |     pub fn debug_enabled(&self) -> bool {
+    |            ^^^^^^^^^^^^^
+
+warning: associated function `metrics_enabled` is never used
+   --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:109:12
+    |
+109 |     pub fn metrics_enabled(&self) -> bool {
+    |            ^^^^^^^^^^^^^^^
+
+warning: associated function `queue_name` is never used
+   --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:113:12
+    |
+113 |     pub fn queue_name(&self) -> &str {
+    |            ^^^^^^^^^^
+
+warning: associated function `implementation_name` is never used
+   --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:117:12
+    |
+117 |     pub fn implementation_name(&self) -> &str {
+    |            ^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `interrupt` is never used
+   --> src/ogre_std/ogre_queues/async_queues/non_blocking_queue.rs:121:8
+    |
+121 |     fn interrupt(&self) {
+    |        ^^^^^^^^^
+
+warning: dereferencing a null pointer
+   --> src/ogre_std/ogre_queues/blocking_queue.rs:205:45
+    |
+205 | ...   empty_guard_ref:      unsafe { &*std::ptr::null() as &RawMutex },     // TODO may changing it by mem init with zeroes solve the war...
+    |                                       ^^^^^^^^^^^^^^^^^ this code causes undefined behavior when executed
+    |
+    = note: `#[warn(deref_nullptr)]` on by default
+
+warning: method `metricsDiagnostics` should have a snake case name
+  --> src/ogre_std/container_instruments.rs:74:18
+   |
+74 |     pub const fn metricsDiagnostics(self) -> bool {
+   |                  ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `metrics_diagnostics`
+   |
+   = note: `#[warn(non_snake_case)]` on by default
+
+warning: `reactive-mutiny` (lib test) generated 60 warnings
+    Finished release [optimized] target(s) in 0.53s
+     Running unittests src/lib.rs (target/release/deps/reactive_mutiny-59b16f1b00df279e)
+--> LOGGER WAS ALREADY STARTED
+--> LOGGER WAS ALREADY STARTED
+2023-03-16T16:42:37.658Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 4 tests
+test multi::channels::ogre_mpmc_queue::tests::performance_measurements ... 
+OgreMPMCQueue  (same task / same thread): 7570054.29/s -- 10485760 items processed in 1.385163118s
+OgreMPMCQueue  (different task / same thread): 4414645.37/s -- 10485760 items processed in 2.375221362s
+OgreMPMCQueue  (different task / different thread): 5981237.23/s -- 10485760 items processed in 1.753108863s
+ok
+test multi::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_multi:     4576155.48/s -- 4194304 items processed in 916.556271ms
+metricless_non_futures_non_fallible_multi:     5998928.24/s -- 4194304 items processed in 699.175558ms
+par_metricless_non_futures_non_fallible_multi: 1698886.00/s -- 4194304 items processed in 2.468855471s
+metricfull_futures_fallible_multi:             2523955.50/s -- 4194304 items processed in 1.661797922s
+metricless_futures_fallible_multi:             4880077.30/s -- 4194304 items processed in 859.47491ms
+timeoutable_metricfull_futures_fallible_multi: 1141471.09/s -- 3145728 items processed in 2.755854293s
+timeoutable_metricless_futures_fallible_multi: 1709714.53/s -- 3145728 items processed in 1.839914171s
+ok
+test uni::channels::tests::performance_measurements ... 
+TokioMPSC  (same task / same thread): 3763997.96/s -- 10485760 items processed in 2.78580385s
+TokioMPSC  (different task / same thread): 3790074.57/s -- 10485760 items processed in 2.76663686s
+TokioMPSC  (different task / different thread): 3221804.67/s -- 10485760 items processed in 3.254623133s
+AtomicMPMCQueue  (same task / same thread): 13223743.35/s -- 10485760 items processed in 792.949449ms
+AtomicMPMCQueue  (different task / same thread): 12567437.59/s -- 10485760 items processed in 834.359425ms
+AtomicMPMCQueue  (different task / different thread): 18031120.18/s -- 10485760 items processed in 581.536804ms
+OgreMPMCQueue  (same task / same thread): 15229937.03/s -- 10485760 items processed in 688.496609ms
+OgreMPMCQueue  (different task / same thread): 6154006.12/s -- 10485760 items processed in 1.703891707s
+OgreMPMCQueue  (different task / different thread): 12957997.15/s -- 10485760 items processed in 809.211476ms
+ok
+test uni::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_uni:     6168284.58/s -- 8388608 items processed in 1.359958006s
+metricless_non_futures_non_fallible_uni:     9694936.29/s -- 8388608 items processed in 865.25664ms
+par_metricless_non_futures_non_fallible_uni: 1897856.87/s -- 8388608 items processed in 4.420042486s
+metricfull_futures_fallible_uni:             3078254.63/s -- 8388608 items processed in 2.725118289s
+metricless_futures_fallible_uni:             7064890.56/s -- 8388608 items processed in 1.187365597s
+timeoutable_metricfull_futures_fallible_uni: 1282234.42/s -- 6291456 items processed in 4.906634793s
+timeoutable_metricless_futures_fallible_uni: 1921175.61/s -- 6291456 items processed in 3.274794848s
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 94 filtered out; finished in 49.70s
+

@@ -85,7 +85,7 @@ FullSyncMeta<SlotType,
 
     #[inline(always)]
     fn dequeue<GetterReturnType,
-               GetterFn:                   FnOnce(&SlotType) -> GetterReturnType,
+               GetterFn:                   FnOnce(&mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
               (&self,
@@ -111,7 +111,7 @@ FullSyncMeta<SlotType,
             }
         }
 
-        let ret_val = getter_fn(self.buffer[self.head as usize % BUFFER_SIZE].deref());
+        let ret_val = getter_fn(&mut mutable_self.buffer[self.head as usize % BUFFER_SIZE]);
         mutable_self.head = self.head.overflowing_add(1).0;
 
         unlock(&self.concurrency_guard);

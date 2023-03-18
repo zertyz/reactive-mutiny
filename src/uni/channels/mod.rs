@@ -111,25 +111,6 @@ macro_rules! impl_uni_channel_for_struct {
         }
 }
 
-trait Test {
-    fn performance_measurements(&self);
-}
-
-type UniChannelType = atomic_mpmc_queue::AtomicMPMCQueue<u32, 1024, 1>;
-
-struct TestAtomic<T> {
-    uni_channel: T,
-}
-impl_uni_channel_for_struct!(TestAtomic, UniChannelType, uni_channel);
-
-impl Test for TestAtomic<UniChannelType> {
-    fn performance_measurements(&self) {
-        self.yeah();
-    }
-}
-
-
-
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\

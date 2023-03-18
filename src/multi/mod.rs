@@ -68,13 +68,13 @@ mod tests {
     /// exercises the code present on the documentation
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn doc_tests() -> Result<(), Box<dyn std::error::Error>> {
-        fn local_on_event(stream: MutinyStream<String>) -> impl Stream<Item=String> {
+        fn local_on_event(stream: MutinyStream<Arc<String>>) -> impl Stream<Item=Arc<String>> {
             stream.inspect(|message| println!("To Zeta: '{}'", message))
         }
-        fn zeta_on_event(stream: MutinyStream<String>) -> impl Stream<Item=String> {
+        fn zeta_on_event(stream: MutinyStream<Arc<String>>) -> impl Stream<Item=Arc<String>> {
             stream.inspect(|message| println!("ZETA: Received a message: '{}'", message))
         }
-        fn earth_on_event(stream: MutinyStream<String>) -> impl Stream<Item=String> {
+        fn earth_on_event(stream: MutinyStream<Arc<String>>) -> impl Stream<Item=Arc<String>> {
             stream.inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
         }
         let multi: Arc<Multi<String, 1024, 3>> = MultiBuilder::new("doc_test() event")
@@ -82,7 +82,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "zeta receiver", zeta_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "earth snapper", earth_on_event, |_| async {}).await?
             .handle();
-        let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+        let producer = |item: &str| multi.send(item.to_string());
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
         multi.close(Duration::ZERO).await;
@@ -102,20 +102,20 @@ mod tests {
         let multi: Arc<Multi<u32, 1024, 2>> = MultiBuilder::new("Simple Event")
             // #1 -- event pipeline
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1",
-                                                     |stream: MutinyStream<u32>| {
+                                                     |stream: MutinyStream<Arc<u32>>| {
                                                          let observed_sum = Arc::clone(&observed_sum_1);
-                                                         stream.map(move |number| observed_sum.fetch_add(number, Relaxed))
+                                                         stream.map(move |number| observed_sum.fetch_add(*number, Relaxed))
                                                      },
                                                      |_| async {}).await?
             // #2 -- event pipeline
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2",
-                                                     |stream: MutinyStream<u32>| {
+                                                     |stream: MutinyStream<Arc<u32>>| {
                                                           let observed_sum = Arc::clone(&observed_sum_2);
-                                                          stream.map(move |number| observed_sum.fetch_add(number, Relaxed))
+                                                          stream.map(move |number| observed_sum.fetch_add(*number, Relaxed))
                                                       },
                                                      |_| async {}).await?
             .handle();
-        let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let producer = |item| multi.send(item);
 
         // produces some events concurrently -- they will be shared with all executable pipelines
         let shared_producer = &producer;
@@ -181,7 +181,7 @@ mod tests {
             .expect("Single instance of PIPELINE_2 should have been created");
 
         let multi: Arc<Multi<u32, 1024, 2>> = multi_builder.handle();
-        while !multi.zero_copy_try_send(|slot| *slot = 97) { std::hint::spin_loop(); };
+        multi.send(97);
         multi.close(Duration::ZERO).await;
 
         assert_eq!(*last_message.try_lock().unwrap(), 97, "event didn't complete");
@@ -208,7 +208,7 @@ mod tests {
         // how to pass it down the pipeline. Also notice the required (as of Rust 1.63)
         // moving of Arc local variables so they will be accessible
 
-        let pipeline1_builder = |stream: MutinyStream<u32>| {
+        let pipeline1_builder = |stream: MutinyStream<Arc<u32>>| {
             let observed_sum = Arc::clone(&observed_sum_1);
             stream
                 .map(|number| async move {
@@ -219,7 +219,7 @@ mod tests {
                     let observed_sum = Arc::clone(&observed_sum);
                     async move {
                         let number = number.await;
-                        observed_sum.fetch_add(number, Relaxed);
+                        observed_sum.fetch_add(*number, Relaxed);
                         number
                     }
                 })
@@ -229,7 +229,7 @@ mod tests {
                     Ok(number)
                 })
         };
-        let pipeline2_builder = |stream: MutinyStream<u32>| {
+        let pipeline2_builder = |stream: MutinyStream<Arc<u32>>| {
             let observed_sum = Arc::clone(&observed_sum_2);
             stream
                 .map(|number| async move {
@@ -240,7 +240,7 @@ mod tests {
                     let observed_sum = Arc::clone(&observed_sum);
                     async move {
                         let number = number.await;
-                        observed_sum.fetch_add(number, Relaxed);
+                        observed_sum.fetch_add(*number, Relaxed);
                         number
                     }
                 })
@@ -256,7 +256,7 @@ mod tests {
             .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), "Stream Pipeline #2", pipeline2_builder, |_| async {}, |_| async {}).await?
             .handle();
 
-        let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let producer = |item| multi.send(item);
 
         let shared_producer = &producer;
         stream::iter(PARTS)
@@ -284,7 +284,7 @@ mod tests {
             multi_builder.spawn_non_futures_non_fallible_executor(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
         }
         let multi = multi_builder.handle();
-        let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+        let producer = |item: &str| multi.send(item.to_string());
         producer("'only count successes' payload");
         multi.close(Duration::ZERO).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
@@ -305,14 +305,14 @@ mod tests {
         let event_name = "future & fallible event";
         let multi_builder: Arc<MultiBuilder<String, 256, N_PIPELINES>> = MultiBuilder::new(event_name);
         for i in 0..N_PIPELINES {
-            multi_builder.spawn_executor(1, Duration::from_millis(150), format!("Pipeline #{} for {}", i, event_name), |stream: MutinyStream<String>| {
+            multi_builder.spawn_executor(1, Duration::from_millis(150), format!("Pipeline #{} for {}", i, event_name), |stream: MutinyStream<Arc<String>>| {
                     stream.map(|payload| async move {
                         if payload.contains("unsuccessful") {
                             tokio::time::sleep(Duration::from_millis(50)).await;
                             Err(Box::from(format!("failing the pipeline, as requested")))
                         } else if payload.contains("timeout") {
                             tokio::time::sleep(Duration::from_millis(200)).await;
-                            Ok("this answer will never make it -- stream executor times out after 100ms".to_string())
+                            Ok(Arc::new(String::from("this answer will never make it -- stream executor times out after 100ms")))
                         } else {
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             Ok(payload)
@@ -324,7 +324,7 @@ mod tests {
             ).await?;
         }
         let multi = multi_builder.handle();
-        let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+        let producer = |item: &str| multi.send(item.to_string());
         // for this test, produce each event twice
         for _ in 0..2 {
             producer("'successful' payload");
@@ -359,7 +359,7 @@ mod tests {
         let six_fire_count = Arc::new(AtomicU32::new(0));
 
         // SIX event
-        let on_six_event = |stream: MutinyStream<bool>| {
+        let on_six_event = |stream: MutinyStream<Arc<bool>>| {
             let six_fire_count = Arc::clone(&six_fire_count);
             stream.inspect(move |_| {
                 six_fire_count.fetch_add(1, Relaxed);
@@ -383,7 +383,7 @@ mod tests {
         });
 
         // TWO event
-        let on_two_event = |stream: MutinyStream<u32>| {
+        let on_two_event = |stream: MutinyStream<Arc<u32>>| {
             let two_fire_count = Arc::clone(&two_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_multi = Arc::clone(&six_multi);
@@ -394,13 +394,13 @@ mod tests {
                     let six_multi = Arc::clone(&six_multi);
                     async move {
                         two_fire_count.fetch_add(1, Relaxed);
-                        if payload & 2 == 2 {
+                        if *payload & 2 == 2 {
                             let previous_state = shared_state.fetch_or(2, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                while !six_multi.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
+                                six_multi.send(true);
                             }
-                        } else if payload == 97 {
+                        } else if *payload == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
                         payload
@@ -422,10 +422,10 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_two_event, on_two_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_two_event, on_two_close_builder()).await?
             .handle();
-        let two_producer = |item| while !two_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let two_producer = |item| two_multi.send(item);
 
         // FOUR event
-        let on_four_event = |stream: MutinyStream<u32>| {
+        let on_four_event = |stream: MutinyStream<Arc<u32>>| {
             let four_fire_count = Arc::clone(&four_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_multi = Arc::clone(&six_multi);
@@ -436,13 +436,13 @@ mod tests {
                     let six_multi = Arc::clone(&six_multi);
                     async move {
                         four_fire_count.fetch_add(1, Relaxed);
-                        if payload & 4 == 4 {
+                        if *payload & 4 == 4 {
                             let previous_state = shared_state.fetch_or(4, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                while !six_multi.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
+                                six_multi.send(true);
                             }
-                        } else if payload == 97 {
+                        } else if *payload == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
                         payload
@@ -464,7 +464,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_four_event, on_four_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_four_event, on_four_close_builder()).await?
             .handle();
-        let four_producer = |item| while !four_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let four_producer = |item| four_multi.send(item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
         //       so we can test race conditions for the 'close producer' functions
@@ -496,12 +496,12 @@ mod tests {
 
         let on_err_count = Arc::new(AtomicU32::new(0));
 
-        fn on_fail_when_odd_event(stream: MutinyStream<u32>) -> impl Stream<Item = impl Future<Output = Result<u32, Box<dyn std::error::Error + Send + Sync>> > + Send> {
+        fn on_fail_when_odd_event(stream: MutinyStream<Arc<u32>>) -> impl Stream<Item = impl Future<Output = Result<u32, Box<dyn std::error::Error + Send + Sync>> > + Send> {
             stream
                 .map(|payload| async move {
-                    if payload % 2 == 0 {
-                        Ok(payload)
-                    } else if payload % 79 == 0 {
+                    if *payload % 2 == 0 {
+                        Ok(*payload)
+                    } else if *payload % 79 == 0 {
                         Err(format!("BLOW CODE received: {}", payload))
                     } else {
                         Err(format!("ODD payload received: {}", payload))
@@ -564,7 +564,7 @@ mod tests {
                             |_| async {}
             ).await?
             .handle();
-        let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let producer = |item| multi.send(item);
         producer(0);
         producer(1);
         producer(2);
@@ -592,7 +592,7 @@ mod tests {
 
         let simple_multi: Arc<Multi<SystemTime, 1024, 1>> = MultiBuilder::new("SIMPLE")
             .spawn_non_futures_non_fallible_executor(1, "solo pipeline",
-                                                     |stream: MutinyStream<SystemTime>| {
+                                                     |stream: MutinyStream<Arc<SystemTime>>| {
                                                          let simple_count = Arc::clone(&simple_count);
                                                          let simple_last_elapsed_nanos = Arc::clone(&simple_last_elapsed_nanos);
                                                          stream.map(move |start| {
@@ -602,7 +602,7 @@ mod tests {
                                                      },
                                                      |_| async {}).await?
             .handle();
-        let simple_producer = |item| while !simple_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let simple_producer = |item| simple_multi.send(item);
 
         // 1) Measure the time to produce & consume a SIMPLE event -- No other multi tokio tasks are available
         simple_producer(SystemTime::now());
@@ -616,7 +616,7 @@ mod tests {
         let bloated_multi: Arc<MultiBuilder<SystemTime, 16, BLOATED_PIPELINES_COUNT>> = MultiBuilder::new("BLOATED");
         for i in 0..BLOATED_PIPELINES_COUNT {
             bloated_multi.spawn_non_futures_non_fallible_executor(1, format!("#{i})"),
-                                                                  |stream: MutinyStream<SystemTime>| {
+                                                                  |stream: MutinyStream<Arc<SystemTime>>| {
                                                                       let bloated_count = Arc::clone(&bloated_count);
                                                                       let bloated_last_elapsed_nanos = Arc::clone(&bloated_last_elapsed_nanos);
                                                                       stream.map(move |start| {
@@ -627,7 +627,7 @@ mod tests {
                                                                   |_| async {}).await?;
         }
         let bloated_multi = bloated_multi.handle();
-        let bloated_producer = |item| while !bloated_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+        let bloated_producer = |item| bloated_multi.send(item);
 
         // 2) Bloat the Tokio Runtime with a lot of tasks -- multi executors in our case -- verifying all of them will run once
         bloated_producer(SystemTime::now());
@@ -679,10 +679,14 @@ mod tests {
                                profiling_name: &str,
                                count: u32) {
             let start = Instant::now();
-            for e in 0..count {
-                while !multi.zero_copy_try_send(|slot| *slot = e) {
-                    std::hint::spin_loop();
-                };
+            let mut e = 0;
+            while e < count {
+                let buffer_entries_left = multi.buffer_size() - multi.pending_items_count();
+                for _ in 0..buffer_entries_left {
+                    multi.send(e);
+                    e += 1;
+                }
+                std::hint::spin_loop();
             }
             multi.close(Duration::from_secs(5)).await;
             let elapsed = start.elapsed();
@@ -697,26 +701,26 @@ mod tests {
 
         let profiling_name = "metricfull_non_futures_non_fallible_multi:    ";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = MultiBuilder::new(profiling_name.trim())
-            .spawn_non_futures_non_fallible_executor(1, "", |stream: MutinyStream<u32>| stream, |_| async {}).await?
+            .spawn_non_futures_non_fallible_executor(1, "", |stream: MutinyStream<Arc<u32>>| stream, |_| async {}).await?
             .handle();
         profile_multi(multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_multi:    ";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = MultiBuilder::new(profiling_name.trim())
-            .spawn_non_futures_non_fallible_executor(1, "", |stream: MutinyStream<u32>| stream, |_| async {}).await?
+            .spawn_non_futures_non_fallible_executor(1, "", |stream: MutinyStream<Arc<u32>>| stream, |_| async {}).await?
             .handle();
         profile_multi(multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_multi:";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = MultiBuilder::new(profiling_name.trim())
-            .spawn_non_futures_non_fallible_executor(12, "", |stream: MutinyStream<u32>| stream, |_| async {}).await?
+            .spawn_non_futures_non_fallible_executor(12, "", |stream: MutinyStream<Arc<u32>>| stream, |_| async {}).await?
             .handle();
         profile_multi(multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_multi:            ";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = MultiBuilder::new(profiling_name.trim())
             .spawn_executor(1, Duration::ZERO, "",
-                            |stream: MutinyStream<u32>| {
+                            |stream: MutinyStream<Arc<u32>>| {
                                 stream.map(|number| async move {
                                     Ok(number)
                                 })
@@ -729,7 +733,7 @@ mod tests {
         let profiling_name = "metricless_futures_fallible_multi:            ";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = MultiBuilder::new(profiling_name.trim())
             .spawn_executor(1, Duration::ZERO, "",
-                            |stream: MutinyStream<u32>| {
+                            |stream: MutinyStream<Arc<u32>>| {
                                 stream.map(|number| async move {
                                     Ok(number)
                                 })
@@ -742,7 +746,7 @@ mod tests {
         let profiling_name = "timeoutable_metricfull_futures_fallible_multi:";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = MultiBuilder::new(profiling_name.trim())
             .spawn_executor(1, Duration::from_millis(100), "",
-                            |stream: MutinyStream<u32>| {
+                            |stream: MutinyStream<Arc<u32>>| {
                                  stream.map(|number| async move {
                                      Ok(number)
                                  })
@@ -755,7 +759,7 @@ mod tests {
         let profiling_name = "timeoutable_metricless_futures_fallible_multi:";
         let multi: Arc<Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = MultiBuilder::new(profiling_name.trim())
             .spawn_executor(1, Duration::from_millis(100), "",
-                            |stream: MutinyStream<u32>| {
+                            |stream: MutinyStream<Arc<u32>>| {
                                 stream.map(|number| async move {
                                     Ok(number)
                                 })

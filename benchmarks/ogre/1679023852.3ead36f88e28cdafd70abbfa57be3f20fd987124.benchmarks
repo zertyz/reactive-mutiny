@@ -1,0 +1,139 @@
+2023-03-17T04:32:04.997Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 8 tests
+test ogre_std::benchmarks::benchmark_queues::all_in_and_out_benchmarks ... 
+1 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')': 394963799.9930 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')': 349741413.2717 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 332601865.4698 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 553075279.9904 ops/s
+2 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')':   14972.9012 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')':   18754.3737 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 323434722.6877 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 412592128.4698 ops/s
+3 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')':   30400.0168 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')':    8602.0692 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 313507858.8898 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 374298498.1449 ops/s
+4 threads:
+    ... running 'all_in_and_out_benchmark('Atomic/Non-Blocking Queue')':   14268.2334 ops/s
+    ... running 'all_in_and_out_benchmark('Atomic/Parking-lot-Blocking Queue')':    8789.3816 ops/s
+    ... running 'all_in_and_out_benchmark('blocking_queue')': 301070081.9537 ops/s
+    ... running 'all_in_and_out_benchmark('Full Sync / Non-Blocking Queue')': 361787727.9881 ops/s
+ok
+test ogre_std::benchmarks::benchmark_queues::multiple_producers_single_consumer_benchmarks ... 
+2 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Non-Blocking Queue')': 412811584.4136 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Parking-lot-Blocking Queue')': 339943521.5110 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('blocking_queue')': 355347653.9797 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Full Sync / Non-Blocking Queue')': 354760746.6887 ops/s
+3 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Non-Blocking Queue')': 234460947.1060 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Parking-lot-Blocking Queue')':   45744.9935 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('blocking_queue')': 5307219.6769 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Full Sync / Non-Blocking Queue')': 192216288.7224 ops/s
+4 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Non-Blocking Queue')': 174167198.1828 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Parking-lot-Blocking Queue')':  127170.2144 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('blocking_queue')': 5012918.3846 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Full Sync / Non-Blocking Queue')': 118806306.3736 ops/s
+5 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Non-Blocking Queue')': 140633366.6673 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Atomic/Parking-lot-Blocking Queue')': 5108588.4909 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('blocking_queue')': 4667884.7678 ops/s
+    ... running 'multiple_producers_single_consumer_benchmark(('Full Sync / Non-Blocking Queue')': 76339380.9927 ops/s
+ok
+test ogre_std::benchmarks::benchmark_queues::single_in_and_out_benchmarks ... 
+1 threads:
+    ... running 'single_in_and_out_benchmark(('Atomic/Non-Blocking Queue')': 421141508.1683 ops/s
+    ... running 'single_in_and_out_benchmark(('Atomic/Parking-lot-Blocking Queue')': 311727477.3258 ops/s
+    ... running 'single_in_and_out_benchmark(('blocking_queue')': 219904906.6634 ops/s
+    ... running 'single_in_and_out_benchmark(('Full Sync / Non-Blocking Queue')': 559251435.3294 ops/s
+2 threads:
+    ... running 'single_in_and_out_benchmark(('Atomic/Non-Blocking Queue')':   16152.5053 ops/s
+    ... running 'single_in_and_out_benchmark(('Atomic/Parking-lot-Blocking Queue')':   33827.6451 ops/s
+    ... running 'single_in_and_out_benchmark(('blocking_queue')': 260101275.1217 ops/s
+    ... running 'single_in_and_out_benchmark(('Full Sync / Non-Blocking Queue')': 417336476.4500 ops/s
+3 threads:
+    ... running 'single_in_and_out_benchmark(('Atomic/Non-Blocking Queue')':   19917.0750 ops/s
+    ... running 'single_in_and_out_benchmark(('Atomic/Parking-lot-Blocking Queue')':   33575.8698 ops/s
+    ... running 'single_in_and_out_benchmark(('blocking_queue')': 278071328.1229 ops/s
+    ... running 'single_in_and_out_benchmark(('Full Sync / Non-Blocking Queue')': 361479080.4125 ops/s
+4 threads:
+    ... running 'single_in_and_out_benchmark(('Atomic/Non-Blocking Queue')':  167499.9150 ops/s
+    ... running 'single_in_and_out_benchmark(('Atomic/Parking-lot-Blocking Queue')':   21289.1642 ops/s
+    ... running 'single_in_and_out_benchmark(('blocking_queue')': 280887137.5293 ops/s
+    ... running 'single_in_and_out_benchmark(('Full Sync / Non-Blocking Queue')': 317851433.6071 ops/s
+ok
+test ogre_std::benchmarks::benchmark_queues::single_producer_multiple_consumers_benchmarks ... 
+2 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Non-Blocking Queue')': 235420170.6527 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Parking-lot-Blocking Queue')': 348638620.3710 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('blocking_queue')': 335556072.0590 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Full Sync / Non-Blocking Queue')': 68556489.0059 ops/s
+3 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Non-Blocking Queue')':   72542.8035 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Parking-lot-Blocking Queue')':   74124.7593 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('blocking_queue')': 5086310.1492 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Full Sync / Non-Blocking Queue')': 50311573.6821 ops/s
+4 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Non-Blocking Queue')':   13640.0963 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Parking-lot-Blocking Queue')': 5217067.9353 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('blocking_queue')': 5037879.6105 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Full Sync / Non-Blocking Queue')': 34068485.8269 ops/s
+5 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Non-Blocking Queue')':   27024.1614 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Atomic/Parking-lot-Blocking Queue')': 5088588.8961 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('blocking_queue')': 4715370.4589 ops/s
+    ... running 'single_producer_multiple_consumers_benchmark(('Full Sync / Non-Blocking Queue')': 30369484.8473 ops/s
+ok
+test ogre_std::benchmarks::benchmark_stacks::all_in_and_out_benchmarks ... 
+1 threads:
+    ... running 'all_in_and_out_benchmark('non_blocking_full_sync_stack')': 521475074.3527 ops/s
+2 threads:
+    ... running 'all_in_and_out_benchmark('non_blocking_full_sync_stack')': 394809937.0524 ops/s
+3 threads:
+    ... running 'all_in_and_out_benchmark('non_blocking_full_sync_stack')': 361943987.0971 ops/s
+4 threads:
+    ... running 'all_in_and_out_benchmark('non_blocking_full_sync_stack')': 356350422.1340 ops/s
+ok
+test ogre_std::benchmarks::benchmark_stacks::multiple_producers_single_consumer_benchmarks ... 
+2 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('non_blocking_full_sync_stack')': 317788918.1668 ops/s
+3 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('non_blocking_full_sync_stack')': 154569301.4458 ops/s
+4 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('non_blocking_full_sync_stack')': 106384250.6815 ops/s
+5 threads:
+    ... running 'multiple_producers_single_consumer_benchmark(('non_blocking_full_sync_stack')': 71966891.2542 ops/s
+ok
+test ogre_std::benchmarks::benchmark_stacks::single_in_and_out_benchmarks ... 
+1 threads:
+    ... running 'single_in_and_out_benchmark(('non_blocking_full_sync_stack')': 534267989.7967 ops/s
+2 threads:
+    ... running 'single_in_and_out_benchmark(('non_blocking_full_sync_stack')': 383378655.6840 ops/s
+3 threads:
+    ... running 'single_in_and_out_benchmark(('non_blocking_full_sync_stack')': 335275001.1150 ops/s
+4 threads:
+    ... running 'single_in_and_out_benchmark(('non_blocking_full_sync_stack')': 304754739.5535 ops/s
+ok
+test ogre_std::benchmarks::benchmark_stacks::single_producer_multiple_consumers_benchmarks ... 
+2 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('non_blocking_full_sync_stack')': 66017720.6088 ops/s
+3 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('non_blocking_full_sync_stack')': 42084729.0884 ops/s
+4 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('non_blocking_full_sync_stack')': 28187271.0635 ops/s
+5 threads:
+    ... running 'single_producer_multiple_consumers_benchmark(('non_blocking_full_sync_stack')': 28441902.5841 ops/s
+ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 91 filtered out; finished in 2212.90s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

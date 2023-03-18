@@ -1,0 +1,83 @@
+warning: unused import: `types::*`
+  --> src/uni/mod.rs:38:9
+   |
+38 |         types::*,
+   |         ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:59:18
+   |
+59 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `zero_copy_try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:76:15
+   |
+76 |     unsafe fn zero_copy_try_send(&self, _item_builder: impl FnOnce(&mut ItemType)) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated constant `PERCENTILES` is never used
+  --> src/instruments.rs:50:11
+   |
+50 |     const PERCENTILES:         usize = 16;
+   |           ^^^^^^^^^^^
+
+warning: associated function `reset` is never used
+  --> src/incremental_averages.rs:82:8
+   |
+82 |     fn reset(&self, weight: u32) {
+   |        ^^^^^
+
+warning: associated function `split` is never used
+  --> src/incremental_averages.rs:87:8
+   |
+87 |     fn split(&self) -> &IncrementalAveragePair32 {
+   |        ^^^^^
+
+warning: associated function `atomic` is never used
+  --> src/incremental_averages.rs:92:8
+   |
+92 |     fn atomic(&self) -> &AtomicU64 {
+   |        ^^^^^^
+
+warning: type alias `ReferenceCountedBlockingAllocator` is never used
+  --> src/ogre_std/reference_counted_buffer_allocator.rs:51:10
+   |
+51 | pub type ReferenceCountedBlockingAllocator<SlotType, USlots, const STACK_SIZE: usize> = ReferenceCountedNonBlockingCustomStackAllocator<S...
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `reactive-mutiny` (lib test) generated 8 warnings
+    Finished release [optimized] target(s) in 0.06s
+     Running unittests src/lib.rs (target/release/deps/reactive_mutiny-bcb553f526d4ef49)
+--> LOGGER WAS ALREADY STARTED
+--> LOGGER WAS ALREADY STARTED
+2023-03-17T01:12:35.417Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 4 tests
+test multi::channels::ogre_mpmc_queue::tests::performance_measurements ... 
+OgreMPMCQueue  (same task / same thread): 13272715.83/s -- 10485760 items processed in 790.023695ms
+OgreMPMCQueue  (different task / same thread): 6229056.78/s -- 10485760 items processed in 1.683362405s
+OgreMPMCQueue  (different task / different thread): 3837526.50/s -- 10485760 items processed in 2.732426735s
+ok
+test multi::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_multi:     2847192.78/s -- 4194304 items processed in 1.47313664s
+metricless_non_futures_non_fallible_multi:     2979609.33/s -- 4194304 items processed in 1.407669106s
+par_metricless_non_futures_non_fallible_multi: 1831753.88/s -- 4194304 items processed in 2.289774867s
+metricfull_futures_fallible_multi:             1940804.99/s -- 4194304 items processed in 2.161115635s
+metricless_futures_fallible_multi:             2514774.53/s -- 4194304 items processed in 1.667864831s
+timeoutable_metricfull_futures_fallible_multi: 1676249.22/s -- 3145728 items processed in 1.876646954s
+timeoutable_metricless_futures_fallible_multi: 1522277.66/s -- 3145728 items processed in 2.066461384s
+ok
+test uni::channels::tests::performance_measurements ... 
+TokioMPSC  (same task / same thread): 7189246.81/s -- 10485760 items processed in 1.458533874s
+TokioMPSC  (different task / same thread): 7310633.01/s -- 10485760 items processed in 1.434316288s
+TokioMPSC  (different task / different thread): 4154173.99/s -- 10485760 items processed in 2.524150417s
+AtomicMPMCQueue  (same task / same thread): 18631666.82/s -- 10485760 items processed in 562.792374ms
+AtomicMPMCQueue  (different task / same thread): 19098311.19/s -- 10485760 items processed in 549.041216ms
+AtomicMPMCQueue  (different task / different thread): 17349319.50/s -- 10485760 items processed in 604.390276ms
+OgreMPMCQueue  (same task / same thread): 22493751.04/s -- 10485760 items processed in 466.163246ms
+OgreMPMCQueue  (different task / same thread): 7607384.22/s -- 10485760 items processed in 1.378366032s

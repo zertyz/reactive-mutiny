@@ -120,7 +120,7 @@ AtomicMeta<SlotType,
 
     #[inline(always)]
     fn dequeue<GetterReturnType,
-               GetterFn:                   Fn(&SlotType) -> GetterReturnType,
+               GetterFn:                   Fn(&mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
               (&self,
@@ -129,6 +129,11 @@ AtomicMeta<SlotType,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
+        let mutable_buffer = unsafe {
+            let const_ptr = self.buffer.as_ptr();
+            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
+            &mut *mut_ptr
+        };
         let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
         let mut len_before;
 
@@ -157,7 +162,7 @@ AtomicMeta<SlotType,
             }
         }
 
-        let slot_value = &self.buffer[slot_id as usize % BUFFER_SIZE];
+        let slot_value = &mut mutable_buffer[slot_id as usize % BUFFER_SIZE];
         let ret_val = getter_fn(slot_value);
 
         // strong sync head

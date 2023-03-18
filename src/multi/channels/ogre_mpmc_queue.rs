@@ -4,7 +4,6 @@ use crate::{
             meta_queue::MetaQueue,
             full_sync_queues::NonBlockingQueue,
         },
-        reference_counted_buffer_allocator::{ReferenceCountedBufferAllocator, ReferenceCountedNonBlockingCustomQueueAllocator},
     },
     ogre_std::ogre_queues::{
         OgreQueue,
@@ -26,27 +25,24 @@ use std::{
 };
 use futures::{Stream};
 use minstant::Instant;
+use log::{warn};
 
 
+/// From the backing queue: "BUFFER_SIZE" must be a power of 2
 pub type OgreMPMCQueue<ItemType,
                        const BUFFER_SIZE: usize = 1024,
                        const MAX_STREAMS: usize = 16>
         = InternalOgreMPMCQueue<ItemType,
-                                AllocatorType<ItemType, BUFFER_SIZE>,
                                 BUFFER_SIZE,
                                 MAX_STREAMS>;
 
 
-type AllocatorType<ItemType, const BUFFER_SIZE: usize> = ReferenceCountedNonBlockingCustomQueueAllocator<ItemType, NonBlockingQueue<u32, BUFFER_SIZE>, BUFFER_SIZE>;
-
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct InternalOgreMPMCQueue<ItemType:          Clone + Unpin + Send + Sync + Debug,
-                                 AllocatorType:     ReferenceCountedBufferAllocator<ItemType, u32, u32>,
+pub struct InternalOgreMPMCQueue<ItemType:          Unpin + Send + Sync + Debug,
                                  const BUFFER_SIZE: usize,
                                  const MAX_STREAMS: usize> {
-    pub (crate) buffer:     AllocatorType,
     /// General non-blocking full sync queues -- one for each Multi
-    queues:                 [FullSyncMeta<u32, BUFFER_SIZE>; MAX_STREAMS],
+    queues:                 [FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>; MAX_STREAMS],
     /// simple metrics
     created_streams_count:  AtomicU32,
     /// simple metrics
@@ -65,18 +61,18 @@ pub struct InternalOgreMPMCQueue<ItemType:          Clone + Unpin + Send + Sync 
     wakers:                 [Option<Waker>; MAX_STREAMS],
     /// signals for Streams to end or to continue waiting for elements
     keep_stream_running:    [bool; MAX_STREAMS],
-    // phantoms
-    _item_type:             PhantomData<ItemType>,
+    /// for logs
+    channel_name:           String,
 }
 
-impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
+impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
-InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS> {
+InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Returns a `Stream` -- may create as many streams as requested, provided the specified limit [MAX_STREAMS] is respected.\
     /// Each stream will see all payloads sent through this channel.
-    pub fn listener_stream(self: &Arc<Pin<Box<Self>>>) -> (impl Stream<Item=ItemType>, u32) {
+    pub fn listener_stream(self: &Arc<Pin<Box<Self>>>) -> (impl Stream<Item=Arc<ItemType>>, u32) {
         // safety: Unwraps the Arc to return the required Pin<Self> to Stream::next(),
         //         which is guaranteed not to mutate Self (our queue don't require it) or to do it
         //         in a safe manner using AtomicPtrs to Wakers
@@ -108,43 +104,12 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
                     drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the upper method `listener_stream()`, so `mutable_self` is guaranteed to be valid while the stream executes
                 },
                 move |cx| {
-                    let slot_id = mutable_self.queues[stream_id as usize].dequeue(|item| *item,
-                                                                                             || false,
-                                                                                             |_| {});
+                    let element = mutable_self.queues[stream_id as usize].dequeue(|mut item| item.take().expect("godshavfty!! element cannot be None here!"),
+                                                                                  || false,
+                                                                                  |_| {});
 
-                    let next = match slot_id {
-                        Some(slot_id) => {
-                            // TODO optimization: Stream<Item=&...> should be returned by this function instead, to allow the optimization of avoiding
-                            //      copying the value over and over again. For this to work, the stream executor should accept a `post_item()` closure,
-                            //      in which I'd `.ref_dec()` the reference
-                            // TODO 20221010: the above attempt wasn't fully tryed. An alternative, using Arc, has shitty performance. New solution:
-                            //                1) A new type will be created: `MultiPayload<ItemType>`, which will have a custom `Drop()`
-                            //                2) That drop will simply `.ref_dec()` from the slot, making it free
-                            //                3) It will implement `Deref` -- giving a reference to the buffer, as well as an unsafe `copy_unchecked()` method -- retuning a droppable copy of the underlying type
-                            //                4) Even if `copy_unchecked()` was called, the custom drop must still call a manual `std::mem::drop()` on the last reference
-                            //                5) Test that with an Arc and its internal reference counts
-                            // TODO 20221010: the above attempt is shitty -- the payload is increased a lot (see MultyPayload, which should be deleted). Lets get back to adding a `post_item()` closure
-                            //let item = MultiPayload::new(slot_id, Arc::clone(self));
-                            if std::mem::needs_drop::<ItemType>() {
-                                let slot = mutable_self.buffer.slot_from_slot_id(slot_id);
-                                let opaque_slot = match mutable_self.buffer.ref_dec_callback(slot, |slot| {
-                                    // move the last element out of the allocator, so it may be dropped (if necessary)
-                                    let mut moved = MaybeUninit::<ItemType>::uninit();
-                                    unsafe { std::ptr::copy_nonoverlapping(slot as *const ItemType, moved.as_mut_ptr(), 1) };
-                                    let moved = unsafe { moved.assume_init() };
-                                    Some(moved)
-                                }) {
-                                    None                 => slot.clone(),     // other streams will still take this element... clone it
-                                    Some(slot) => slot,             // this is the last stream -- return the original item
-                                };
-                                Poll::Ready(Some(opaque_slot))
-                            } else {
-                                let slot = mutable_self.buffer.slot_from_slot_id(slot_id);
-                                let cloned = slot.clone();
-                                mutable_self.buffer.ref_dec(slot);
-                                Poll::Ready(Some(cloned))
-                            }
-                        },
+                    let next = match element {
+                        Some(element) => Poll::Ready(Some(element)),
                         None => {
                             if mutable_self.keep_stream_running[stream_id as usize] {
                                 // share the waker the first time this runs, so producers may wake this task up (when an item is ready)
@@ -168,6 +133,11 @@ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZ
             ),
             stream_id
         )
+    }
+
+    #[inline(always)]
+    fn buffer_size(&self) -> u32 {
+        BUFFER_SIZE as u32
     }
 
     #[inline(always)]
@@ -235,15 +205,14 @@ impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
 /*MultiChannel<ItemType>
-for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS> {
+for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    pub fn new() -> Arc<Pin<Box<Self>>> {
+    pub fn new<IntoString: Into<String>>(channel_name: IntoString) -> Arc<Pin<Box<Self>>> {
         let instance = Arc::new(Box::pin(Self {
-            buffer:                 AllocatorType::<ItemType, BUFFER_SIZE>::new(),
             queues:                 {
-                                         let mut queues: [FullSyncMeta<u32, BUFFER_SIZE>; MAX_STREAMS] = unsafe { MaybeUninit::zeroed().assume_init() };
+                                         let mut queues: [FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>; MAX_STREAMS] = unsafe { MaybeUninit::zeroed().assume_init() };
                                          for i in 0..queues.len() {
-                                             queues[i] = FullSyncMeta::<u32, BUFFER_SIZE>::new();
+                                             queues[i] = FullSyncMeta::<Option<Arc<ItemType>>, BUFFER_SIZE>::new();
                                          }
                                          queues
                                      },
@@ -261,47 +230,27 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
             keep_stream_running:    [false; MAX_STREAMS],
             streams_lock:           AtomicBool::new(false),
             wakers_lock:            AtomicBool::new(false),
-            _item_type:             PhantomData::default(),
+            channel_name:           channel_name.into(),
         }));
         instance
     }
 
     #[inline(always)]
-    pub async fn zero_copy_send(&self, item_builder: impl Fn(&mut ItemType)) {
-        // time to sleep between retry attempts, if the channel is full
-        const FULL_WAIT_TIME: Duration = Duration::from_millis(1);
-        // loop until there is an allocation
-        loop {
-            if self.zero_copy_try_send(&item_builder) {
-                break
-            } else {
-                tokio::time::sleep(FULL_WAIT_TIME).await;
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub fn zero_copy_try_send(&self, item_builder: &impl Fn(&mut ItemType)) -> bool {
-        let mut slot_id = None;
+    pub fn send(&self, item: ItemType) {
+        let arc_item = Arc::new(item);
         for stream_id in self.used_streams.iter() {
             if *stream_id == u32::MAX {
                 break
             }
-            if let None = slot_id {
-                let used_streams_count = (MAX_STREAMS - self.vacant_streams.len()) as u32;
-                if let Some(slot) = self.buffer.allocate(used_streams_count) {
-                    slot_id = Some(self.buffer.slot_id_from_slot(slot));
-                    item_builder(slot);
-                } else {
-                    self.wake_all_streams();
-                    return false;
-                }
-            }
-            self.queues[*stream_id as usize].enqueue(|e| *e = slot_id.unwrap(),
-                                                        || panic!("Multi Channel's OgreMPMCQueue BUG! Stream (#{stream_id}) queue is full (but it shouldn't be ahead of the Allocator, which was not full)"),
-                                                        |len| if len == 1 { self.wake_stream(*stream_id) });
+            self.queues[*stream_id as usize].enqueue(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
+                                                     || {
+                                                         warn!("Multi Channel's OgreMPMCQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+                                                               channel_name = self.channel_name, used_streams_count = (MAX_STREAMS - self.vacant_streams.len()) as u32);
+                                                         std::thread::sleep(Duration::from_millis(500));
+                                                         true
+                                                     },
+                                                     |len| if len == 1 { self.wake_stream(*stream_id) });
         }
-        true
     }
 
     pub async fn flush(&self, timeout: Duration) -> u32 {
@@ -381,8 +330,12 @@ for*/ InternalOgreMPMCQueue<ItemType, AllocatorType<ItemType, BUFFER_SIZE>, BUFF
         (MAX_STREAMS - self.vacant_streams.len()) as u32
     }
 
+    #[inline(always)]
     pub fn pending_items_count(&self) -> u32 {
-        self.buffer.used_slots_count() as u32
+        self.used_streams.iter()
+            .filter(|&&stream_id| stream_id != u32::MAX)
+            .map(|&stream_id| self.queues[stream_id as usize].len())
+            .sum::<usize>() as u32
     }
 
 }
@@ -406,14 +359,15 @@ mod tests {
     use super::*;
     use std::io::Write;
     use futures::{stream, StreamExt};
+    use tokio::task::spawn_blocking;
 
 
     /// exercises the code present on the documentation for $uni_channel_type
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn doc_test() {
-        let channel = OgreMPMCQueue::<&str>::new();
+        let channel = OgreMPMCQueue::<&str>::new("doc_test");
         let (mut stream, _stream_id) = channel.listener_stream();
-        channel.zero_copy_send(|slot| *slot = "a").await;
+        channel.send("a");
         println!("received: {}", stream.next().await.unwrap());
     }
 
@@ -422,24 +376,24 @@ mod tests {
     async fn stream_and_channel_dropping() {
         {
             print!("Dropping the channel before the stream consumes the element: ");
-            let channel = OgreMPMCQueue::<&str>::new();
+            let channel = OgreMPMCQueue::<&str>::new("stream_and_channel_dropping");
             assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
             let (mut stream, _stream_id) = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
-            channel.zero_copy_send(|slot| *slot = "a").await;
+            channel.send("a");
             drop(channel);  // dropping the channel will decrease the Arc reference count by 1
             println!("received: {}", stream.next().await.unwrap());
         }
         {
             print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
-            let channel = OgreMPMCQueue::<&str>::new();
+            let channel = OgreMPMCQueue::<&str>::new("stream_and_channel_dropping");
             let stream = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 2");
             drop(stream);
             assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
             let (mut stream, _stream_id) = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
-            channel.zero_copy_send(|slot| *slot = "a").await;
+            channel.send("a");
             drop(channel);  // dropping the channel will decrease the Arc reference count by 1
             println!("received: {}", stream.next().await.unwrap());
         }
@@ -461,13 +415,13 @@ mod tests {
     /// This test guarantees and stresses that
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn on_the_fly_streams() {
-        let channel = OgreMPMCQueue::<String>::new();
+        let channel = OgreMPMCQueue::<String>::new("on_the_fly_streams");
 
         println!("1) streams 1 & 2 about to receive a message");
         let message = "to `stream1` and `stream2`".to_string();
         let (stream1, _stream1_id) = channel.listener_stream();
         let (stream2, _stream2_id) = channel.listener_stream();
-        channel.zero_copy_send(|slot| *slot = message.clone()).await;
+        channel.send(message.clone());
         assert_received(stream1, message.clone(), "`stream1` didn't receive the right message").await;
         assert_received(stream2, message.clone(), "`stream2` didn't receive the right message").await;
 
@@ -479,18 +433,18 @@ mod tests {
         for i in 0..10240 {
             let message = format!("gremling #{}", i);
             let (gremlin_stream, _gremlin_stream_id) = channel.listener_stream();
-            channel.zero_copy_send(|slot| *slot = message.clone()).await;
+            channel.send(message.clone());
             assert_received(gremlin_stream, message, "`gremling_stream` didn't receive the right message").await;
         }
 
-        async fn assert_received(stream: impl Stream<Item=String>, expected_message: String, failure_explanation: &str) {
+        async fn assert_received(stream: impl Stream<Item=Arc<String>>, expected_message: String, failure_explanation: &str) {
             match tokio::time::timeout(Duration::from_millis(10), Box::pin(stream).next()).await {
-                Ok(left)  => assert_eq!(left.unwrap(), expected_message, "{}", failure_explanation),
-                Err(_)                 => panic!("{} -- Timed out!", failure_explanation),
+                Ok(left) => assert_eq!(*left.unwrap(), expected_message, "{}", failure_explanation),
+                Err(_)                    => panic!("{} -- Timed out!", failure_explanation),
             }
         }
 
-        async fn assert_no_message(stream: impl Stream<Item=String>, failure_explanation: &str) {
+        async fn assert_no_message(stream: impl Stream<Item=Arc<String>>, failure_explanation: &str) {
             match tokio::time::timeout(Duration::from_millis(10), Box::pin(stream).next()).await {
                 Ok(left)  => panic!("{} -- A timeout was expected, but message '{}' was received", failure_explanation, left.unwrap()),
                 Err(_)                 => {},
@@ -502,9 +456,10 @@ mod tests {
     /// guarantees implementors allows copying messages over several streams
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn multiple_streams() {
-        const PARALLEL_STREAMS: usize = 100;     // total test time will be this number / 100 (in seconds)
+        const ELEMENTS:         usize = 100;
+        const PARALLEL_STREAMS: usize = 100;
 
-        let channel = OgreMPMCQueue::<u32, 100, PARALLEL_STREAMS>::new();
+        let channel = OgreMPMCQueue::<u32, 128, PARALLEL_STREAMS>::new("multiple_streams");
 
         // collect the streams
         let mut streams = stream::iter(0..PARALLEL_STREAMS)
@@ -517,18 +472,16 @@ mod tests {
             })
             .collect::<Vec<_>>().await;
 
-        // send
-        for i in 0..PARALLEL_STREAMS as u32 {
-            while !channel.zero_copy_try_send(&|slot| *slot = i) {
-                spin_loop();
-            };
+        // send (one copy to each stream)
+        for i in 0..ELEMENTS as u32 {
+            channel.send(i);
         }
 
         // check each stream gets all elements
         for s in 0..PARALLEL_STREAMS as u32 {
-            for i in 0..PARALLEL_STREAMS as u32 {
+            for i in 0..ELEMENTS as u32 {
                 let item = streams[s as usize].next().await;
-                assert_eq!(item, Some(i), "Stream #{s} didn't produce item {i}")
+                assert_eq!(*item.unwrap(), i, "Stream #{s} didn't produce item {i}")
             }
         }
 
@@ -549,7 +502,7 @@ mod tests {
         const WAIT_TIME: Duration = Duration::from_millis(100);
         {
             println!("Creating & ending a single stream: ");
-            let channel = OgreMPMCQueue::<&str>::new();
+            let channel = OgreMPMCQueue::<&str>::new("end_streams");
             let (mut stream, stream_id) = channel.listener_stream();
             tokio::spawn(async move {
                 tokio::time::sleep(WAIT_TIME/2).await;
@@ -562,7 +515,7 @@ mod tests {
         }
         {
             println!("Creating & ending two streams: ");
-            let channel = OgreMPMCQueue::<&str>::new();
+            let channel = OgreMPMCQueue::<&str>::new("end_streams");
             let (mut first, first_id) = channel.listener_stream();
             let (mut second, second_id) = channel.listener_stream();
             let first_ended = Arc::new(AtomicBool::new(false));
@@ -601,12 +554,12 @@ mod tests {
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn payload_dropping() {
         const PAYLOAD_TEXT: &str = "A shareable playload";
-        let channel = OgreMPMCQueue::<Option<Arc<String>>>::new();
+        let channel = OgreMPMCQueue::<String>::new("payload_dropping");
         let (mut stream, _stream_id) = channel.listener_stream();
-        channel.zero_copy_send(|slot| *slot = Some(Arc::new(String::from(PAYLOAD_TEXT)))).await;
+        channel.send(String::from(PAYLOAD_TEXT));
         let payload = stream.next().await.unwrap();
-        assert_eq!(payload.as_ref().unwrap().as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
-        assert_eq!(Arc::strong_count(&payload.unwrap()), 1, "A payload doing the round trip (being sent by the channel and received by the stream) should have been cloned just once -- so, when dropped, all resources would be freed");
+        assert_eq!(payload.as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
+        assert_eq!(Arc::strong_count(&payload), 1, "A payload doing the round trip (being sent by the channel and received by the stream) should have been cloned just once -- so, when dropped, all resources would be freed");
     }
 
     /// assures performance won't be degraded when we make changes
@@ -629,9 +582,9 @@ mod tests {
 
                 let start = Instant::now();
                 for e in 0..count {
-                    channel.zero_copy_try_send(&|slot| *slot = e);
+                    channel.send(e);
                     if let Some(consumed_e) = stream.next().await {
-                        assert_eq!(consumed_e, e, "{profiling_name}: produced and consumed items differ");
+                        assert_eq!(*consumed_e, e, "{profiling_name}: produced and consumed items differ");
                     } else {
                         panic!("{profiling_name}: Stream didn't provide expected item {e}");
                     }
@@ -653,10 +606,14 @@ mod tests {
                 let (mut stream, _stream_id) = channel.listener_stream();
 
                 let sender_future = async {
-                    for e in 0..count {
-                        while !channel.zero_copy_try_send(&|slot| *slot = e) {
-                            tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
+                    let mut e = 0;
+                    while e < count {
+                        let buffer_entries_left = channel.buffer_size() - channel.pending_items_count();
+                        for _ in 0..buffer_entries_left {
+                            channel.send(e);
+                            e += 1;
                         }
+                        tokio::task::yield_now().await;
                     }
                     channel.end_all_streams(Duration::from_secs(1)).await;
                 };
@@ -664,7 +621,7 @@ mod tests {
                 let receiver_future = async {
                     let mut counter = 0;
                     while let Some(e) = stream.next().await {
-                        assert_eq!(e, counter, "Wrong event consumed");
+                        assert_eq!(*e, counter, "Wrong event consumed");
                         counter += 1;
                     }
                 };
@@ -691,10 +648,15 @@ mod tests {
                 let (mut stream, _stream_id) = channel.listener_stream();
 
                 let sender_task = tokio::spawn(async move {
-                    for e in 0..count {
-                        while !channel.zero_copy_try_send(&|slot| *slot = e) {
-                            std::hint::spin_loop(); tokio::task::yield_now().await;
+                    let mut e = 0;
+                    while e < count {
+                        let buffer_entries_left = channel.buffer_size() - channel.pending_items_count();
+                        for _ in 0..buffer_entries_left {
+                            channel.send(e);
+                            e += 1;
                         }
+                        std::hint::spin_loop();
+                        tokio::task::yield_now().await;
                     }
                     channel.end_all_streams(Duration::from_secs(5)).await;
                 });
@@ -702,7 +664,7 @@ mod tests {
                 let receiver_task = tokio::spawn(async move {
                     let mut counter = 0;
                     while let Some(e) = stream.next().await {
-                        assert_eq!(e, counter, "Wrong event consumed");
+                        assert_eq!(*e, counter, "Wrong event consumed");
                         counter += 1;
                     }
                 });
@@ -724,9 +686,9 @@ mod tests {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new(), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new(), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new(), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new("profile_same_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_different_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new("profile_different_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_different_task_different_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new("profile_different_task_different_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
     }
 
 }

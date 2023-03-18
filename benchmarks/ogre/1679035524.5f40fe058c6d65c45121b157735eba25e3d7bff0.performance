@@ -1,0 +1,77 @@
+warning: unused import: `types::*`
+  --> src/uni/mod.rs:38:9
+   |
+38 |         types::*,
+   |         ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:59:18
+   |
+59 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `zero_copy_try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:76:15
+   |
+76 |     unsafe fn zero_copy_try_send(&self, _item_builder: impl FnOnce(&mut ItemType)) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated constant `PERCENTILES` is never used
+  --> src/instruments.rs:50:11
+   |
+50 |     const PERCENTILES:         usize = 16;
+   |           ^^^^^^^^^^^
+
+warning: associated function `reset` is never used
+  --> src/incremental_averages.rs:82:8
+   |
+82 |     fn reset(&self, weight: u32) {
+   |        ^^^^^
+
+warning: associated function `split` is never used
+  --> src/incremental_averages.rs:87:8
+   |
+87 |     fn split(&self) -> &IncrementalAveragePair32 {
+   |        ^^^^^
+
+warning: associated function `atomic` is never used
+  --> src/incremental_averages.rs:92:8
+   |
+92 |     fn atomic(&self) -> &AtomicU64 {
+   |        ^^^^^^
+
+warning: type alias `ReferenceCountedBlockingAllocator` is never used
+  --> src/ogre_std/reference_counted_buffer_allocator.rs:51:10
+   |
+51 | pub type ReferenceCountedBlockingAllocator<SlotType, USlots, const STACK_SIZE: usize> = ReferenceCountedNonBlockingCustomStackAllocator<S...
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `reactive-mutiny` (lib test) generated 8 warnings
+    Finished release [optimized] target(s) in 0.15s
+     Running unittests src/lib.rs (target/release/deps/reactive_mutiny-59b16f1b00df279e)
+--> LOGGER WAS ALREADY STARTED
+--> LOGGER WAS ALREADY STARTED
+2023-03-17T06:49:58.450Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 4 tests
+test multi::channels::ogre_mpmc_queue::tests::performance_measurements ... 
+OgreMPMCQueue  (same task / same thread): 12283694.72/s -- 10485760 items processed in 853.632416ms
+OgreMPMCQueue  (different task / same thread): 6085773.89/s -- 10485760 items processed in 1.722995332s
+OgreMPMCQueue  (different task / different thread): 13426929.96/s -- 10485760 items processed in 780.949929ms
+ok
+test multi::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_multi:      849469.60/s -- 4194304 items processed in 4.937556346s
+metricless_non_futures_non_fallible_multi:      809284.17/s -- 4194304 items processed in 5.182733303s
+par_metricless_non_futures_non_fallible_multi: 1117471.26/s -- 4194304 items processed in 3.753388688s
+metricfull_futures_fallible_multi:             1245396.43/s -- 4194304 items processed in 3.367846486s
+metricless_futures_fallible_multi:              880831.54/s -- 4194304 items processed in 4.761755033s
+timeoutable_metricfull_futures_fallible_multi:  942415.37/s -- 3145728 items processed in 3.337942152s
+timeoutable_metricless_futures_fallible_multi: 1244892.79/s -- 3145728 items processed in 2.526906758s
+ok
+test uni::channels::tests::performance_measurements ... 
+TokioMPSC  (same task / same thread): 6294371.27/s -- 10485760 items processed in 1.665894741s
+TokioMPSC  (different task / same thread): 6560239.90/s -- 10485760 items processed in 1.598380572s

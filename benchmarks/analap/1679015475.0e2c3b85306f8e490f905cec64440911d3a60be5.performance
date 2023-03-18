@@ -1,0 +1,264 @@
+   Compiling reactive-mutiny v0.1.0 (/tmp/reactive-mutiny)
+warning: unused import: `types::*`
+  --> src/uni/mod.rs:38:9
+   |
+38 |         types::*,
+   |         ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `OgreBlockingQueue`
+   --> src/ogre_std/benchmarks.rs:292:33
+    |
+292 |         ogre_queues::{OgreQueue,OgreBlockingQueue}
+    |                                 ^^^^^^^^^^^^^^^^^
+
+warning: unused macro definition: `impl_benchmarkable_container_for_blocking`
+   --> src/ogre_std/benchmarks.rs:318:18
+    |
+318 |     macro_rules! impl_benchmarkable_container_for_blocking {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_macros)]` on by default
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>` in the current scope
+   --> src/multi/mod.rs:683:30
+    |
+683 |                 while !multi.zero_copy_try_send(|slot| *slot = e) {
+    |                              ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+683 |                 while !multi.channel.zero_copy_try_send(|slot| *slot = e) {
+    |                              ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<String, 1024, 3, 103>>` in the current scope
+  --> src/multi/mod.rs:85:43
+   |
+85 |         let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+   |                                           ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<String, 1024, 3, 103>>`
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+  --> src/uni/channels/mod.rs:37:1
+   |
+37 | pub trait UniChannel<ItemType> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+   |
+85 |         let producer = |item: &str| multi.channel.zero_copy_try_send(|slot| *slot = item.to_string());
+   |                                           ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:118:44
+    |
+118 |         let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                            ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+118 |         let producer = |item| while !multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                            ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:184:22
+    |
+184 |         while !multi.zero_copy_try_send(|slot| *slot = 97) { std::hint::spin_loop(); };
+    |                      ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+184 |         while !multi.channel.zero_copy_try_send(|slot| *slot = 97) { std::hint::spin_loop(); };
+    |                      ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:259:44
+    |
+259 |         let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                            ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+259 |         let producer = |item| while !multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                            ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<String, 256, 256, 103>>` in the current scope
+   --> src/multi/mod.rs:287:43
+    |
+287 |         let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+    |                                           ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<String, 256, 256, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+287 |         let producer = |item: &str| multi.channel.zero_copy_try_send(|slot| *slot = item.to_string());
+    |                                           ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<String, 256, 256, 103>>` in the current scope
+   --> src/multi/mod.rs:327:43
+    |
+327 |         let producer = |item: &str| multi.zero_copy_try_send(|slot| *slot = item.to_string());
+    |                                           ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<String, 256, 256, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+327 |         let producer = |item: &str| multi.channel.zero_copy_try_send(|slot| *slot = item.to_string());
+    |                                           ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<bool, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:401:50
+    |
+401 | ...                   while !six_multi.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
+    |                                        ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<bool, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+401 |                                 while !six_multi.channel.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
+    |                                                  ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:425:52
+    |
+425 |         let two_producer = |item| while !two_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                    ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+425 |         let two_producer = |item| while !two_multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                    ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<bool, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:443:50
+    |
+443 | ...                   while !six_multi.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
+    |                                        ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<bool, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+443 |                                 while !six_multi.channel.zero_copy_try_send(|slot| *slot = true) { std::hint::spin_loop(); }
+    |                                                  ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:467:54
+    |
+467 |         let four_producer = |item| while !four_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                      ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+467 |         let four_producer = |item| while !four_multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                      ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<u32, 1024, 2, 103>>` in the current scope
+   --> src/multi/mod.rs:567:44
+    |
+567 |         let producer = |item| while !multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                            ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<u32, 1024, 2, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+567 |         let producer = |item| while !multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                            ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<SystemTime, 1024, 1, 103>>` in the current scope
+   --> src/multi/mod.rs:605:58
+    |
+605 |         let simple_producer = |item| while !simple_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                          ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<SystemTime, 1024, 1, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+605 |         let simple_producer = |item| while !simple_multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                          ++++++++
+
+error[E0599]: no method named `zero_copy_try_send` found for struct `Arc<Multi<SystemTime, 16, 256, 103>>` in the current scope
+   --> src/multi/mod.rs:630:60
+    |
+630 |         let bloated_producer = |item| while !bloated_multi.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                            ^^^^^^^^^^^^^^^^^^ method not found in `Arc<Multi<SystemTime, 16, 256, 103>>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+note: `uni::channels::UniChannel` defines an item `zero_copy_try_send`, perhaps you need to implement it
+   --> src/uni/channels/mod.rs:37:1
+    |
+37  | pub trait UniChannel<ItemType> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: one of the expressions' fields has a method of the same name
+    |
+630 |         let bloated_producer = |item| while !bloated_multi.channel.zero_copy_try_send(|slot| *slot = item) { std::hint::spin_loop(); };
+    |                                                            ++++++++
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `reactive-mutiny` (lib test) generated 3 warnings
+error: could not compile `reactive-mutiny` due to 14 previous errors; 3 warnings emitted

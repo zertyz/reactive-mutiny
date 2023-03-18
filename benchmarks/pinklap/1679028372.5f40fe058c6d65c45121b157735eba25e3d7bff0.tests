@@ -1,0 +1,223 @@
+   Compiling reactive-mutiny v0.1.0 (/tmp/reactive-mutiny)
+warning: unused import: `types::*`
+  --> src/uni/mod.rs:38:9
+   |
+38 |         types::*,
+   |         ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: struct `TokioMPSC` is never constructed
+  --> src/uni/channels/tokio_mpsc.rs:16:12
+   |
+16 | pub struct TokioMPSC<ItemType, const BUFFER_SIZE: usize> {
+   |            ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `new` is never used
+  --> src/uni/channels/tokio_mpsc.rs:24:12
+   |
+24 |     pub fn new() -> Arc<Pin<Box<Self>>> {
+   |            ^^^
+
+warning: associated function `consumer_stream` is never used
+  --> src/uni/channels/tokio_mpsc.rs:32:12
+   |
+32 |     pub fn consumer_stream(self: &Arc<Pin<Box<Self>>>) -> Option<impl Stream<Item=ItemType>> {
+   |            ^^^^^^^^^^^^^^^
+
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:59:18
+   |
+59 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+
+warning: associated function `try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:66:12
+   |
+66 |     pub fn try_send(&self, item: ItemType) -> bool {
+   |            ^^^^^^^^
+
+warning: associated function `zero_copy_try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:76:15
+   |
+76 |     unsafe fn zero_copy_try_send(&self, _item_builder: impl FnOnce(&mut ItemType)) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `flush` is never used
+  --> src/uni/channels/tokio_mpsc.rs:80:18
+   |
+80 |     pub async fn flush(&self, timeout: Duration) -> u32 {
+   |                  ^^^^^
+
+warning: associated function `end_all_streams` is never used
+   --> src/uni/channels/tokio_mpsc.rs:100:18
+    |
+100 |     pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
+    |                  ^^^^^^^^^^^^^^^
+
+warning: associated function `pending_items_count` is never used
+   --> src/uni/channels/tokio_mpsc.rs:109:12
+    |
+109 |     pub fn pending_items_count(&self) -> u32 {
+    |            ^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `consumer_stream` is never used
+  --> src/uni/channels/atomic_mpmc_queue.rs:48:12
+   |
+48 |     pub fn consumer_stream(self: &Arc<Pin<Box<Self>>>) -> Option<impl Stream<Item=ItemType>> {
+   |            ^^^^^^^^^^^^^^^
+
+warning: associated function `wake_all_streams` is never used
+   --> src/uni/channels/atomic_mpmc_queue.rs:118:8
+    |
+118 |     fn wake_all_streams(&self) {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> src/uni/channels/atomic_mpmc_queue.rs:147:12
+    |
+147 |     pub fn new() -> Arc<Pin<Box<Self>>> {
+    |            ^^^
+
+warning: associated function `flush` is never used
+   --> src/uni/channels/atomic_mpmc_queue.rs:172:18
+    |
+172 |     pub async fn flush(&self, timeout: Duration) -> u32 {
+    |                  ^^^^^
+
+warning: associated function `end_all_streams` is never used
+   --> src/uni/channels/atomic_mpmc_queue.rs:193:18
+    |
+193 |     pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
+    |                  ^^^^^^^^^^^^^^^
+
+warning: associated function `pending_items_count` is never used
+   --> src/uni/channels/atomic_mpmc_queue.rs:205:12
+    |
+205 |     pub fn pending_items_count(&self) -> u32 {
+    |            ^^^^^^^^^^^^^^^^^^^
+
+warning: associated constant `PERCENTILES` is never used
+  --> src/instruments.rs:50:11
+   |
+50 |     const PERCENTILES:         usize = 16;
+   |           ^^^^^^^^^^^
+
+warning: associated function `reset` is never used
+  --> src/incremental_averages.rs:82:8
+   |
+82 |     fn reset(&self, weight: u32) {
+   |        ^^^^^
+
+warning: associated function `split` is never used
+  --> src/incremental_averages.rs:87:8
+   |
+87 |     fn split(&self) -> &IncrementalAveragePair32 {
+   |        ^^^^^
+
+warning: associated function `atomic` is never used
+  --> src/incremental_averages.rs:92:8
+   |
+92 |     fn atomic(&self) -> &AtomicU64 {
+   |        ^^^^^^
+
+warning: type alias `ReferenceCountedAllocator` is never used
+  --> src/ogre_std/reference_counted_buffer_allocator.rs:48:10
+   |
+48 | pub type ReferenceCountedAllocator<SlotType, USlots, const STACK_SIZE: usize> = ReferenceCountedNonBlockingCustomStackAllocator<SlotType,...
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type alias `ReferenceCountedBlockingAllocator` is never used
+  --> src/ogre_std/reference_counted_buffer_allocator.rs:51:10
+   |
+51 | pub type ReferenceCountedBlockingAllocator<SlotType, USlots, const STACK_SIZE: usize> = ReferenceCountedNonBlockingCustomStackAllocator<S...
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `all_in_and_out_benchmark` is never used
+  --> src/ogre_std/benchmarks.rs:22:8
+   |
+22 | pub fn all_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `single_in_and_out_benchmark` is never used
+  --> src/ogre_std/benchmarks.rs:41:8
+   |
+41 | pub fn single_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `single_producer_multiple_consumers_benchmark` is never used
+  --> src/ogre_std/benchmarks.rs:58:8
+   |
+58 | pub fn single_producer_multiple_consumers_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Dur...
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `multiple_producers_single_consumer_benchmark` is never used
+   --> src/ogre_std/benchmarks.rs:100:8
+    |
+100 | pub fn multiple_producers_single_consumer_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Dur...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `compute_operations_per_second` is never used
+   --> src/ogre_std/benchmarks.rs:151:4
+    |
+151 | fn compute_operations_per_second(benchmark_name:      String,
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `keep_looping` is never used
+   --> src/ogre_std/benchmarks.rs:171:4
+    |
+171 | fn keep_looping(start_time: &SystemTime, iterations: &mut u64, deadline: &Duration, loops_per_iteration: u64) -> Option<f64> {
+    |    ^^^^^^^^^^^^
+
+warning: function `multi_threaded_iterate` is never used
+   --> src/ogre_std/benchmarks.rs:186:8
+    |
+186 | pub fn multi_threaded_iterate(start: usize, finish: usize, threads: usize, callback: impl Fn(u32) -> () + std::marker::Sync) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `iterate` is never used
+   --> src/ogre_std/benchmarks.rs:199:4
+    |
+199 | fn iterate(start: usize, finish: usize, step: usize, callback: impl Fn(u32) -> () + std::marker::Sync) {
+    |    ^^^^^^^
+
+warning: associated function `into` is never used
+  --> src/ogre_std/instruments.rs:55:18
+   |
+55 |     pub const fn into(self) -> usize {
+   |                  ^^^^
+
+warning: `reactive-mutiny` (lib) generated 30 warnings
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:59:18
+   |
+59 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `reactive-mutiny` (lib test) generated 8 warnings (6 duplicates)
+    Finished release [optimized] target(s) in 13m 59s
+     Running unittests src/lib.rs (target/release/deps/reactive_mutiny-59b16f1b00df279e)
+--> LOGGER WAS ALREADY STARTED
+--> LOGGER WAS ALREADY STARTED
+2023-03-17T05:00:11.616Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 92 tests
+test incremental_averages::tests::incremental_averages ... ok <1.121s>
+test multi::channels::ogre_mpmc_queue::tests::doc_test ... received: a
+ok <0.001s>
+test multi::channels::ogre_mpmc_queue::tests::end_streams ... Creating & ending a single stream: 
+Creating & ending two streams: 
+ok <0.108s>
+test multi::channels::ogre_mpmc_queue::tests::multiple_streams ... ok <1.150s>
+test multi::channels::ogre_mpmc_queue::tests::on_the_fly_streams ... 1) streams 1 & 2 about to receive a message
+2) stream3 should timeout
+3) several creations and removals
+free(): double free detected in tcache 2
+error: test failed, to rerun pass `--lib`
+
+Caused by:
+  process didn't exit successfully: `/tmp/reactive-mutiny/target/release/deps/reactive_mutiny-59b16f1b00df279e --test-threads 1 -Z unstable-options --report-time --nocapture` (signal: 6, SIGABRT: process abort signal)
