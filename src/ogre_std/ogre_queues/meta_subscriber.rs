@@ -12,7 +12,7 @@ pub trait MetaSubscriber<SlotType> {
     ///   1) The caller must ensure the `getter_fn()` operation returns as soon as possible, or else the whole queue is likely to hang. If so, one sould consider to pass in a `getter_fn()`
     ///      that would clone/copy the value and release the queue as soon as possible.
     ///   2) Note the `getter_fn()` is not `FnOnce()`. Some implementors might require calling this function more than once, on contention scenarios.
-    fn dequeue<GetterReturnType,
+    fn consume<GetterReturnType,
                GetterFn:                   Fn(&mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
@@ -21,7 +21,6 @@ pub trait MetaSubscriber<SlotType> {
                report_empty_fn:                ReportEmptyFn,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType>;
-    // TODO: rename to "consume()", as it may, possibly, be shared with stacks
 
     /// Considering parallelism, this method *might* provide access to all elements available for [consume()].\
     /// This method is totally not thread safe for ring-buffer based implementations -- the moment it returns, all those elements might have already

@@ -113,7 +113,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|slot| *slot,
+        self.base_queue.consume(|slot| *slot,
                        || {
                                     if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' DEQUEUE: queue is empty when attempting to dequeue an element", self.queue_name);

@@ -209,7 +209,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     #[inline(always)]
     fn dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|slot| *slot,
+        self.base_queue.consume(|slot| *slot,
                                 || self.report_empty(),
                                 |len| {
                                     if Instruments::from(INSTRUMENTS).tracing() {
@@ -305,7 +305,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     fn try_dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|slot| *slot,
+        self.base_queue.consume(|slot| *slot,
                                 || {
                                     if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' is empty when dequeueing an element in non-blocking mode", self.queue_name);

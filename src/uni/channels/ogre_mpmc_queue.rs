@@ -78,7 +78,7 @@ OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the `consumer_stream()`, so `mutable_self` is guaranteed to be valid
             },
             move |cx| {
-                let element = mutable_self.queue.dequeue(|item| {
+                let element = mutable_self.queue.consume(|item| {
                                                                         let mut moved_value = MaybeUninit::<ItemType>::uninit();
                                                                         unsafe { std::ptr::copy_nonoverlapping(item as *const ItemType, moved_value.as_mut_ptr(), 1) }
                                                                         unsafe { moved_value.assume_init() }

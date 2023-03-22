@@ -74,7 +74,7 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the `consumer_stream()`, so `mutable_self` is guaranteed to be valid
             },
             move |cx| {
-                let item = mutable_self.queue.dequeue(|item| item.clone(), || false, |_| {});
+                let item = mutable_self.queue.consume(|item| item.clone(), || false, |_| {});
                 let next = match item {
                     Some(item) => {
                         empty_retry_count = 0;

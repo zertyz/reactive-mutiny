@@ -123,7 +123,7 @@ MetaSubscriber<SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn dequeue<GetterReturnType,
+    fn consume<GetterReturnType,
                GetterFn:                   FnOnce(&mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>

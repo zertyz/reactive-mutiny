@@ -80,7 +80,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn dequeue(&self) -> Option<SlotType> {
-        self.base_queue.dequeue(|slot| {
+        self.base_queue.consume(|slot| {
                                     let mut moved_value = MaybeUninit::<SlotType>::uninit();
                                     unsafe { std::ptr::copy_nonoverlapping(slot as *const SlotType, moved_value.as_mut_ptr(), 1) }
                                     unsafe { moved_value.assume_init() }
