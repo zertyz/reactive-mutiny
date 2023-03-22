@@ -243,7 +243,7 @@ for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
             if *stream_id == u32::MAX {
                 break
             }
-            self.queues[*stream_id as usize].enqueue(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
+            self.queues[*stream_id as usize].publish(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
                                                      || {
                                                          warn!("Multi Channel's OgreMPMCQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
                                                                channel_name = self.channel_name, used_streams_count = (MAX_STREAMS - self.vacant_streams.len()) as u32);

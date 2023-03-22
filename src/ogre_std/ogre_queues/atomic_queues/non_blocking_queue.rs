@@ -84,7 +84,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
-        self.base_queue.enqueue(|slot| {
+        self.base_queue.publish(|slot| {
                                     *slot = element;
                                     if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);

@@ -175,7 +175,7 @@ for*/ OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     pub unsafe fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
-        self.queue.enqueue(item_builder,
+        self.queue.publish(item_builder,
                            || false,
                            |len| self.wake_stream(len-1))
     }

@@ -56,7 +56,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
         let element = ManuallyDrop::new(element);       // ensure it won't be dropped when this function ends, since it will be "moved"
-        self.base_queue.enqueue(|slot| {
+        self.base_queue.publish(|slot| {
                                     if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
                                     }

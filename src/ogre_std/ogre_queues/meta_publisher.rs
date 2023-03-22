@@ -18,7 +18,7 @@ pub trait MetaPublisher<SlotType> {
     ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call;
     ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
     ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
-    fn enqueue<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
               (&self,
@@ -26,7 +26,6 @@ pub trait MetaPublisher<SlotType> {
                report_full_fn:                 ReportFullFn,
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
               -> bool;
-    // TODO: rename this to "publish()" (it may, possibly, be shared with a Stack)
 
     /// Possibly returns the number of published elements (and not-yet-collected) by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)

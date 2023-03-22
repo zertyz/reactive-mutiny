@@ -187,7 +187,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
-        self.base_queue.enqueue(|slot| {
+        self.base_queue.publish(|slot| {
                                     *slot = element;
                                     if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' enqueued element '{:?}'", self.queue_name, element);
@@ -274,7 +274,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     fn try_enqueue(&self, element: SlotType) -> bool {
-        self.base_queue.enqueue(|slot| {
+        self.base_queue.publish(|slot| {
                                     *slot = element;
                                     if Instruments::from(INSTRUMENTS).tracing() {
                                         trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);

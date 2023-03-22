@@ -59,7 +59,7 @@ MetaPublisher<SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn enqueue<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
               (&self, setter_fn:                      SetterFn,
