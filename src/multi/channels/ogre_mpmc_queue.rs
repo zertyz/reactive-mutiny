@@ -335,7 +335,7 @@ for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     pub fn pending_items_count(&self) -> u32 {
         self.used_streams.iter()
             .filter(|&&stream_id| stream_id != u32::MAX)
-            .map(|&stream_id| self.queues[stream_id as usize].len())
+            .map(|&stream_id| self.queues[stream_id as usize].available_elements())
             .sum::<usize>() as u32
     }
 

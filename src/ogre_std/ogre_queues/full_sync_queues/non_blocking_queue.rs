@@ -104,8 +104,9 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                                 })
     }
 
+    #[inline(always)]
     fn len(&self) -> usize {
-        self.base_queue.len()
+        self.base_queue.available_elements()
     }
 
     fn max_size(&self) -> usize {

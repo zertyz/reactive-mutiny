@@ -94,7 +94,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     }
 
     #[inline(always)]
-    fn len(&self) -> usize {
+    fn available_elements(&self) -> usize {
         self.tail.overflowing_sub(self.head).0 as usize
     }
 
@@ -109,7 +109,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         let concurrency_guard = concurrency_guard.load(Relaxed);
         let empty_guard = empty_guard.load(Relaxed);
         format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
-                self.len(),
+                self.available_elements(),
                 unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));
                     acc
@@ -138,7 +138,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         let mut len_before;
         loop {
             lock(&self.concurrency_guard);
-            len_before = self.len() as i32;
+            len_before = self.available_elements() as i32;
             if len_before > 0 {
                 break
             } else {

@@ -239,8 +239,9 @@ for*/ OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.created_streams_count.load(Relaxed) - self.finished_streams_count.load(Relaxed)
     }
 
+    #[inline(always)]
     pub fn pending_items_count(&self) -> u32 {
-        self.queue.len() as u32
+        self.queue.available_elements() as u32
     }
 
 }

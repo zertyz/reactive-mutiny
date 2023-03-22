@@ -27,11 +27,10 @@ pub trait MetaPublisher<SlotType> {
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
               -> bool;
 
-    /// Possibly returns the number of published elements (and not-yet-collected) by this `meta_publisher`, at the moment of the call -- not synchronized.\
+    /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
     /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
-    fn len(&self) -> usize;
-    // TODO: rename the above to "available_elements()"
+    fn available_elements(&self) -> usize;
 
     /// Returns the maximum number of elements this `meta_publisher` can hold -- \
     /// 0, if the implementor offers an unbounded container,\
