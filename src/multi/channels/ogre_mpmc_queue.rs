@@ -169,7 +169,7 @@ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     /// rebuilds the `used_streams` list based of the current `vacant_items`
     fn sync_vacant_and_used_streams(&self) {
         lock(&self.streams_lock);
-        let mut vacant = unsafe { self.vacant_streams.peek_all().concat() };
+        let mut vacant = unsafe { self.vacant_streams.peek_remaining().concat() };
         vacant.sort_unstable();
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         let mut vacant_iter = vacant.iter();
@@ -280,7 +280,7 @@ for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     pub async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
 
         // true if `stream_id` is not running
-        let is_vacant = || unsafe { self.vacant_streams.peek_all().iter() }
+        let is_vacant = || unsafe { self.vacant_streams.peek_remaining().iter() }
             .flat_map(|&slice| slice)
             .find(|&vacant_stream_id| *vacant_stream_id == stream_id)
             .is_some();

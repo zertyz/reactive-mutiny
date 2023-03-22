@@ -139,10 +139,10 @@ impl<SlotType:          Unpin + Debug,
      const INSTRUMENTS: usize>
 NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
-    /// See [MetaQueue::peek_all()]
+    /// See [MetaSubscriber::peek_all()]
     #[inline(always)]
-    pub unsafe fn peek_all(&self) -> [&[SlotType];2] {
-        self.base_queue.peek_all()
+    pub unsafe fn peek_remaining(&self) -> [&[SlotType];2] {
+        self.base_queue.peek_remaining()
     }
 
 }
@@ -195,7 +195,7 @@ mod tests {
         }
         let expected_sum = (1+16)*(16/2);
         let mut observed_sum = 0;
-        for item in unsafe { queue.peek_all().iter().flat_map(|&slice| slice) } {
+        for item in unsafe { queue.peek_remaining().iter().flat_map(|&slice| slice) } {
             observed_sum += item;
         }
         assert_eq!(observed_sum, expected_sum, "peeking elements from [&[0..n], &[]] didn't work");
@@ -209,7 +209,7 @@ mod tests {
         }
         let expected_sum = (9+9+16-1)*(16/2);
         let mut observed_sum = 0;
-        for item in unsafe { queue.peek_all().iter().flat_map(|&slice| slice) } {
+        for item in unsafe { queue.peek_remaining().iter().flat_map(|&slice| slice) } {
             observed_sum += item;
         }
         assert_eq!(observed_sum, expected_sum, "peeking elements from [&[8..n], &[0..8]] didn't work");

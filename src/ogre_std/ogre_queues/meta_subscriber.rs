@@ -47,6 +47,5 @@ pub trait MetaSubscriber<SlotType> {
     ///   for peeked_reference in queue.peek_all().iter().flat_map(|&slice| slice) {
     ///       println!("your_logic_goes_here: {:#?}", *peeked_reference);
     ///   }
-    unsafe fn peek_all(&self) -> [&[SlotType];2];
-    // TODO: rename to "peek_remaining()"
+    unsafe fn peek_remaining(&self) -> [&[SlotType];2];
 }

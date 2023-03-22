@@ -110,7 +110,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         let empty_guard = empty_guard.load(Relaxed);
         format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
                 self.available_elements(),
-                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
+                unsafe {self.peek_remaining()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));
                     acc
                 }))
@@ -159,7 +159,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     }
 
     #[inline(always)]
-    unsafe fn peek_all(&self) -> [&[SlotType];2] {
+    unsafe fn peek_remaining(&self) -> [&[SlotType];2] {
         let head_index = self.head as usize % BUFFER_SIZE;
         let tail_index = self.tail as usize % BUFFER_SIZE;
         if self.head == self.tail {

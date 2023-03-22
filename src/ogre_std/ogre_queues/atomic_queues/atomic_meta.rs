@@ -142,7 +142,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         let enqueuer_tail = enqueuer_tail.load(Relaxed);
         format!("ogre_queues::atomic_meta's state: {{head: {head}, tail: {tail}, dequeuer_head: {dequeuer_head}, enqueuer_tail: {enqueuer_tail}, (len: {}), elements: {{{}}}'}}",
                 self.available_elements(),
-                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
+                unsafe {self.peek_remaining()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));
                     acc
                 }))
@@ -216,7 +216,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         Some(ret_val)
     }
 
-    unsafe fn peek_all(&self) -> [&[SlotType]; 2] {
+    unsafe fn peek_remaining(&self) -> [&[SlotType]; 2] {
         let head_index = self.head.load(Relaxed) as usize % BUFFER_SIZE;
         let tail_index = self.tail.load(Relaxed) as usize % BUFFER_SIZE;
         if self.head.load(Relaxed) == self.tail.load(Relaxed) {
