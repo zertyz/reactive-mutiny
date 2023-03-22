@@ -4,9 +4,11 @@ use super::super::super::{
     instruments::Instruments,
     ogre_queues::{
         OgreQueue,
-        meta_queue::MetaQueue,
         OgreBlockingQueue,
         atomic_queues::atomic_meta::AtomicMeta,
+        meta_publisher::MetaPublisher,
+        meta_subscriber::MetaSubscriber,
+        meta_queue::MetaQueue,
     },
 };
 use std::{

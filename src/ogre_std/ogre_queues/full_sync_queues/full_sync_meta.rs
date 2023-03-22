@@ -1,7 +1,11 @@
 //! Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
 //! full synchronization through an atomic flag, with a clever & experimentally tuned efficient locking mechanism.
 
-use super::super::meta_queue::MetaQueue;
+use crate::ogre_std::ogre_queues::{
+    meta_publisher::MetaPublisher,
+    meta_subscriber::MetaSubscriber,
+    meta_queue::MetaQueue,
+};
 use std::{
     fmt::Debug,
     mem::{ManuallyDrop, MaybeUninit},
@@ -34,8 +38,7 @@ pub struct FullSyncMeta<SlotType,
 impl<SlotType:          Unpin + Debug,
      const BUFFER_SIZE: usize>
 MetaQueue<SlotType> for
-FullSyncMeta<SlotType,
-             BUFFER_SIZE> {
+FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self {
@@ -47,6 +50,13 @@ FullSyncMeta<SlotType,
             empty_guard:       AtomicBool::new(false),
         }
     }
+
+}
+
+impl<SlotType:          Unpin + Debug,
+     const BUFFER_SIZE: usize>
+MetaPublisher<SlotType> for
+FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn enqueue<SetterFn:                   FnOnce(&mut SlotType),
@@ -82,6 +92,35 @@ FullSyncMeta<SlotType,
         report_len_after_enqueueing_fn(len_before+1);
         true
     }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.tail.overflowing_sub(self.head).0 as usize
+    }
+
+    #[inline(always)]
+    fn max_size(&self) -> usize {
+        BUFFER_SIZE
+    }
+
+    fn debug_info(&self) -> String {
+        let Self {full_guard, concurrency_guard, tail, buffer: _, head, empty_guard} = self;
+        let full_guard = full_guard.load(Relaxed);
+        let concurrency_guard = concurrency_guard.load(Relaxed);
+        let empty_guard = empty_guard.load(Relaxed);
+        format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
+                self.len(),
+                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
+                    acc.push_str(&format!("'{:?}',", e));
+                    acc
+                }))
+    }
+}
+
+impl<SlotType:          Unpin + Debug,
+     const BUFFER_SIZE: usize>
+MetaSubscriber<SlotType> for
+FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn dequeue<GetterReturnType,
@@ -120,15 +159,6 @@ FullSyncMeta<SlotType,
     }
 
     #[inline(always)]
-    fn len(&self) -> usize {
-        self.tail.overflowing_sub(self.head).0 as usize
-    }
-
-    fn max_size(&self) -> usize {
-        BUFFER_SIZE
-    }
-
-    #[inline(always)]
     unsafe fn peek_all(&self) -> [&[SlotType];2] {
         let head_index = self.head as usize % BUFFER_SIZE;
         let tail_index = self.tail as usize % BUFFER_SIZE;
@@ -149,19 +179,6 @@ FullSyncMeta<SlotType,
                 [&array[head_index..BUFFER_SIZE], &array[0..tail_index]]
             }
         }
-    }
-
-    fn debug_info(&self) -> String {
-        let Self {full_guard, concurrency_guard, tail, buffer: _, head, empty_guard} = self;
-        let full_guard = full_guard.load(Relaxed);
-        let concurrency_guard = concurrency_guard.load(Relaxed);
-        let empty_guard = empty_guard.load(Relaxed);
-        format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
-                self.len(),
-                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
-                    acc.push_str(&format!("'{:?}',", e));
-                    acc
-                }))
     }
 
 }

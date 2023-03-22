@@ -1,13 +1,15 @@
 use crate::{
     ogre_std::{
         ogre_queues::{
+            OgreQueue,
+            full_sync_queues::{
+                full_sync_meta::FullSyncMeta,
+                NonBlockingQueue,
+            },
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
             meta_queue::MetaQueue,
-            full_sync_queues::NonBlockingQueue,
         },
-    },
-    ogre_std::ogre_queues::{
-        OgreQueue,
-        full_sync_queues::full_sync_meta::FullSyncMeta,
     },
 };
 use std::{
@@ -21,7 +23,6 @@ use std::{
     task::{Poll, Waker},
     mem::{self, MaybeUninit},
     hint::spin_loop,
-    marker::PhantomData,
 };
 use futures::{Stream};
 use minstant::Instant;

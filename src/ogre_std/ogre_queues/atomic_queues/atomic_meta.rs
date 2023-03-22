@@ -2,6 +2,8 @@
 //! allowing enqueueing syncing to be (almost) fully detached from the dequeueing syncing
 
 use super::super::{
+    meta_publisher::MetaPublisher,
+    meta_subscriber::MetaSubscriber,
     meta_queue::MetaQueue,
 };
 use std::{
@@ -32,8 +34,7 @@ pub struct AtomicMeta<SlotType,
 impl<SlotType:          Clone + Debug,
      const BUFFER_SIZE: usize>
 MetaQueue<SlotType> for
-AtomicMeta<SlotType,
-           BUFFER_SIZE> {
+AtomicMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self {
@@ -44,6 +45,12 @@ AtomicMeta<SlotType,
             buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
         }
     }
+}
+
+impl<SlotType:          Clone + Debug,
+     const BUFFER_SIZE: usize>
+MetaPublisher<SlotType> for
+AtomicMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn enqueue<SetterFn:                   FnOnce(&mut SlotType),
@@ -118,6 +125,34 @@ AtomicMeta<SlotType,
         true
     }
 
+    fn len(&self) -> usize {
+        self.tail.load(Relaxed).overflowing_sub(self.head.load(Relaxed)).0 as usize
+    }
+
+    fn max_size(&self) -> usize {
+        BUFFER_SIZE
+    }
+
+    fn debug_info(&self) -> String {
+        let Self {head, tail, dequeuer_head, enqueuer_tail, buffer: _} = self;
+        let head = head.load(Relaxed);
+        let tail = tail.load(Relaxed);
+        let dequeuer_head = dequeuer_head.load(Relaxed);
+        let enqueuer_tail = enqueuer_tail.load(Relaxed);
+        format!("ogre_queues::atomic_meta's state: {{head: {head}, tail: {tail}, dequeuer_head: {dequeuer_head}, enqueuer_tail: {enqueuer_tail}, (len: {}), elements: {{{}}}'}}",
+                self.len(),
+                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
+                    acc.push_str(&format!("'{:?}',", e));
+                    acc
+                }))
+    }
+}
+
+impl<SlotType:          Clone + Debug,
+     const BUFFER_SIZE: usize>
+MetaSubscriber<SlotType> for
+AtomicMeta<SlotType, BUFFER_SIZE> {
+
     #[inline(always)]
     fn dequeue<GetterReturnType,
                GetterFn:                   Fn(&mut SlotType) -> GetterReturnType,
@@ -180,14 +215,6 @@ AtomicMeta<SlotType,
         Some(ret_val)
     }
 
-    fn len(&self) -> usize {
-        self.tail.load(Relaxed).overflowing_sub(self.head.load(Relaxed)).0 as usize
-    }
-
-    fn max_size(&self) -> usize {
-        BUFFER_SIZE
-    }
-
     unsafe fn peek_all(&self) -> [&[SlotType]; 2] {
         let head_index = self.head.load(Relaxed) as usize % BUFFER_SIZE;
         let tail_index = self.tail.load(Relaxed) as usize % BUFFER_SIZE;
@@ -210,19 +237,6 @@ AtomicMeta<SlotType,
         }
     }
 
-    fn debug_info(&self) -> String {
-        let Self {head, tail, dequeuer_head, enqueuer_tail, buffer: _} = self;
-        let head = head.load(Relaxed);
-        let tail = tail.load(Relaxed);
-        let dequeuer_head = dequeuer_head.load(Relaxed);
-        let enqueuer_tail = enqueuer_tail.load(Relaxed);
-        format!("ogre_queues::atomic_meta's state: {{head: {head}, tail: {tail}, dequeuer_head: {dequeuer_head}, enqueuer_tail: {enqueuer_tail}, (len: {}), elements: {{{}}}'}}",
-                self.len(),
-                unsafe {self.peek_all()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
-                    acc.push_str(&format!("'{:?}',", e));
-                    acc
-                }))
-    }
 }
 
 // NOTE: spin_loop instruction disabled for now, as Tokio is faster without it (frees the CPU to do other tasks)
