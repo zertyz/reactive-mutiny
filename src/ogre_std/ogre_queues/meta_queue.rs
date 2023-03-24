@@ -10,7 +10,7 @@ use super::{
 /// This trait, therefore, exists to allow sharing common code between the mentioned concrete queue implementations.
 pub trait MetaQueue<SlotType>: MetaPublisher<SlotType> + MetaSubscriber<SlotType> {
 
-    /// Instantiates the base queue
+    /// Instantiates the meta queue
     fn new() -> Self;
 
 }

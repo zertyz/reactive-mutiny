@@ -105,7 +105,7 @@ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                     drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the upper method `listener_stream()`, so `mutable_self` is guaranteed to be valid while the stream executes
                 },
                 move |cx| {
-                    let element = mutable_self.queues[stream_id as usize].consume(|mut item| item.take().expect("godshavfty!! element cannot be None here!"),
+                    let element = mutable_self.queues[stream_id as usize].consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
                                                                                   || false,
                                                                                   |_| {});
 
