@@ -1,0 +1,130 @@
+warning: unused macro definition: `impl_uni_channel_for_struct`
+   --> src/uni/channels/mod.rs:100:14
+    |
+100 | macro_rules! impl_uni_channel_for_struct {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_macros)]` on by default
+
+warning: unused import: `types::*`
+  --> src/uni/mod.rs:38:9
+   |
+38 |         types::*,
+   |         ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `marker::PhantomData`
+  --> src/multi/channels/ogre_mpmc_queue.rs:24:5
+   |
+24 |     marker::PhantomData,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::task::spawn_blocking`
+   --> src/multi/channels/ogre_mpmc_queue.rs:362:9
+    |
+362 |     use tokio::task::spawn_blocking;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `multi::channels::ogre_mpmc_queue::OgreMPMCQueue`
+ --> src/types.rs:4:5
+  |
+4 |     multi::channels::ogre_mpmc_queue::OgreMPMCQueue,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `MaybeUninit`, `fmt::Debug`, `ops::Deref`, `sync::Arc`
+  --> src/types.rs:9:5
+   |
+9  |     fmt::Debug,
+   |     ^^^^^^^^^^
+10 |     mem::{MaybeUninit},
+   |           ^^^^^^^^^^^
+11 |     ops::Deref,
+   |     ^^^^^^^^^^
+12 |     sync::Arc,
+   |     ^^^^^^^^^
+
+warning: unused import: `ops::Deref`
+ --> src/ogre_std/ogre_queues/full_sync_queues/full_sync_meta.rs:8:5
+  |
+8 |     ops::Deref,
+  |     ^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> src/multi/channels/ogre_mpmc_queue.rs:107:84
+    |
+107 | ...   let element = mutable_self.queues[stream_id as usize].dequeue(|mut item| item.take().expect("godshavfty!! element cannot be None he...
+    |                                                                      ----^^^^
+    |                                                                      |
+    |                                                                      help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:59:18
+   |
+59 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `zero_copy_try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:76:15
+   |
+76 |     unsafe fn zero_copy_try_send(&self, _item_builder: impl FnOnce(&mut ItemType)) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated constant `PERCENTILES` is never used
+  --> src/instruments.rs:50:11
+   |
+50 |     const PERCENTILES:         usize = 16;
+   |           ^^^^^^^^^^^
+
+warning: associated function `reset` is never used
+  --> src/incremental_averages.rs:82:8
+   |
+82 |     fn reset(&self, weight: u32) {
+   |        ^^^^^
+
+warning: associated function `split` is never used
+  --> src/incremental_averages.rs:87:8
+   |
+87 |     fn split(&self) -> &IncrementalAveragePair32 {
+   |        ^^^^^
+
+warning: associated function `atomic` is never used
+  --> src/incremental_averages.rs:92:8
+   |
+92 |     fn atomic(&self) -> &AtomicU64 {
+   |        ^^^^^^
+
+warning: `reactive-mutiny` (lib test) generated 14 warnings
+    Finished release [optimized] target(s) in 0.32s
+     Running unittests src/lib.rs (target/release/deps/reactive_mutiny-c113a0ba0612f326)
+--> LOGGER WAS ALREADY STARTED
+2023-03-18T11:08:49.581Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 4 tests
+test multi::channels::ogre_mpmc_queue::tests::performance_measurements ... 
+OgreMPMCQueue  (same task / same thread): 3345041.75/s -- 10485760 items processed in 3.134717232s
+OgreMPMCQueue  (different task / same thread): 2172932.25/s -- 10485760 items processed in 4.825626755s
+OgreMPMCQueue  (different task / different thread): 2685856.49/s -- 10485760 items processed in 3.90406562s
+ok
+test multi::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_multi:     1151897.39/s -- 4194304 items processed in 3.641213213s
+metricless_non_futures_non_fallible_multi:     1176293.78/s -- 4194304 items processed in 3.565694279s
+par_metricless_non_futures_non_fallible_multi:  746568.34/s -- 4194304 items processed in 5.618111284s
+metricfull_futures_fallible_multi:              898766.60/s -- 4194304 items processed in 4.666733253s
+metricless_futures_fallible_multi:             1085381.04/s -- 4194304 items processed in 3.864360841s
+timeoutable_metricfull_futures_fallible_multi:  795968.39/s -- 3145728 items processed in 3.952076535s
+timeoutable_metricless_futures_fallible_multi:  841683.47/s -- 3145728 items processed in 3.73742398s
+ok
+test uni::channels::tests::performance_measurements ... 
+TokioMPSC  (same task / same thread): 2501356.94/s -- 10485760 items processed in 4.19202867s
+TokioMPSC  (different task / same thread): 2445859.85/s -- 10485760 items processed in 4.287146711s
+TokioMPSC  (different task / different thread): 1507692.40/s -- 10485760 items processed in 6.954840394s
+AtomicMPMCQueue  (same task / same thread): 6243339.86/s -- 10485760 items processed in 1.679511325s
+AtomicMPMCQueue  (different task / same thread): 6562589.35/s -- 10485760 items processed in 1.597808341s
+AtomicMPMCQueue  (different task / different thread): 2358155.24/s -- 10485760 items processed in 4.446594451s
+OgreMPMCQueue  (same task / same thread): 7621519.76/s -- 10485760 items processed in 1.375809593s
+OgreMPMCQueue  (different task / same thread): 5617927.22/s -- 10485760 items processed in 1.866481993s

@@ -1,0 +1,111 @@
+warning: unused import: `types::*`
+  --> src/uni/mod.rs:38:9
+   |
+38 |         types::*,
+   |         ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `OgreBlockingQueue`
+   --> src/ogre_std/benchmarks.rs:292:33
+    |
+292 |         ogre_queues::{OgreQueue,OgreBlockingQueue}
+    |                                 ^^^^^^^^^^^^^^^^^
+
+warning: unused macro definition: `impl_benchmarkable_container_for_blocking`
+   --> src/ogre_std/benchmarks.rs:318:18
+    |
+318 |     macro_rules! impl_benchmarkable_container_for_blocking {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_macros)]` on by default
+
+warning: associated function `send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:59:18
+   |
+59 |     pub async fn send(&self, item: ItemType) {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `zero_copy_try_send` is never used
+  --> src/uni/channels/tokio_mpsc.rs:76:15
+   |
+76 |     unsafe fn zero_copy_try_send(&self, _item_builder: impl FnOnce(&mut ItemType)) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated constant `PERCENTILES` is never used
+  --> src/instruments.rs:50:11
+   |
+50 |     const PERCENTILES:         usize = 16;
+   |           ^^^^^^^^^^^
+
+warning: associated function `reset` is never used
+  --> src/incremental_averages.rs:82:8
+   |
+82 |     fn reset(&self, weight: u32) {
+   |        ^^^^^
+
+warning: associated function `split` is never used
+  --> src/incremental_averages.rs:87:8
+   |
+87 |     fn split(&self) -> &IncrementalAveragePair32 {
+   |        ^^^^^
+
+warning: associated function `atomic` is never used
+  --> src/incremental_averages.rs:92:8
+   |
+92 |     fn atomic(&self) -> &AtomicU64 {
+   |        ^^^^^^
+
+warning: type alias `ReferenceCountedBlockingAllocator` is never used
+  --> src/ogre_std/reference_counted_buffer_allocator.rs:51:10
+   |
+51 | pub type ReferenceCountedBlockingAllocator<SlotType, USlots, const STACK_SIZE: usize> = ReferenceCountedNonBlockingCustomStackAllocator<S...
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `reactive-mutiny` (lib test) generated 10 warnings
+    Finished release [optimized] target(s) in 0.32s
+     Running unittests src/lib.rs (target/release/deps/reactive_mutiny-c113a0ba0612f326)
+--> LOGGER WAS ALREADY STARTED
+--> LOGGER WAS ALREADY STARTED
+2023-03-18T08:50:12.994Z INFO  [reactive_mutiny::stream_executor::tests] minstant: is TSC / RDTSC instruction available for time measurement? false
+
+running 4 tests
+test multi::channels::ogre_mpmc_queue::tests::performance_measurements ... 
+OgreMPMCQueue  (same task / same thread): 4244409.33/s -- 10485760 items processed in 2.470487456s
+OgreMPMCQueue  (different task / same thread): 3426546.87/s -- 10485760 items processed in 3.060153672s
+OgreMPMCQueue  (different task / different thread): 1341839.26/s -- 10485760 items processed in 7.814468044s
+ok
+test multi::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_multi:     1034300.82/s -- 4194304 items processed in 4.055207053s
+metricless_non_futures_non_fallible_multi:     1235506.46/s -- 4194304 items processed in 3.394805399s
+par_metricless_non_futures_non_fallible_multi:  770070.18/s -- 4194304 items processed in 5.446651658s
+metricfull_futures_fallible_multi:              850868.45/s -- 4194304 items processed in 4.929438879s
+metricless_futures_fallible_multi:              999366.49/s -- 4194304 items processed in 4.196962802s
+timeoutable_metricfull_futures_fallible_multi:  737869.16/s -- 3145728 items processed in 4.263259889s
+timeoutable_metricless_futures_fallible_multi:  839687.81/s -- 3145728 items processed in 3.746306639s
+ok
+test uni::channels::tests::performance_measurements ... 
+TokioMPSC  (same task / same thread): 2423399.55/s -- 10485760 items processed in 4.326880398s
+TokioMPSC  (different task / same thread): 2374703.66/s -- 10485760 items processed in 4.415607798s
+TokioMPSC  (different task / different thread): 1525753.98/s -- 10485760 items processed in 6.872510337s
+AtomicMPMCQueue  (same task / same thread): 6263082.84/s -- 10485760 items processed in 1.674217037s
+AtomicMPMCQueue  (different task / same thread): 6454565.83/s -- 10485760 items processed in 1.624549238s
+AtomicMPMCQueue  (different task / different thread): 2434905.80/s -- 10485760 items processed in 4.306433537s
+OgreMPMCQueue  (same task / same thread): 7628136.22/s -- 10485760 items processed in 1.37461625s
+OgreMPMCQueue  (different task / same thread): 5592958.74/s -- 10485760 items processed in 1.874814473s
+OgreMPMCQueue  (different task / different thread): 2388617.89/s -- 10485760 items processed in 4.389885902s
+ok
+test uni::tests::performance_measurements ... 
+metricfull_non_futures_non_fallible_uni:     1188936.19/s -- 8388608 items processed in 7.055557785s
+metricless_non_futures_non_fallible_uni:     1209184.59/s -- 8388608 items processed in 6.937408937s
+par_metricless_non_futures_non_fallible_uni: 1061086.77/s -- 8388608 items processed in 7.905675771s
+metricfull_futures_fallible_uni:             1486532.16/s -- 8388608 items processed in 5.643072001s
+metricless_futures_fallible_uni:             1196871.82/s -- 8388608 items processed in 7.008777291s
+timeoutable_metricfull_futures_fallible_uni:  982417.12/s -- 6291456 items processed in 6.404057781s
+timeoutable_metricless_futures_fallible_uni: 1221240.48/s -- 6291456 items processed in 5.151692994s
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 88 filtered out; finished in 120.36s
+
