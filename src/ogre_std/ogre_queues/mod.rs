@@ -8,6 +8,7 @@ pub mod meta_topic;
 pub mod non_blocking_parking_lot_queue;
 pub mod atomic_queues;
 pub mod full_sync_queues;
+pub mod log_topics;
 
 
 /// multi-producer / multi-consumer queue

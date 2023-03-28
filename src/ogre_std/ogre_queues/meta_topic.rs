@@ -13,7 +13,7 @@ pub trait MetaTopic<SlotType>: MetaPublisher<SlotType> {
 
     /// Instantiates the meta topic using `mmap_file_path` as the backing storage
     /// and `growing_step_size` as the incrment in the elements it can handle, once creating new space is needed.
-    fn new<IntoString: Into<String>>(mmap_file_path: IntoString, growing_step_size: usize);
+    fn new<IntoString: Into<String>>(mmap_file_path: IntoString, growing_step_size: u64) -> Result<Self, Box<dyn std::error::Error>> where Self: Sized;
 
     // /// Creates a consumer (aka, a consumer group) able to consume elements in parallel with other consumers returned by this method -- each one receiving its own reference to each element.\
     // /// When considering a single consumer returned by this function, multiple callers (from different threads) may consume from it through [MetaSubscriber::consume()] -- but, this time,
