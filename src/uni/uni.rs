@@ -37,12 +37,12 @@ impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
 Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     /// creates & returns a pair (`Uni`, `UniStream`)
-    pub fn new(stream_executor: Arc<StreamExecutor<INSTRUMENTS>>) -> Arc<Self> {
-        Arc::new(Uni {
+    pub fn new(stream_executor: Arc<StreamExecutor<INSTRUMENTS>>) -> Self {
+        Uni {
             uni_channel:              UniChannelType::<ItemType, BUFFER_SIZE, MAX_STREAMS>::new(),
             stream_executor,
             finished_executors_count: AtomicU32::new(0),
-        })
+        }
     }
 
     #[inline(always)]

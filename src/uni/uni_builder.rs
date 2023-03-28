@@ -86,7 +86,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
                          -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
         let executor = StreamExecutor::with_futures_timeout(stream_name.into(), self.futures_timeout);
-        let handle = Uni::new(Arc::clone(&executor));
+        let handle = Arc::new(Uni::new(Arc::clone(&executor)));
         let in_stream = handle.consumer_stream().expect("At least 1 stream should be provided by the Uni Channel");
         let returned_handle = Arc::clone(&handle);
         let out_stream = pipeline_builder(MutinyStream { stream: Box::new(in_stream) });
@@ -120,7 +120,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
                                                   -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
         let executor = StreamExecutor::new(stream_name.into());
-        let handle = Uni::new(Arc::clone(&executor));
+        let handle = Arc::new(Uni::new(Arc::clone(&executor)));
         let in_stream = handle.consumer_stream().expect("At least 1 stream should be provided by the Uni Channel");
         let returned_handle = Arc::clone(&handle);
         let out_stream = pipeline_builder(MutinyStream { stream: Box::new(in_stream) });
