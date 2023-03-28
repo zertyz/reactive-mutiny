@@ -4,6 +4,7 @@ use super::{
     meta_publisher::MetaPublisher,
     meta_subscriber::MetaSubscriber,
 };
+use std::sync::Arc;
 
 /// Dictates the API for "meta" topics and how they should work.\
 /// Topics are like queues but allow multiple & independent consumers -- like consumer-groups in a Kafka queue topic: each "consumer group" will see all available events.\
@@ -13,7 +14,7 @@ pub trait MetaTopic<SlotType>: MetaPublisher<SlotType> {
 
     /// Instantiates the meta topic using `mmap_file_path` as the backing storage
     /// and `growing_step_size` as the incrment in the elements it can handle, once creating new space is needed.
-    fn new<IntoString: Into<String>>(mmap_file_path: IntoString, growing_step_size: u64) -> Result<Self, Box<dyn std::error::Error>> where Self: Sized;
+    fn new<IntoString: Into<String>>(mmap_file_path: IntoString, growing_step_size: u64) -> Result<Arc<Self>, Box<dyn std::error::Error>> where Self: Sized;
 
     // /// Creates a consumer (aka, a consumer group) able to consume elements in parallel with other consumers returned by this method -- each one receiving its own reference to each element.\
     // /// When considering a single consumer returned by this function, multiple callers (from different threads) may consume from it through [MetaSubscriber::consume()] -- but, this time,
