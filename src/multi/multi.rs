@@ -37,16 +37,16 @@ impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
      const INSTRUMENTS: usize>
 Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
-    pub fn new<IntoString: Into<String>>(stream_name: IntoString) -> Arc<Self> {
+    pub fn new<IntoString: Into<String>>(stream_name: IntoString) -> Self {
         let stream_name = stream_name.into();
-        Arc::new(Multi {
+        Multi {
             stream_name:    stream_name.clone(),
             channel:        MultiChannelType::<ItemType, BUFFER_SIZE, MAX_STREAMS>::new(stream_name.clone()),
             executor_infos: RwLock::new(IndexMap::new()),
-        })
+        }
     }
 
-    pub fn stream_name<'r>(self: &'r Arc<Self>) -> &'r String {
+    pub fn stream_name<'r>(self: &'r Self) -> &'r String {
         &self.stream_name
     }
 
@@ -74,7 +74,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     /// Also note that timing out this operation is not advisable, for resources won't be freed until it reaches the last step.\
     /// Returns false if there was no executor associated with `pipeline_name`.
     pub async fn flush_and_cancel_executor<IntoString: Into<String>>
-                                          (self:          &Arc<Self>,
+                                          (self:          &Self,
                                            pipeline_name: IntoString,
                                            timeout:       Duration) -> bool {
 
@@ -120,7 +120,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     /// waiting for all events to be fully processed and calling the "on close" callback.\
     /// If this multi share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [multis_close_async!()]
-    pub async fn close(self: &Arc<Self>, timeout: Duration) {
+    pub async fn close(self: &Self, timeout: Duration) {
         self.channel.end_all_streams(timeout).await;
     }
 

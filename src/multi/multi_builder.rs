@@ -27,7 +27,7 @@ pub struct MultiBuilder<InType:              Clone + Unpin + Send + Sync + Debug
                         const MAX_STREAMS:   usize = 1,
                         const INSTRUMENTS:   usize = {Instruments::LogsWithMetrics.into()}> {
 
-    pub handle:                   Arc<Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>,
+    pub handle: Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>,
 
 }
 impl<'a, InType:              Clone + Unpin + Send + Sync + Debug + 'static,
@@ -37,10 +37,10 @@ impl<'a, InType:              Clone + Unpin + Send + Sync + Debug + 'static,
 MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub fn new<IntoString: Into<String>>
-              (multi_name: IntoString) -> Arc<Self> {
-        Arc::new(Self {
-            handle:                   Multi::new(multi_name),
-        })
+              (multi_name: IntoString) -> Self {
+        Self {
+            handle: Multi::new(multi_name),
+        }
     }
 
     pub async fn spawn_executor<IntoString:             Into<String>,
@@ -53,7 +53,7 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                 OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)         -> CloseVoidAsyncType + Send + Sync + 'static,
                                 CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
-                               (self:                      &'a Arc<Self>,
+                               (self,
                                 concurrency_limit:         u32,
                                 futures_timeout:           Duration,
                                 pipeline_name:             IntoString,
@@ -61,7 +61,31 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                 on_err_callback:           OnErrFnType,
                                 on_close_callback:         OnCloseFnType)
 
-                                -> Result<&'a Arc<Self>, Box<dyn std::error::Error>> {
+                                -> Result<Self, Box<dyn std::error::Error>> {
+
+        self.spawn_executor_ref(concurrency_limit, futures_timeout, pipeline_name, pipeline_builder, on_err_callback, on_close_callback).await?;
+        Ok(self)
+    }
+
+    pub async fn spawn_executor_ref<IntoString:             Into<String>,
+                                    OutItemType:            Send + Debug,
+                                    PipelineBuilderFnType:  FnOnce(MutinyStream<Arc<InType>>)            -> OutStreamType,
+                                    OutStreamType:          Stream<Item=OutType> + Send + 'static,
+                                    OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
+                                    OnErrFnType:            Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
+                                    ErrVoidAsyncType:       Future<Output=()> + Send + 'static,
+                                    OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)         -> CloseVoidAsyncType + Send + Sync + 'static,
+                                    CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                                   (&'a self,
+                                    concurrency_limit:         u32,
+                                    futures_timeout:           Duration,
+                                    pipeline_name:             IntoString,
+                                    pipeline_builder:          PipelineBuilderFnType,
+                                    on_err_callback:           OnErrFnType,
+                                    on_close_callback:         OnCloseFnType)
+
+                                    -> Result<&'a Self, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.handle.stream_name(), pipeline_name.into()), futures_timeout);
         let (in_stream, in_stream_id) = self.handle.listener_stream();
@@ -84,13 +108,31 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                                          OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)  -> CloseVoidAsyncType + Send + Sync + 'static,
                                                          CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
-                                                        (self:                     &'a Arc<Self>,
+                                                        (self,
                                                          concurrency_limit:        u32,
                                                          pipeline_name:            IntoString,
                                                          pipeline_builder:         PipelineBuilderFnType,
                                                          on_close_callback:        OnCloseFnType)
 
-                                                        -> Result<&'a Arc<Self>, Box<dyn std::error::Error>> {
+                                                        -> Result<Self, Box<dyn std::error::Error>> {
+        self.spawn_non_futures_non_fallible_executor_ref(concurrency_limit, pipeline_name, pipeline_builder, on_close_callback).await?;
+        Ok(self)
+    }
+
+    pub async fn spawn_non_futures_non_fallible_executor_ref<IntoString:             Into<String>,
+                                                             OutItemType:            Send + Debug,
+                                                             PipelineBuilderFnType:  FnOnce(MutinyStream<Arc<InType>>)     -> OutStreamType,
+                                                             OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
+                                                             OnCloseFnType:          Fn(Arc<StreamExecutor<INSTRUMENTS>>)  -> CloseVoidAsyncType + Send + Sync + 'static,
+                                                             CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                                                            (&'a self,
+                                                             concurrency_limit:        u32,
+                                                             pipeline_name:            IntoString,
+                                                             pipeline_builder:         PipelineBuilderFnType,
+                                                             on_close_callback:        OnCloseFnType)
+
+                                                            -> Result<&'a Self, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::new(format!("{}: {}", self.handle.stream_name(), pipeline_name.into()));
         let (in_stream, in_stream_id) = self.handle.listener_stream();
@@ -107,14 +149,18 @@ MultiBuilder<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     /// See [Multi::flush_and_cancel_executor()]
     pub async fn flush_and_cancel_executor<IntoString: Into<String>>
-                                          (self:          &Arc<Self>,
+                                          (&self,
                                            pipeline_name: IntoString,
                                            timeout:       Duration) -> bool {
         self.handle.flush_and_cancel_executor(pipeline_name, timeout).await
     }
 
-    pub fn handle(self: &Arc<Self>) -> Arc<Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
-        Arc::clone(&self.handle)
+    pub fn handle(self) -> Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
+        self.handle
+    }
+
+    pub fn handle_ref(&'a self) -> &'a Multi<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
+        &self.handle
     }
 
 }
