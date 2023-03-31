@@ -2,7 +2,7 @@
 
 
 /// API for producing elements to a [meta_queue] or [meta_topic].
-pub trait MetaPublisher<SlotType> {
+pub trait MetaPublisher<'a, SlotType: 'a> {
 
     /// Zero-copy enqueue method with the following characteristics:
     ///   - After allocating a slot for the new element, `setter_fn(&mut slot)` is called to fill it;
@@ -18,10 +18,10 @@ pub trait MetaPublisher<SlotType> {
     ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call;
     ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
     ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
-              (&self,
+              (&'a self,
                setter_fn:                      SetterFn,
                report_full_fn:                 ReportFullFn,
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)

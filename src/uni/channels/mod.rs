@@ -149,7 +149,7 @@ mod tests {
                 let mut stream = channel.consumer_stream().expect("At least one stream should be available -- regardless of the implementation");
                 let send_result = channel.try_send("a");
                 assert!(send_result, "Even couldn't be sent!");
-                exec_future(stream.next(), "receiving").await;
+                exec_future(stream.next(), "receiving", 1.0).await;
             }
         }
     }
@@ -175,7 +175,7 @@ mod tests {
                     assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
                     channel.try_send("a");
                     drop(channel);  // dropping the channel will decrease the Arc reference count by 1
-                    exec_future(stream.next(), "receiving").await;
+                    exec_future(stream.next(), "receiving", 1.0).await;
                 }
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
@@ -188,7 +188,7 @@ mod tests {
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.try_send("a");
                     drop(channel);  // dropping the channel will decrease the Arc reference count by 1
-                    exec_future(stream.next(), "receiving").await;
+                    exec_future(stream.next(), "receiving", 1.0).await;
                 }
                 // print!("Lazy check with stupid amount of creations and destructions... watch out the process for memory: ");
                 // for i in 0..1234567 {
@@ -240,7 +240,7 @@ mod tests {
 
                 // check each stream gets a different item, in sequence
                 for i in 0..PARALLEL_STREAMS as u32 {
-                    let item = exec_future(streams[i as usize].next(), &format!("receiving on stream #{i}")).await;
+                    let item = exec_future(streams[i as usize].next(), &format!("receiving on stream #{i}"), 1.0).await;
                     assert_eq!(item, Some(i), "Stream #{i} didn't produce item {i}")
                 }
 
@@ -311,7 +311,7 @@ mod tests {
                     let mut counter = 0;
                     while let Some(_e) = stream.next().await {
                         counter += 1;
-// TODO remove this if once all channels implement `.end_all_streams()` -- which will cause stream to return none and end the loop
+// TODO remove this if once all channels implement `.end_all_streams()` -- which will cause streams to return none and end the loop
 if counter == count {
     break;
 }
@@ -337,25 +337,33 @@ if counter == count {
                 let mut stream = channel.consumer_stream().expect("Asking for the first stream");
                 let start = Instant::now();
 
-                let sender_task = tokio::spawn(async move {
-                    for e in 0..count {
-                        while !channel.try_send(e) {
-                            std::hint::spin_loop();
+                let sender_task = tokio::spawn(
+                    exec_future(async move {
+                        for e in 0..count {
+                            while !channel.try_send(e) {
+                                std::hint::spin_loop();
+                            }
                         }
-                    }
-                    channel.end_all_streams(Duration::from_secs(5)).await;
-                });
+                        channel.end_all_streams(Duration::from_secs(5)).await;
+                    },
+                    format!("Different Task & Thread producer for '{}'", $profiling_name),
+                    20.0)
+                );
 
-                let receiver_task = tokio::spawn(async move {
-                    let mut counter = 0;
-                    while let Some(_e) = stream.next().await {
-                        counter += 1;
-// TODO remove this if once all channels implement `.end_all_streams()` -- which will cause stream to return none and end the loop
+                let receiver_task = tokio::spawn(
+                    exec_future(async move {
+                        let mut counter = 0;
+                        while let Some(_e) = stream.next().await {
+                            counter += 1;
+// TODO remove this if once all channels implement `.end_all_streams()` -- which will cause streams to return none and end the loop
 if counter == count {
     break;
 }
-                    }
-                });
+                        }
+                    },
+                    format!("Different Task & Thread consumer for '{}'", $profiling_name),
+                    20.0)
+                );
 
                 let (sender_result, receiver_result) = tokio::join!(sender_task, receiver_task);
                 receiver_result.expect("receiver task");
@@ -385,15 +393,19 @@ if counter == count {
     }
 
     /// executes the given `fut`ure, tracking timeouts
-    async fn exec_future<Output: Debug, FutureType: Future<Output=Output>>(fut: FutureType, operation_name: &str) -> Output {
-        const TIMEOUT: Duration = Duration::from_secs(1);
-        match tokio::time::timeout(TIMEOUT, fut).await {
+    async fn exec_future<Output: Debug,
+                         FutureType: Future<Output=Output>,
+                         IntoString: Into<String>>
+                         (fut: FutureType, operation_name: IntoString, timeout_secs: f64) -> Output {
+        let operation_name = operation_name.into();
+        let timeout = Duration::from_secs_f64(timeout_secs);
+        match tokio::time::timeout(timeout, fut).await {
             Ok(non_timed_out_result) => {
                 println!("{operation_name}: {:?}", non_timed_out_result);
                 non_timed_out_result
             },
             Err(_time_out_err) => {
-                let msg = format!("\"{operation_name}\" has TIMED OUT: more than {:?} had passed while waiting the Future to complete", TIMEOUT);
+                let msg = format!("\"{operation_name}\" has TIMED OUT: more than {:?} had passed while waiting the Future to complete", timeout);
                     println!("{}", msg);
                     panic!("{}", msg);
             }

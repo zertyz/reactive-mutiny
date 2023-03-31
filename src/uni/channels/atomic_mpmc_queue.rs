@@ -140,7 +140,7 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
 //#[async_trait]
 /// implementation note: Rust 1.63 does not yet support async traits. See [super::UniChannel]
-impl<ItemType:          Copy+Send+Sync+Debug + 'static,
+impl<ItemType:          'static + Copy + Send + Sync + Debug,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
 /*UniChannel<ItemType>

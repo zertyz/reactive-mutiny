@@ -10,7 +10,7 @@ use std::sync::Arc;
 /// Topics are like queues but allow multiple & independent consumers -- like consumer-groups in a Kafka queue topic: each "consumer group" will see all available events.\
 /// Meta topics are not proper topics yet: they become "concrete" topics when turned into [log_topic::Topic] or [ring_buffer_topic::Topic].
 /// This trait, therefore, exists to allow sharing common code between the mentioned concrete topic implementations.
-pub trait MetaTopic<SlotType>: MetaPublisher<SlotType> {
+pub trait MetaTopic<'a, SlotType: 'a>: MetaPublisher<'a, SlotType> {
 
     /// Instantiates the meta topic using `mmap_file_path` as the backing storage
     /// and `growing_step_size` as the incrment in the elements it can handle, once creating new space is needed.

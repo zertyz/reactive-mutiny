@@ -2,7 +2,7 @@
 
 
 /// API for consuming elements from a [meta_queue] or [meta_topic].
-pub trait MetaSubscriber<SlotType> {
+pub trait MetaSubscriber<'a, SlotType: 'a> {
 
     /// Zero-copy dequeue method with the following characteristics:
     ///   - If the queue is found to be empty, `report_empty_fn()` is called. Specializations of this `meta-subscriber` might use it to build a blocking queue, for instance;
@@ -12,11 +12,11 @@ pub trait MetaSubscriber<SlotType> {
     ///   1) The caller must ensure the `getter_fn()` operation returns as soon as possible, or else the whole queue is likely to hang. If so, one sould consider to pass in a `getter_fn()`
     ///      that would clone/copy the value and release the queue as soon as possible.
     ///   2) Note the `getter_fn()` is not `FnOnce()`. Some implementors might require calling this function more than once, on contention scenarios.
-    fn consume<GetterReturnType,
-               GetterFn:                   Fn(&mut SlotType) -> GetterReturnType,
+    fn consume<GetterReturnType: 'a,
+               GetterFn:                   Fn(&'a mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
-              (&self,
+              (&'a self,
                getter_fn:                      GetterFn,
                report_empty_fn:                ReportEmptyFn,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)

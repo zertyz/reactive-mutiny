@@ -26,13 +26,13 @@ use parking_lot::RwLock;
 /// which always grows and have the ability to create consumers able to replay all elements ever created whenever a new subscriber is instantiated.
 /// Synchronization is done throug simple atomics, making this container the fastest among [full_sync_queues::full_sync_meta] & [atomic_sync_queues::atomic_sync_meta].
 #[derive(Debug)]
-pub struct MMapMeta<SlotType: 'static> {
+pub struct MMapMeta<'a, SlotType: 'a> {
 
     mmap_file_path: String,
     mmap_file: File,
     mmap_handle: MmapMut,
-    mmap_contents: &'static mut MMapContents<SlotType>,
-    buffer:        &'static mut [SlotType],
+    mmap_contents: &'a mut MMapContents<SlotType>,
+    buffer:        &'a mut [SlotType],
 }
 
 /// the data represented on the mmap-file
@@ -50,18 +50,18 @@ struct MMapContents<SlotType> {
 }
 
 
-impl<SlotType: Debug> MMapMeta<SlotType> {
+impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
 
     /// Returns the Rust structure able to operate on the mmapped data -- for either reads or writes.\
     /// Even if the mmapped data grow, the returned reference is always valid, as the data never shrinks.
-    fn buffer_as_slice_mut(&self) -> &'static mut [SlotType] {
+    fn buffer_as_slice_mut(&self) -> &'a mut [SlotType] {
         unsafe {
             let mutable_self = &mut *((self as *const Self) as *mut Self);
             std::slice::from_raw_parts_mut(&mut mutable_self.mmap_contents.first_buffer_element as *mut SlotType, mutable_self.mmap_contents.slice_length.load(Relaxed))
         }
     }
 
-    pub fn subscribe(self: &Arc<Self>, replay_old_events: bool) -> MMapMetaSubscriber<SlotType> {
+    pub fn subscribe(self: &Arc<Self>, replay_old_events: bool) -> MMapMetaSubscriber<'a, SlotType> {
         let first_element_slot_id = if replay_old_events {0} else {self.mmap_contents.consumer_tail.load(Relaxed)};
         MMapMetaSubscriber {
             head:                AtomicUsize::new(first_element_slot_id),
@@ -73,8 +73,12 @@ impl<SlotType: Debug> MMapMeta<SlotType> {
 }
 
 
-impl<SlotType: Debug> MetaTopic<SlotType> for MMapMeta<SlotType> {
+impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType> {
 
+    /// Instantiates a new mmap based meta log_topic using the given file as the backing storage -- which may grow bigger than RAM and will have all its contents erased before starting.\
+    /// `mmap_file_path` will have all its space sparsely pre-allocated -- so it should be used on ext4, btrfs, etc.\
+    /// `max_slots` should be way-over-the-maximum-number-of-elements expected to be produced throughout the life of this object (as log topics allows the full replay of events, it only grows and slots are never reused).
+    /// A reasonable number would be 1T (1<<40) number of elements, which (if ever used) is likely to exceed the storage of most VPSes
     fn new<IntoString: Into<String>>(mmap_file_path: IntoString, max_slots: u64) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         let mmap_file_path = mmap_file_path.into();
         let mut mmap_file = OpenOptions::new()
@@ -94,7 +98,7 @@ impl<SlotType: Debug> MetaTopic<SlotType> for MMapMeta<SlotType> {
                 .map_mut(&mmap_file)
                 .map_err(|err| format!("Couldn't mmap the (already openned) file '{mmap_file_path}' in RW mode, for use as the backing storage of a `log_topic` buffer: {:?}", err))?
         };
-        let mmap_contents: &'static mut MMapContents<SlotType> = unsafe { &mut *(mmap_handle.as_mut_ptr() as *mut MMapContents<SlotType>) };
+        let mmap_contents: &mut MMapContents<SlotType> = unsafe { &mut *(mmap_handle.as_mut_ptr() as *mut MMapContents<SlotType>) };
         unsafe { std::ptr::write_bytes::<MMapContents<SlotType>>(mmap_contents, 0, 1); }     // zero-out the header of the mmap file
         mmap_contents.slice_length.store(max_slots as usize, Relaxed); // +1 because `MMapContents<SlotType>` contains 1 slot
         let buffer_slice_ptr = &mut mmap_contents.first_buffer_element as *mut SlotType;
@@ -110,12 +114,12 @@ impl<SlotType: Debug> MetaTopic<SlotType> for MMapMeta<SlotType> {
 
 }
 
-impl<SlotType: Debug> MetaPublisher<SlotType> for MMapMeta<SlotType> {
+impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, SlotType> {
 
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
-              (&self,
+              (&'a self,
                setter_fn:                      SetterFn,
                report_full_fn:                 ReportFullFn,
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
@@ -143,19 +147,19 @@ impl<SlotType: Debug> MetaPublisher<SlotType> for MMapMeta<SlotType> {
     }
 }
 
-pub struct MMapMetaSubscriber<SlotType: 'static> {
+pub struct MMapMetaSubscriber<'a, SlotType: 'a> {
     head:                AtomicUsize,
-    buffer:              &'static mut [SlotType],
-    meta_mmap_log_topic: Arc<MMapMeta<SlotType>>,
+    buffer:              &'a mut [SlotType],
+    meta_mmap_log_topic: Arc<MMapMeta<'a, SlotType>>,
 }
 
-impl<SlotType: Debug> MetaSubscriber<SlotType> for MMapMetaSubscriber<SlotType> {
+impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscriber<'a, SlotType> {
 
-    fn consume<GetterReturnType,
-               GetterFn:                   Fn(&mut SlotType) -> GetterReturnType,
+    fn consume<GetterReturnType: 'a,
+               GetterFn:                   FnOnce(&'a mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
-              (&self,
+              (&'a self,
                getter_fn:                      GetterFn,
                report_empty_fn:                ReportEmptyFn,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
@@ -218,9 +222,9 @@ mod tests {
 
         let consumer_1 = meta_log_topic.subscribe(true);
         // here is one of the essences of a log topic: references exists "forever", as it only grows (old elements are never freed)
-        let observed_slot_1: &'static MyData = consumer_1.consume(|slot| unsafe { &*(slot as *const MyData) },
-                                                                  || false,
-                                                                  |_| {})
+        let observed_slot_1: &MyData = consumer_1.consume(|slot| unsafe { &*(slot as *const MyData) },
+                                                          || false,
+                                                          |_| {})
             .expect("Consuming the element from `consumer_1`");
         let observed_name = unsafe { std::slice::from_raw_parts(observed_slot_1.name.as_ptr(), observed_slot_1.name_len as usize) };
         let observed_name = String::from_utf8_lossy(observed_name);
@@ -229,15 +233,15 @@ mod tests {
 
         // the second essence of a log topic: new consumers might be created at any time and they will access all previous elements
         let consumer_2 = meta_log_topic.subscribe(true);
-        let observed_slot_2: &'static MyData = consumer_2.consume(|slot| unsafe { &*(slot as *const MyData) },
-                                                                  || false,
-                                                                  |_| {})
+        let observed_slot_2: &MyData = consumer_2.consume(|slot| slot,
+                                                          || false,
+                                                          |_| {})
             .expect("Consuming the element from `consumer_2`");
         assert_eq!(observed_slot_2 as *const MyData, observed_slot_1 as *const MyData, "These references should point to the same address");
 
         // consumers may be scheduled not to replay old events
         let consumer_3 = meta_log_topic.subscribe(false);
-        let observed_slot_3 = consumer_3.consume(|slot| unsafe { &*(slot as *const MyData) },
+        let observed_slot_3 = consumer_3.consume(|slot| slot,
                                              || false,
                                              |_| {});
         assert_eq!(None, observed_slot_3, "`consumer_3` was told not to retrieve old elements...");
@@ -251,32 +255,32 @@ mod tests {
             slot.age = 100 - expected_age;
         }, || false, |_| ());
         assert!(publishing_result, "Publishing of a second element failed");
-        let observed_slot_1: &'static MyData = consumer_1.consume(|slot| unsafe { &*(slot as *const MyData) },
-                                                                  || false,
-                                                                  |_| {})
+        let observed_slot_1: &MyData = consumer_1.consume(|slot| slot,
+                                                          || false,
+                                                          |_| {})
             .expect("Consuming yet another element from `consumer_1`");
         let observed_name = unsafe { std::slice::from_raw_parts(observed_slot_1.name.as_ptr(), observed_slot_1.name_len as usize) };
         let observed_name = String::from_utf8_lossy(observed_name);
         assert_eq!(*observed_name, expected_name.to_ascii_uppercase(), "Name doesn't match");
         assert_eq!(100 - observed_slot_1.age, expected_age, "Age doesn't match");
-        let observed_slot_2: &'static MyData = consumer_2.consume(|slot| unsafe { &*(slot as *const MyData) },
-                                                                  || false,
-                                                                  |_| {})
+        let observed_slot_2: &MyData = consumer_2.consume(|slot| slot,
+                                                          || false,
+                                                          |_| {})
             .expect("Consuming yet another element from `consumer_2`");
         assert_eq!(observed_slot_2 as *const MyData, observed_slot_1 as *const MyData, "These references should point to the same address");
-        let observed_slot_3: &'static MyData = consumer_3.consume(|slot| unsafe { &*(slot as *const MyData) },
-                                                                  || false,
-                                                                  |_| {})
+        let observed_slot_3: &MyData = consumer_3.consume(|slot| slot,
+                                                          || false,
+                                                          |_| {})
             .expect("Consuming the element from `consumer_3`");
         assert_eq!(observed_slot_3 as *const MyData, observed_slot_1 as *const MyData, "These references should point to the same address");
 
     }
 
-    /// Simple mmap open/close capabilities
+    /// Checks the mmap file would be able to fill all the storage, if needed
     #[cfg_attr(not(feature = "dox"), test)]
     fn indefinite_growth() {
 
-        const N_ELEMENTS: u64 = 2 * 1024 * 1024 * 1024;
+        const N_ELEMENTS: u64 = 2 * 1024 * 1024;
 
         #[derive(Debug, PartialEq)]
         struct MyData {
@@ -309,7 +313,7 @@ mod tests {
         };
         for i in 0..N_ELEMENTS {
             populate_expected_element(i, &mut expected_element);
-            let observed_element = consumer.consume(|slot| unsafe { &*(slot as *const MyData) },
+            let observed_element = consumer.consume(|slot| slot,
                                || false,
                                |_| {})
                 .expect("Consuming an element");
@@ -323,6 +327,28 @@ mod tests {
             expected_element.known_number_of_descendents = ( (i % expected_element.year_of_birth as u64) * (expected_element.year_of_death - expected_element.year_of_birth) as u64 ) as u32;
         }
 
+    }
+
+    /// Checks that dropping leaves no dangling references behind
+    #[cfg_attr(not(feature = "dox"), test)]
+    fn safe_lifetimes<'a>() {
+        const EXPECTED_ELEMENT: u128 = 1928384756;
+
+        let mut meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024 * 1024)
+            .expect("Instantiating the meta log topic");
+        let consumer = meta_log_topic.subscribe(true);
+        meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT,
+                               || false,
+                               |_| {});
+        let observed_element = consumer.consume(|slot| slot,
+                                                || false,
+                                                |_| {})
+            .expect("Consuming an element");
+        assert_eq!(observed_element, &EXPECTED_ELEMENT, "Dequeued element doesn't match");
+
+        // here you may either comment the drop or the assert, but not both -- meaning the unsafe code is correctly respecting lifetimes
+        drop(consumer);
+        //assert_eq!(observed_element, &EXPECTED_ELEMENT, "Dequeued element doesn't match");
     }
 
 }

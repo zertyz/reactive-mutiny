@@ -35,9 +35,9 @@ pub struct FullSyncMeta<SlotType,
 
 }
 
-impl<SlotType:          Unpin + Debug,
-     const BUFFER_SIZE: usize>
-MetaQueue<SlotType> for
+impl<'a, SlotType:          'a + Unpin + Debug,
+         const BUFFER_SIZE: usize>
+MetaQueue<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
@@ -53,13 +53,13 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 
 }
 
-impl<SlotType:          Unpin + Debug,
-     const BUFFER_SIZE: usize>
-MetaPublisher<SlotType> for
+impl<'a, SlotType:          'a + Unpin + Debug,
+         const BUFFER_SIZE: usize>
+MetaPublisher<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
               (&self, setter_fn:                      SetterFn,
@@ -117,14 +117,14 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<SlotType:          Unpin + Debug,
-     const BUFFER_SIZE: usize>
-MetaSubscriber<SlotType> for
+impl<'a, SlotType:          'a + Unpin + Debug,
+         const BUFFER_SIZE: usize>
+MetaSubscriber<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn consume<GetterReturnType,
-               GetterFn:                   FnOnce(&mut SlotType) -> GetterReturnType,
+               GetterFn:                   FnOnce(&'a mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
               (&self,
