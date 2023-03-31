@@ -25,18 +25,19 @@ use parking_lot::RwLock;
 /// Basis for multiple producer / multiple consumer `log_topics`, using an m-mapped file as the backing storage --
 /// which always grows and have the ability to create consumers able to replay all elements ever created whenever a new subscriber is instantiated.
 /// Synchronization is done throug simple atomics, making this container the fastest among [full_sync_queues::full_sync_meta] & [atomic_sync_queues::atomic_sync_meta].
+#[derive(Debug)]
 pub struct MMapMeta<SlotType: 'static> {
 
     mmap_file_path: String,
     mmap_file: File,
-    mmap_file_len: RwLock<u64>,
     mmap_handle: MmapMut,
     mmap_contents: &'static mut MMapContents<SlotType>,
-    growing_step_size: u64,
+    buffer:        &'static mut [SlotType],
 }
 
 /// the data represented on the mmap-file
 #[repr(C)]
+#[derive(Debug)]
 struct MMapContents<SlotType> {
     /// the marker where publishers should place new elements
     publisher_tail: AtomicUsize,
@@ -60,18 +61,6 @@ impl<SlotType: Debug> MMapMeta<SlotType> {
         }
     }
 
-    /// Resizes up the mmap file so more elements are able to fit in it.\
-    /// Expansion is done in fixed steps as defined when instantiating this structure.
-    fn expand_buffer(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut current_len = self.mmap_file_len.write();
-        let new_len = *current_len + self.growing_step_size*std::mem::size_of::<SlotType>() as u64;
-        self.mmap_file.set_len(new_len)
-            .map_err(|err| format!("mmapped log topic '{mmap_file_path}': Could not expand buffer of the mentioned mmapped file from {current_len} to {new_len}: {:?}", err, mmap_file_path = self.mmap_file_path))?;
-        *current_len = new_len;
-        self.mmap_contents.slice_length.fetch_add(self.growing_step_size as usize, Relaxed);
-        Ok(())
-    }
-
     pub fn subscribe(self: &Arc<Self>, replay_old_events: bool) -> MMapMetaSubscriber<SlotType> {
         let first_element_slot_id = if replay_old_events {0} else {self.mmap_contents.consumer_tail.load(Relaxed)};
         MMapMetaSubscriber {
@@ -86,7 +75,7 @@ impl<SlotType: Debug> MMapMeta<SlotType> {
 
 impl<SlotType: Debug> MetaTopic<SlotType> for MMapMeta<SlotType> {
 
-    fn new<IntoString: Into<String>>(mmap_file_path: IntoString, growing_step_size: u64) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
+    fn new<IntoString: Into<String>>(mmap_file_path: IntoString, max_slots: u64) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         let mmap_file_path = mmap_file_path.into();
         let mut mmap_file = OpenOptions::new()
             .read(true)
@@ -94,24 +83,28 @@ impl<SlotType: Debug> MetaTopic<SlotType> for MMapMeta<SlotType> {
             .create(true)
             .open(&mmap_file_path)
             .map_err(|err| format!("Could not open file '{mmap_file_path}' (that would be used to mmap a `log_topic` buffer): {:?}", err))?;
-        let mmap_file_len = std::mem::size_of::<MMapContents<SlotType>>() as u64 + (growing_step_size-1) * std::mem::size_of::<SlotType>() as u64;  // `MMapContents<SlotType>` already contains 1 slot
-        mmap_file.set_len(mmap_file_len)
-            .map_err(|err| format!("mmapped log topic '{mmap_file_path}': Could not set the length of the mentioned mmapped file (after opening it) to {mmap_file_len}: {:?}", err))?;  // related to the size of `MMapContents<SlotType>`
+        let mmap_file_len = std::mem::size_of::<MMapContents<SlotType>>() as u64 + (max_slots-1) * std::mem::size_of::<SlotType>() as u64;  // `MMapContents<SlotType>` already contains 1 slot
+        mmap_file.set_len(0)
+            .map_err(|err| format!("mmapped log topic '{mmap_file_path}': Could not set the (sparsed) length of the mentioned mmapped file (after opening it) to {mmap_file_len}: {:?}", err, mmap_file_len = 0))?;
+        mmap_file.set_len(mmap_file_len as u64)
+             .map_err(|err| format!("mmapped log topic '{mmap_file_path}': Could not set the (sparsed) length of the mentioned mmapped file (after opening it) to {mmap_file_len}: {:?}", err))?;
         let mut mmap_handle = unsafe {
             MmapOptions::new()
+                .len(mmap_file_len as usize)
                 .map_mut(&mmap_file)
                 .map_err(|err| format!("Couldn't mmap the (already openned) file '{mmap_file_path}' in RW mode, for use as the backing storage of a `log_topic` buffer: {:?}", err))?
         };
         let mmap_contents: &'static mut MMapContents<SlotType> = unsafe { &mut *(mmap_handle.as_mut_ptr() as *mut MMapContents<SlotType>) };
         unsafe { std::ptr::write_bytes::<MMapContents<SlotType>>(mmap_contents, 0, 1); }     // zero-out the header of the mmap file
-        mmap_contents.slice_length.store(growing_step_size as usize, Relaxed);
+        mmap_contents.slice_length.store(max_slots as usize, Relaxed); // +1 because `MMapContents<SlotType>` contains 1 slot
+        let buffer_slice_ptr = &mut mmap_contents.first_buffer_element as *mut SlotType;
+        let slice_length = mmap_contents.slice_length.load(Relaxed);
         Ok(Arc::new(Self {
             mmap_file_path,
             mmap_file,
-            mmap_file_len: RwLock::new(mmap_file_len),
             mmap_handle,
             mmap_contents,
-            growing_step_size,
+            buffer: unsafe { std::slice::from_raw_parts_mut(buffer_slice_ptr, slice_length) },
         }))
     }
 
@@ -130,11 +123,7 @@ impl<SlotType: Debug> MetaPublisher<SlotType> for MMapMeta<SlotType> {
 
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
-        let mut buffer = mutable_self.buffer_as_slice_mut();
-        if buffer.len() == tail {
-            self.expand_buffer().expect("Could not publish to MMAP log");
-        }
-        setter_fn(&mut buffer[tail]);
+        setter_fn(&mut mutable_self.buffer[tail]);
         while self.mmap_contents.consumer_tail.compare_exchange_weak(tail, tail+1, Relaxed, Relaxed).is_err() {
             std::hint::spin_loop();
         }
@@ -182,10 +171,6 @@ impl<SlotType: Debug> MetaSubscriber<SlotType> for MMapMetaSubscriber<SlotType> 
             }
             return None;
         }
-        // check if our `buffer` slice needs syncing with the mmapped data
-        if head >= self.buffer.len() {
-            mutable_self.buffer = mutable_self.meta_mmap_log_topic.buffer_as_slice_mut();
-        }
         let slot_ref = &mut mutable_self.buffer[head];
         Some(getter_fn(slot_ref))
 
@@ -211,7 +196,7 @@ mod tests {
             name_len: u8,
             age: u8,
         }
-        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/mmap_meta.test.mmap", 4096)
+        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/happy_path.test.mmap", 4096)
             .expect("Instantiating the meta log topic");
         let expected_name = "zertyz";
         let expected_age = 42;
@@ -286,4 +271,58 @@ mod tests {
         assert_eq!(observed_slot_3 as *const MyData, observed_slot_1 as *const MyData, "These references should point to the same address");
 
     }
+
+    /// Simple mmap open/close capabilities
+    #[cfg_attr(not(feature = "dox"), test)]
+    fn indefinite_growth() {
+
+        const N_ELEMENTS: u64 = 2 * 1024 * 1024 * 1024;
+
+        #[derive(Debug, PartialEq)]
+        struct MyData {
+            id:                          u64,
+            year_of_birth:               u16,
+            year_of_death:               u16,
+            known_number_of_descendents: u32,
+        }
+
+        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/indefinite_growth.test.mmap", 1024 * 1024 * 1024 * 1024)
+            .expect("Instantiating the meta log topic");
+        let consumer = meta_log_topic.subscribe(true);
+
+        // enqueue
+        //////////
+        for i in 0..N_ELEMENTS {
+            let publishing_result = meta_log_topic.publish(|slot| populate_expected_element(i, slot),
+                                                                 || false,
+                                                                 |_| {});
+            assert!(publishing_result, "Publishing of event #{i} failed");
+        }
+
+        // dequene & assert
+        ///////////////////
+        let mut expected_element = MyData {
+            id: 0,
+            year_of_birth: 0,
+            year_of_death: 0,
+            known_number_of_descendents: 0,
+        };
+        for i in 0..N_ELEMENTS {
+            populate_expected_element(i, &mut expected_element);
+            let observed_element = consumer.consume(|slot| unsafe { &*(slot as *const MyData) },
+                               || false,
+                               |_| {})
+                .expect("Consuming an element");
+            assert_eq!(observed_element, &expected_element, "Element #{i} doesn't match");
+        }
+
+        fn populate_expected_element(i: u64, expected_element: &mut MyData) {
+            expected_element.id = i;
+            expected_element.year_of_birth = 1 + i as u16 % 2023;
+            expected_element.year_of_death = expected_element.year_of_birth + (i % 120) as u16;
+            expected_element.known_number_of_descendents = ( (i % expected_element.year_of_birth as u64) * (expected_element.year_of_death - expected_element.year_of_birth) as u64 ) as u32;
+        }
+
+    }
+
 }
