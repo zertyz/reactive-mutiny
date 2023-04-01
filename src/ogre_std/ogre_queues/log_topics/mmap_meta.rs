@@ -24,7 +24,14 @@ use parking_lot::RwLock;
 
 /// Basis for multiple producer / multiple consumer `log_topics`, using an m-mapped file as the backing storage --
 /// which always grows and have the ability to create consumers able to replay all elements ever created whenever a new subscriber is instantiated.
-/// Synchronization is done throug simple atomics, making this container the fastest among [full_sync_queues::full_sync_meta] & [atomic_sync_queues::atomic_sync_meta].
+/// Synchronization is done through simple atomics, making this container the fastest among [full_sync_queues::full_sync_meta] & [atomic_sync_queues::atomic_sync_meta].\
+///
+/// NOTE: applications using this container should be designed to be restarted from time-to-time (daily restarts are recommended) -- or to implement clever ways of synchronizing the dropping of old & recreation of new instances
+///       (to do this on-the-fly), as dropping used instances is the only way to free the disk resources used by the m-mappings present here.
+///       If your app is a long-runner that don't need the "replay all events guarantee", please use [ring_buffer_topics] instead.
+///
+/// NOTE 2: this container was not designed to survive app crashes nor to provide inter-process communications: it, currently, only allows the application to store a greater-than-RAM number of events in a zero-cost manner,
+///         with none to minimal performance hit. Upgrading it seems to be a no-brainer, though, if these ever prove to be useful features.
 #[derive(Debug)]
 pub struct MMapMeta<'a, SlotType: 'a> {
 
@@ -75,10 +82,16 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
 
 impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType> {
 
-    /// Instantiates a new mmap based meta log_topic using the given file as the backing storage -- which may grow bigger than RAM and will have all its contents erased before starting.\
-    /// `mmap_file_path` will have all its space sparsely pre-allocated -- so it should be used on ext4, btrfs, etc.\
-    /// `max_slots` should be way-over-the-maximum-number-of-elements expected to be produced throughout the life of this object (as log topics allows the full replay of events, it only grows and slots are never reused).
-    /// A reasonable number would be 1T (1<<40) number of elements, which (if ever used) is likely to exceed the storage of most VPSes
+    /// Instantiates a new **mmap based** *meta log_topic* using the given file as the backing storage -- which may grow bigger than RAM and will have all its contents erased before starting.
+    ///   - `mmap_file_path` will have all its space sparsely pre-allocated -- so it should be used on ext4, btrfs, etc.
+    ///   - `max_slots` should be way-over-the-maximum-number-of-elements expected to be produced throughout the life of this object (as log topics allows the full replay of events, it only grows and slots are never reused).
+    /// A reasonable number would be 1T (1<<40) number of elements, which (if ever used) is likely to exceed the storage of most VPSes.\
+    ///
+    /// Performance & operational considerations:
+    ///   1. If BTRFS is in use, set the mmapped files to not be compressed and to have Copy-On-Write disabled: `truncate -s 0 /DIR/*.mmap; chattr +Cm /DIR/*.mmap`. Check with `lsattr /DIR/*.mmap`
+    ///   2. Having a high swappiness may cause unwanted swaps in high usage scenarios. Consider decreasing it to `echo 1 | sudo tee /proc/sys/vm/swappiness`
+    ///   3. The mmapped files will have a huge size, as reported by `ls -l`. To see the real usage, `du /DIR/*.mmap` and `compsize /DIR/*.mmap`
+    ///   4. When measuring performance on a BTRFS filesystem, remember it has some services on the background. To minimize the block freeing service impact, do this between runs: `truncate -s 0 /DIR/*.mmap; sudo sync`
     fn new<IntoString: Into<String>>(mmap_file_path: IntoString, max_slots: u64) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         let mmap_file_path = mmap_file_path.into();
         let mut mmap_file = OpenOptions::new()
