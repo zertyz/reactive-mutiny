@@ -20,8 +20,9 @@ use futures::Stream;
 
 /// this will simply be ripped off...
 /// pub type OnMultiCloseFnType = Box<dyn Fn(Arc<StreamExecutor<true, true>>) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
-
-
+/// Example:
+/// ```
+/// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
 pub struct MultiBuilder<InType:              Clone + Unpin + Send + Sync + Debug,
                         const BUFFER_SIZE:   usize = 1024,
                         const MAX_STREAMS:   usize = 1,

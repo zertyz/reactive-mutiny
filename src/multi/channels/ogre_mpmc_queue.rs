@@ -237,8 +237,7 @@ for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    pub fn send(&self, item: ItemType) {
-        let arc_item = Arc::new(item);
+    pub fn send_arc(&self, arc_item: Arc<ItemType>) {
         for stream_id in self.used_streams.iter() {
             if *stream_id == u32::MAX {
                 break
@@ -252,6 +251,12 @@ for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                                                      },
                                                      |len| if len == 1 { self.wake_stream(*stream_id) });
         }
+    }
+
+    #[inline(always)]
+    pub fn send(&self, item: ItemType) {
+        let arc_item = Arc::new(item);
+        self.send_arc(arc_item);
     }
 
     pub async fn flush(&self, timeout: Duration) -> u32 {

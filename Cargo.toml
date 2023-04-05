@@ -3,12 +3,11 @@ name = "reactive-mutiny"
 version = "0.1.0"
 edition = "2021"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [workspace]
 
 [features]
-dox = ["ctor", "simple_logger"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 log         = "0.4"
@@ -23,12 +22,35 @@ crossbeam   = "0.8"     # scoped threads
 memmap      = "0.7"
 
 
-# doc dependencies
-ctor          = { version = "0.1", optional = true }
-simple_logger = { version = "4.0", optional = true }
-
-
 [dev-dependencies]
-ctor          = "0.1"    # setup and teardown for modules
+ctor          = "0.2"    # setup and teardown for modules
 simple_logger = "4.0"    # a dirty console logger
 log           = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
+
+# dependencies for the socket-server example
+############################################
+
+# default config loading & saving
+serde      = { version = "1.0", features = ["derive"] }      # typed serialization / deserialization
+ron        = "0.8"                                           # .ron config files
+regex      = "1.5"                                           # for placing docs along with config files
+owning_ref = "0.4.1"                                         # allows Arcs to be used for internal references
+
+# std replacements
+minstant       = "0.1"  # (real) time measurements through RDTSC instruction (without calling the Kernel / without causing a context switch)
+
+# command-line parsing
+structopt    = "0.3"                                            # command line parsing
+strum        = { version = "0.24", features = ["derive"] }      # enums serialization/deserialization
+strum_macros = "0.24"
+chrono       = "0"
+
+# console UI
+slog-stdlog = "4"   # Facade between slog and Rust's standard 'log' api
+slog-scope  = "4"
+slog        = "2"
+sloggers    = "2"
+
+# deprecated
+lazy_static = "1.4"     # as of 2023-03-29: use `one_cell` instead
+neat-date-time = "0.1"  # as of 2023-04-05: scheduled to be removed once ogre is removed from here

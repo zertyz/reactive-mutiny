@@ -99,6 +99,11 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     }
 
     #[inline(always)]
+    pub fn send_arc(&self, arc_item: Arc<ItemType>) {
+        self.channel.send_arc(arc_item);
+    }
+
+    #[inline(always)]
     pub fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
     }

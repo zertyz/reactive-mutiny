@@ -54,6 +54,7 @@ mod tests {
             SystemTime,
         }
     };
+    use std::rc::Rc;
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
     use tokio::sync::Mutex;
@@ -668,7 +669,54 @@ mod tests {
         Ok(())
     }
 
-    /// assures performance won't be degraded when we make changes
+    /// assures we're able to chain multiple multis while reusing the `Arc<T>` without any overhead
+    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    async fn chained_multis() -> Result<(), Box<dyn std::error::Error>> {
+        let expected_msgs = vec![
+            "Hello, beautiful world!",
+            "Oh me, oh my, this will never do... Goodbye, cruel world!"
+        ];
+        let first_multi_msgs = Arc::new(std::sync::Mutex::new(vec![]));
+        let first_multi_msgs_ref = Arc::clone(&first_multi_msgs);
+        let second_multi_msgs = Arc::new(std::sync::Mutex::new(vec![]));
+        let second_multi_msgs_ref = Arc::clone(&second_multi_msgs);
+
+        let second_multi: Multi<String, 1024, 3> = MultiBuilder::new("second chained multi, receiving the Arc-wrapped event -- with no copying (and no additional Arc cloning)")
+            .spawn_non_futures_non_fallible_executor(1, "second executor", move |stream: MutinyStream<Arc<String>>| {
+                stream.map(move |message| {
+                    println!("`second_multi` received '{:?}'", message);
+                    second_multi_msgs_ref
+                        .lock().unwrap()
+                        .push(message);
+                })
+            }, |_| async {}).await?
+            .handle();
+        let second_multi = Arc::new(second_multi);
+        let second_multi_ref = Arc::clone(&second_multi);
+        let first_multi: Multi<String, 1024, 3> = MultiBuilder::new("first chained multi, receiving the original events")
+            .spawn_non_futures_non_fallible_executor(1, "first executor", move |stream: MutinyStream<Arc<String>>| {
+                stream.map(move |message| {
+                    println!("`first_multi` received '{:?}'", message);
+                    first_multi_msgs_ref
+                        .lock().unwrap()
+                        .push(message.clone());
+                    second_multi_ref.send_arc(message)
+                })
+            }, |_| async {}).await?
+            .handle();
+        let producer = |item: &str| first_multi.send(item.to_string());
+        expected_msgs.iter().for_each(|&msg| producer(msg));
+        multis_close_async!(Duration::ZERO, first_multi, second_multi);
+        let expected_msgs: Vec<Arc<String>> = expected_msgs.into_iter()
+            .map(|msg| Arc::new(msg.to_string()))
+            .collect();
+        assert_eq!(*first_multi_msgs.lock().unwrap(), expected_msgs, "First multi didn't receive the expected messages");
+        assert_eq!(*second_multi_msgs.lock().unwrap(), expected_msgs, "Second multi didn't receive the expected messages");
+        Ok(())
+
+    }
+
+        /// assures performance won't be degraded when we make changes
     #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn performance_measurements() -> Result<(), Box<dyn std::error::Error>> {
 
