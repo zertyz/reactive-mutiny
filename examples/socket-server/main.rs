@@ -40,9 +40,13 @@ fn sync_main(runtime: &RwLock<Runtime>, config: &Config) -> Result<(), Box<dyn E
     result
 }
 
-async fn async_main(runtime: &RwLock<Runtime>, config: &Config) -> Result<(), Box<dyn Error>> {
+async fn async_main(runtime: &RwLock<Runtime>, config: &Config) -> Result<(), Box<dyn Error + Sync + Send>> {
+    debug!("    Instantiating OgreRobot...");
+    Runtime::register_ogre_robot(runtime, OgreRobot::new().await).await;
     let result = frontend::async_run(runtime, config).await;
-    debug!("App's async main is done. Result: '{:?}'", result);
+    debug!("App's async frontend::async_run() is done. Result: '{:?}'", result);
+    Runtime::do_for_ogre_robot(runtime, |ogre_robot| Box::pin(async { ogre_robot.shutdown().await })).await;
+    debug!("App's async main is done.");
     result
 }
 
@@ -75,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(Box::from(format!("Application ended with error in one of the Tokio tasks")))
         }
         true => {
-            debug!("All Tokio tasks ended. Starting graceful shutdown process!");
+            debug!("All Tokio tasks ended gracefully");
             warn!("DONE! (Application ended gracefully)");
             Ok(())
         }
@@ -163,7 +167,7 @@ fn start_tokio_runtime_and_apps(runtime: Arc<RwLock<Runtime>>, config: Arc<Confi
                                 }
                             }
                         }
-                        Err(join_err) => error!("Can't start Tokio task '{}': {:?}", task_name, join_err)
+                        Err(join_err) => error!("Couldn't start/finish Tokio task '{}': {:?} -- thread panicked?", task_name, join_err)
                     }
                     Some(())
                 };
@@ -186,20 +190,6 @@ fn start_tokio_runtime_and_apps(runtime: Arc<RwLock<Runtime>>, config: Arc<Confi
     })
 }
 
-/// In case no UI was provided, experimentally picks one of the available
-/// which don't require further parameters to run -- this, most of the times,
-/// filters out Console (form it may have several commands to coose from),
-/// leaving the interactive ones as options -- such as Terminal or EGui)
-fn auto_select_ui(_config: &Config) -> UiOptions {
-    // if std::env("DISPLAY") {
-    //     AvailableFrontends::Egui
-    // } else if is_tty() && config.log != Console {
-    //     AvailableFrontends::Terminal
-    // } else {
-    UiOptions::Console(Jobs::Daemon)
-    // }
-}
-
 
 // LOGGING
 //////////
@@ -209,6 +199,7 @@ use config::config::LoggingOptions;
 use slog_scope::GlobalLoggerGuard;
 use sloggers::{Build, types::{OverflowStrategy, Severity}};
 use crate::config::Jobs;
+use crate::logic::ogre_robot::OgreRobot;
 
 
 /// Keep those levels in sync with Cargo.toml's `log` crate levels defined in features.

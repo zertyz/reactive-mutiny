@@ -2,7 +2,7 @@ use crate::{runtime::Runtime, config::{Config, Jobs}, logic, frontend};
 use tokio::sync::RwLock;
 
 
-pub async fn async_run(job: &Jobs, runtime: &RwLock<Runtime>, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn async_run(job: &Jobs, runtime: &RwLock<Runtime>, config: &Config) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
     match job {
         Jobs::CheckConfig => logic::check_config(runtime, config).await?,
         Jobs::Daemon      => logic::long_runner(runtime, config).await?,
