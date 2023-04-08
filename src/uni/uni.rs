@@ -46,6 +46,11 @@ Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     }
 
     #[inline(always)]
+    pub fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
+        unsafe { self.uni_channel.zero_copy_try_send(item_builder) }
+    }
+
+    #[inline(always)]
     pub fn try_send(&self, message: ItemType) -> bool {
         self.uni_channel.try_send(message)
     }

@@ -52,7 +52,7 @@ impl<D, T, F> Stream for CustomDropPollFn<D, F>
 impl <D: FnOnce(), F> Drop for CustomDropPollFn<D, F> {
     fn drop(&mut self) {
         match self.d.take() {
-            None => panic!("Bug! Custom Drop FnOnce() code didn't reach the drop() function!!"),
+            None => unreachable!("Bug! Custom Drop FnOnce() code didn't reach the drop() function!!"),
             Some(d) => (d)(),
         }
     }

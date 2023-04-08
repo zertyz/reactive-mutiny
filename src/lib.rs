@@ -8,6 +8,8 @@ mod instruments;
 pub use instruments::Instruments;
 
 mod types;
+pub use types::*;
+
 mod incremental_averages;
 mod stream;
 

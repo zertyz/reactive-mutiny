@@ -12,7 +12,7 @@ use std::{
 };
 use reactive_mutiny::{
     multi::MultiBuilder,
-    uni::MutinyStream,
+    MutinyStream,
 };
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;

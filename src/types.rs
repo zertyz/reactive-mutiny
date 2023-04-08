@@ -1,7 +1,8 @@
 //! Common types across this module
 
 use crate::{
-    multi::channels::ogre_mpmc_queue::OgreMPMCQueue,
+    uni::Uni,
+    multi::Multi,
 };
 use std::{
     pin::Pin,
@@ -14,6 +15,8 @@ use std::{
 use futures::stream::Stream;
 
 
+/// A stream of events for [Uni]s and [Multi]s
+//// TODO 2023-04-07: to be dropped as it is not needed: Functions like Uni::spawn_non_futures_non_fallible_executor() might have their generics improved so that this is not needed
 pub struct MutinyStream<ItemType> {
     pub stream: Box<dyn Stream<Item=ItemType> + Send>,
 }

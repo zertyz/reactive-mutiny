@@ -21,7 +21,7 @@ use log::warn;
 
 
 /// Default Mutiny type for "per client" events
-type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = MultiBuilder<ItemType, 1024, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = MultiBuilder<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 /// Can I refer to internal fields?

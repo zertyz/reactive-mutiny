@@ -19,7 +19,7 @@
 //!    uni.close().await;
 //! ```
 
-pub use crate::types::*;
+use crate::types::*;
 
 mod uni_builder;
 pub use uni_builder::*;
