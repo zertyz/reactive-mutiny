@@ -15,8 +15,16 @@ use super::{
 use std::{
     fmt::Debug,
     io::Write,
-    sync::atomic::{AtomicU64, Ordering::Relaxed},
+    sync::atomic::{AtomicU32, AtomicU64, Ordering::Relaxed},
     time::{Duration, SystemTime},
+};
+use std::sync::Arc;
+use parking_lot::{
+    Mutex, RawMutex,
+    lock_api::{
+        RawMutex as _RawMutex,
+        RawMutexTimed,
+    }
 };
 
 
@@ -568,4 +576,140 @@ pub fn blocking_behavior(queue_size:    usize,
                 "Non-blocking operations should not take considerable time: tolerance of {}ms; observed (non-blocking?) time: {}ms; expected: 0ms ",
                 TOLERANCE_MILLIS, elapsed.as_millis());
     }
+}
+
+/// measures the independency of producers/consumers, returning:
+/// ```no_compile
+///   let (independent_productions_count, dependent_productions_count, independent_consumptions_count, dependent_consumptions_count) = measure_syncing_independency(...)
+/// ```
+/// where `independent_productions_count` & `independent_consumptions_count` are the count of operations done while the counter-part operation was "busy".\
+/// Having all counts in those two properties (and none in the "dependent_*" versions, means the operations are independent.\
+/// IMPLEMENTATION NOTE: due to the complex thread relations used in this test, lots of `Arc`s are used -- it would be wonderful, for sake of readability, to get rid of them.
+pub fn measure_syncing_independency(produce: impl Fn(u32,        &dyn Fn()) -> bool       + Sync + Send,
+                                    consume: impl Fn(&AtomicU32, &dyn Fn()) -> Option<()> + Sync + Send)
+                                   -> (/*independent_productions_count: */u32, /*dependent_productions_count: */u32, /*independent_consumptions_count: */u32, /*dependent_productions_count: */u32) {
+
+    const N_OPERATIONS: usize = 16;
+    const MAX_THREAD_START_MILLIS: Duration = Duration::from_millis(100);
+
+    let independent_productions_count  = Arc::new(AtomicU32::new(0));
+    let dependent_productions_count    = Arc::new(AtomicU32::new(0));
+    let independent_consumptions_count = Arc::new(AtomicU32::new(0));
+    let dependent_consumptions_count   = Arc::new(AtomicU32::new(0));
+
+    let independent_productions_count_ref  = Arc::clone(&independent_productions_count);
+    let dependent_productions_count_ref    = Arc::clone(&dependent_productions_count);
+    let independent_consumptions_count_ref = Arc::clone(&independent_consumptions_count);
+    let dependent_consumptions_count_ref   = Arc::clone(&dependent_consumptions_count);
+
+    crossbeam::scope(|scope| {
+
+        // locked: not allowed to release the current producer
+        let release_producer_signal = Arc::new(unsafe { RawMutex::INIT });
+        // locked: not allowed to release the current consumer
+        let release_consumer_signal = Arc::new(unsafe { RawMutex::INIT });
+        // locked: event not produced yet
+        let produced_signal = Arc::new(unsafe { RawMutex::INIT });
+        // locked: event not consumed yet
+        let consumed_signal = Arc::new(unsafe { RawMutex::INIT });
+
+        let release_producer_signal_ref = Arc::clone(&release_producer_signal);
+        let release_consumer_signal_ref = Arc::clone(&release_consumer_signal);
+        let produced_signal_ref = Arc::clone(&produced_signal);
+        let consumed_signal_ref = Arc::clone(&consumed_signal);
+        let produced_signal_ref2 = Arc::clone(&produced_signal);
+        let consumed_signal_ref2 = Arc::clone(&consumed_signal);
+
+        let wait_for_producer_release = Arc::new(move || release_producer_signal_ref.lock());
+        let wait_for_consumer_release = Arc::new(move || release_consumer_signal_ref.lock());
+        let inform_production_completed = Arc::new(move || unsafe { produced_signal_ref.unlock() });
+        let inform_consumption_completed = Arc::new(move || unsafe { consumed_signal_ref.unlock() });
+        let is_production_complete = move || produced_signal_ref2.try_lock_for(MAX_THREAD_START_MILLIS);
+        let is_consumption_complete = move || consumed_signal_ref2.try_lock_for(MAX_THREAD_START_MILLIS);
+        let release_previous_producer = move || unsafe {
+            release_producer_signal.unlock();
+            produced_signal.try_lock();
+            std::thread::sleep(Duration::from_millis(10));
+            release_producer_signal.try_lock();
+        };
+        let release_previous_consumer = move || unsafe {
+            release_consumer_signal.unlock();
+            consumed_signal.try_lock();
+            std::thread::sleep(Duration::from_millis(10));
+            release_consumer_signal.try_lock();
+        };
+
+        let produce = Arc::new(produce);
+        let consume = Arc::new(consume);
+
+        // signaler
+        scope.spawn(move |scope2| {
+            for i in 0..N_OPERATIONS as u32 {
+
+                release_previous_producer();
+                //produce_next(i);
+                let inform_production_completed_ref = Arc::clone(&inform_production_completed);
+                let wait_for_producer_release_ref = Arc::clone(&wait_for_producer_release);
+                let produce_ref = Arc::clone(&produce);
+                let independent_productions_count_ref  = Arc::clone(&independent_productions_count_ref);
+                let dependent_productions_count_ref    = Arc::clone(&dependent_productions_count_ref);
+                scope2.spawn(move |_| {
+                    let post_produce_callback = || {
+                        inform_production_completed_ref();
+                        wait_for_producer_release_ref();
+                    };
+                    loop {
+                        if produce_ref(i+1, &post_produce_callback) {
+                            break
+                        } else {
+                            std::hint::spin_loop();
+                        }
+                    }
+                });
+                if is_production_complete() {
+                    independent_productions_count_ref.fetch_add(1, Relaxed);
+                } else {
+                    dependent_productions_count_ref.fetch_add(1, Relaxed);
+                }
+
+                release_previous_consumer();
+                //consume_next(i);
+                let inform_consumption_completed_ref = Arc::clone(&inform_consumption_completed);
+                let wait_for_consumer_release_ref = Arc::clone(&wait_for_consumer_release);
+                let consume_ref = Arc::clone(&consume);
+                let independent_consumptions_count_ref = Arc::clone(&independent_consumptions_count_ref);
+                let dependent_consumptions_count_ref   = Arc::clone(&dependent_consumptions_count_ref);
+                scope2.spawn(move |_| {
+                    let post_consume_callback = || {
+                        inform_consumption_completed_ref();
+                        wait_for_consumer_release_ref();
+                    };
+                    let observed = AtomicU32::new(0);
+                    loop {
+                        consume_ref(&observed, &post_consume_callback);
+                        let observed = observed.load(Relaxed);
+                        if observed > 0 {
+                            //assert_eq!(observed, i+1, "Consumed a wrong element");
+                            break;
+                        } else {
+                            std::hint::spin_loop();
+                        }
+                    }
+                });
+                if is_consumption_complete() {
+                    independent_consumptions_count_ref.fetch_add(1, Relaxed);
+                } else {
+                    dependent_consumptions_count_ref.fetch_add(1, Relaxed);
+                }
+            }
+
+            release_previous_producer();
+            release_previous_consumer();
+
+        });
+
+    }).unwrap();
+
+    ( independent_productions_count.load(Relaxed), dependent_productions_count.load(Relaxed), independent_consumptions_count.load(Relaxed), dependent_consumptions_count.load(Relaxed) )
+
 }

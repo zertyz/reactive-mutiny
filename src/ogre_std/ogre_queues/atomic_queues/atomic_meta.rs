@@ -252,3 +252,49 @@ fn relaxed_wait<SlotType>(_wait_factor: u32) {
     //     }
     // }
 }
+
+#[cfg(any(test, feature="dox"))]
+mod tests {
+    //! Unit tests for [atomic_meta](super) module
+
+    use super::{
+        *,
+        super::super::super::test_commons::measure_syncing_independency
+    };
+    use std::sync::{
+        Arc,
+        atomic::AtomicU32,
+    };
+
+    /// the atomic meta queue should allow independent enqueueing (if dequeue takes too long to complete, enqueueing should not be affected)
+    #[test]
+    pub fn assure_enqueue_syncing_independency() {
+        let queue = AtomicMeta::<u32, 128>::new();
+        let (independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(
+            |i, callback: &dyn Fn()| {
+                queue.publish(
+                    |slot| {
+                        *slot = i;
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            },
+            |result: &AtomicU32, callback: &dyn Fn()| {
+                queue.consume(
+                    |slot| {
+                        result.store(*slot, Relaxed);
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            }
+        );
+
+        assert!(independent_productions_count > 0, "No independent production was detected");
+        assert_eq!(dependent_productions_count, 0, "a > 0 number here means enqueueing had to wait for dequeueing (which is not supposed to happen in ths Atomic meta queue) -- BTW, for this test, the queue is never full");
+    }
+
+}

@@ -213,6 +213,5 @@ mod tests {
             observed_sum += item;
         }
         assert_eq!(observed_sum, expected_sum, "peeking elements from [&[8..n], &[0..8]] didn't work");
-
     }
 }

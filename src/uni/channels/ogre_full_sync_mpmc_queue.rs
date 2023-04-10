@@ -1,3 +1,5 @@
+//! Resting place for the [OgreFullSyncMPMCQueue] Uni Channel
+
 use crate::ogre_std::ogre_queues::{
     full_sync_queues::full_sync_meta::FullSyncMeta,
     meta_publisher::MetaPublisher,
@@ -17,12 +19,20 @@ use std::{
 };
 use futures::{Stream};
 use minstant::Instant;
+use crate::multi;
 
 
+/// This channel uses the fastest of the queues [FullSyncMeta], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
+/// of the backing queue, which doesn't allow enqueueing to happen independently of dequeueing.\
+/// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
+/// making this channel a typical best fit for small & trivial types.\
+/// Please, measure your `Uni`s using all available channels [OgreFullSyncMPMCQueue], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
+/// See also [uni::channels::ogre_full_sync_mpmc_queue].\
+/// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct OgreMPMCQueue<ItemType:           Unpin + Send + Sync + Debug,
-                          const BUFFER_SIZE: usize,
-                          const MAX_STREAMS: usize> {
+pub struct OgreFullSyncMPMCQueue<ItemType:           Unpin + Send + Sync + Debug,
+                                 const BUFFER_SIZE: usize,
+                                 const MAX_STREAMS: usize> {
     /// General non-blocking full sync queue allowing to report back on the number of retained elements after enqueueing,
     /// so to work optimally with our round-robin stream-awaking algorithm
     queue:                  FullSyncMeta<ItemType, BUFFER_SIZE>,
@@ -37,7 +47,7 @@ pub struct OgreMPMCQueue<ItemType:           Unpin + Send + Sync + Debug,
 impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
-OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
+OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Returns as many consumer streams as requested, provided the specified limit [MAX_STREAMS] is respected.
     /// -- events will be split for each generated stream, so no two streams  will see the same payload.\
@@ -159,7 +169,7 @@ impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
 /*UniChannel<ItemType>
-for*/ OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
+for*/ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     pub fn new() -> Arc<Pin<Box<Self>>> {
         let queue = FullSyncMeta::<ItemType, BUFFER_SIZE>::new();

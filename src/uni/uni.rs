@@ -17,7 +17,7 @@ use minstant::Instant;
 /// this is the fastest [UniChannel] for general use, as revealed in performance tests
 type UniChannelType<ItemType,
                     const BUFFER_SIZE: usize,
-                    const MAX_STREAMS: usize> = channels::ogre_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
+                    const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
 
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...

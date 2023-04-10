@@ -17,7 +17,7 @@ use tokio::{
 /// this is the fastest [MultiChannel] for general use, as revealed in performance tests
 type MultiChannelType<ItemType,
                       const BUFFER_SIZE: usize,
-                      const MAX_STREAMS: usize> = channels::ogre_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
+                      const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
 
 
 /// Contains the producer-side [Multi] handle used to interact with the multi event

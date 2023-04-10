@@ -1,3 +1,5 @@
+//! Resting place for the [OgreFullSyncMPMCQueue] Multi Channel
+
 use crate::{
     ogre_std::{
         ogre_queues::{
@@ -29,19 +31,27 @@ use minstant::Instant;
 use log::{warn};
 
 
-/// From the backing queue: "BUFFER_SIZE" must be a power of 2
-pub type OgreMPMCQueue<ItemType,
+/// [InternalOgreFullSyncMPMCQueue] with defaults.\
+/// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
+pub type OgreFullSyncMPMCQueue<ItemType,
                        const BUFFER_SIZE: usize = 1024,
                        const MAX_STREAMS: usize = 16>
-        = InternalOgreMPMCQueue<ItemType,
+        = InternalOgreFullSyncMPMCQueue<ItemType,
                                 BUFFER_SIZE,
                                 MAX_STREAMS>;
 
 
+/// This channel uses the fastest of the queues [FullSyncMeta], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
+/// of the backing queue, which doesn't allow enqueueing to happen independently of dequeueing.\
+/// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
+/// making this channel a typical best fit for small & trivial types.\
+/// Please, measure your `Multi`s using all available channels [OgreFullSyncMPMCQueue], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
+/// See also [multi::channels::ogre_full_sync_mpmc_queue].\
+/// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct InternalOgreMPMCQueue<ItemType:          Unpin + Send + Sync + Debug,
-                                 const BUFFER_SIZE: usize,
-                                 const MAX_STREAMS: usize> {
+pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Unpin + Send + Sync + Debug,
+                                        const BUFFER_SIZE: usize,
+                                        const MAX_STREAMS: usize> {
     /// General non-blocking full sync queues -- one for each Multi
     queues:                 [FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>; MAX_STREAMS],
     /// simple metrics
@@ -69,7 +79,7 @@ pub struct InternalOgreMPMCQueue<ItemType:          Unpin + Send + Sync + Debug,
 impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
-InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
+InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Returns a `Stream` -- may create as many streams as requested, provided the specified limit [MAX_STREAMS] is respected.\
     /// Each stream will see all payloads sent through this channel.
@@ -206,7 +216,7 @@ impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
      const BUFFER_SIZE: usize,
      const MAX_STREAMS: usize>
 /*MultiChannel<ItemType>
-for*/ InternalOgreMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
+for*/ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     pub fn new<IntoString: Into<String>>(channel_name: IntoString) -> Arc<Pin<Box<Self>>> {
         let instance = Arc::new(Box::pin(Self {
@@ -371,7 +381,7 @@ mod tests {
     /// exercises the code present on the documentation for $uni_channel_type
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn doc_test() {
-        let channel = OgreMPMCQueue::<&str>::new("doc_test");
+        let channel = OgreFullSyncMPMCQueue::<&str>::new("doc_test");
         let (mut stream, _stream_id) = channel.listener_stream();
         channel.send("a");
         println!("received: {}", stream.next().await.unwrap());
@@ -382,7 +392,7 @@ mod tests {
     async fn stream_and_channel_dropping() {
         {
             print!("Dropping the channel before the stream consumes the element: ");
-            let channel = OgreMPMCQueue::<&str>::new("stream_and_channel_dropping");
+            let channel = OgreFullSyncMPMCQueue::<&str>::new("stream_and_channel_dropping");
             assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
             let (mut stream, _stream_id) = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
@@ -392,7 +402,7 @@ mod tests {
         }
         {
             print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
-            let channel = OgreMPMCQueue::<&str>::new("stream_and_channel_dropping");
+            let channel = OgreFullSyncMPMCQueue::<&str>::new("stream_and_channel_dropping");
             let stream = channel.listener_stream();
             assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 2");
             drop(stream);
@@ -421,7 +431,7 @@ mod tests {
     /// This test guarantees and stresses that
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn on_the_fly_streams() {
-        let channel = OgreMPMCQueue::<String>::new("on_the_fly_streams");
+        let channel = OgreFullSyncMPMCQueue::<String>::new("on_the_fly_streams");
 
         println!("1) streams 1 & 2 about to receive a message");
         let message = "to `stream1` and `stream2`".to_string();
@@ -465,7 +475,7 @@ mod tests {
         const ELEMENTS:         usize = 100;
         const PARALLEL_STREAMS: usize = 100;
 
-        let channel = OgreMPMCQueue::<u32, 128, PARALLEL_STREAMS>::new("multiple_streams");
+        let channel = OgreFullSyncMPMCQueue::<u32, 128, PARALLEL_STREAMS>::new("multiple_streams");
 
         // collect the streams
         let mut streams = stream::iter(0..PARALLEL_STREAMS)
@@ -508,7 +518,7 @@ mod tests {
         const WAIT_TIME: Duration = Duration::from_millis(100);
         {
             println!("Creating & ending a single stream: ");
-            let channel = OgreMPMCQueue::<&str>::new("end_streams");
+            let channel = OgreFullSyncMPMCQueue::<&str>::new("end_streams");
             let (mut stream, stream_id) = channel.listener_stream();
             tokio::spawn(async move {
                 tokio::time::sleep(WAIT_TIME/2).await;
@@ -521,7 +531,7 @@ mod tests {
         }
         {
             println!("Creating & ending two streams: ");
-            let channel = OgreMPMCQueue::<&str>::new("end_streams");
+            let channel = OgreFullSyncMPMCQueue::<&str>::new("end_streams");
             let (mut first, first_id) = channel.listener_stream();
             let (mut second, second_id) = channel.listener_stream();
             let first_ended = Arc::new(AtomicBool::new(false));
@@ -560,7 +570,7 @@ mod tests {
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn payload_dropping() {
         const PAYLOAD_TEXT: &str = "A shareable playload";
-        let channel = OgreMPMCQueue::<String>::new("payload_dropping");
+        let channel = OgreFullSyncMPMCQueue::<String>::new("payload_dropping");
         let (mut stream, _stream_id) = channel.listener_stream();
         channel.send(String::from(PAYLOAD_TEXT));
         let payload = stream.next().await.unwrap();
@@ -692,9 +702,9 @@ mod tests {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new("profile_same_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new("profile_different_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new("profile_different_task_different_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new("profile_same_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new("profile_different_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new("profile_different_task_different_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
     }
 
 }

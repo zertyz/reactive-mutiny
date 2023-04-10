@@ -207,3 +207,51 @@ fn lock(raw_mutex: &AtomicBool) {
 fn unlock(raw_mutex: &AtomicBool) {
     raw_mutex.store(false, Relaxed);
 }
+
+
+#[cfg(any(test, feature="dox"))]
+mod tests {
+    //! Unit tests for [full_sync_meta](super) module
+
+    use super::{
+        *,
+        super::super::super::test_commons::measure_syncing_independency
+    };
+    use std::sync::{
+        Arc,
+        atomic::AtomicU32,
+    };
+
+    /// the full sync base queue should not allow independent produce/consume operations (one blocks the other while it is happening)
+    #[test]
+    pub fn assure_syncing_dependency() {
+        let queue = Arc::new(FullSyncMeta::<u32, 128>::new());
+        let queue_ref1 = Arc::clone(&queue);
+        let queue_ref2 = Arc::clone(&queue);
+        let (_independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(
+            |i, callback: &dyn Fn()| {
+                queue_ref1.publish(
+                    |slot| {
+                        *slot = i;
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            },
+            |result: &AtomicU32, callback: &dyn Fn()| {
+                queue_ref2.consume(
+                    |slot| {
+                        result.store(*slot, Relaxed);
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            }
+        );
+
+        assert!(dependent_productions_count > 0, "This queue should wait for dequeue to finish before a new dequeueing is allowed to happen. We are not seeing this behavior here...");
+    }
+
+}

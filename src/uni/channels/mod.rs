@@ -1,6 +1,6 @@
 pub mod tokio_mpsc;
 pub mod atomic_mpmc_queue;
-pub mod ogre_mpmc_queue;
+pub mod ogre_full_sync_mpmc_queue;
 
 use std::{
     pin::Pin,
@@ -131,7 +131,7 @@ mod tests {
     use crate::uni::channels::{
         tokio_mpsc::TokioMPSC,
         atomic_mpmc_queue::AtomicMPMCQueue,
-        ogre_mpmc_queue::OgreMPMCQueue,
+        ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue,
     };
     use futures::{stream, StreamExt};
     use minstant::Instant;
@@ -155,7 +155,7 @@ mod tests {
     }
     doc_test!(tokio_mpsc_queue_doc_test,  tokio_mpsc::TokioMPSC<&str, 1024>);
     doc_test!(atomic_mpmc_queue_doc_test, atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 1>);
-    doc_test!(mutex_mpmc_queue_doc_test,  ogre_mpmc_queue::OgreMPMCQueue<&str, 1024, 1>);
+    doc_test!(mutex_mpmc_queue_doc_test,  ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
 
 
     // *_dropping for known parallel stream implementors
@@ -206,7 +206,7 @@ mod tests {
         }
     }
     dropping!(atomic_mpmc_queue_dropping, atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 2>);
-    dropping!(mutex_mpmc_queue_dropping,  ogre_mpmc_queue::OgreMPMCQueue<&str, 1024, 2>);
+    dropping!(mutex_mpmc_queue_dropping,  ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 2>);
 
 
     // *_parallel_streams for known parallel stream implementors
@@ -255,7 +255,7 @@ mod tests {
         }
     }
     parallel_streams!(atomic_mpmc_queue_parallel_streams, atomic_mpmc_queue::AtomicMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(mutex_mpmc_queue_parallel_streams,  ogre_mpmc_queue::OgreMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(mutex_mpmc_queue_parallel_streams,  ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
 
 
     /// assures performance won't be degraded when we make changes
@@ -387,9 +387,9 @@ if counter == count {
         profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
         profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
 
-        profile_same_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new(), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new(), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(OgreMPMCQueue::<u32, 10240, 1>::new(), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
+        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
+        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
     }
 
     /// executes the given `fut`ure, tracking timeouts
