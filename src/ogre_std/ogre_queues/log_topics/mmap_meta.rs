@@ -172,7 +172,7 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
                GetterFn:                   FnOnce(&'a mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
-              (&'a self,
+              (&self,
                getter_fn:                      GetterFn,
                report_empty_fn:                ReportEmptyFn,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)

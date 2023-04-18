@@ -1,13 +1,21 @@
+pub mod uni_stream;
 pub mod tokio_mpsc;
 pub mod atomic_mpmc_queue;
 pub mod ogre_full_sync_mpmc_queue;
 
+use crate::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
 use std::{
     pin::Pin,
     sync::Arc,
     time::Duration,
+    fmt::Debug,
+    sync::atomic::Ordering::Relaxed,
+    task::{Context, Poll, Waker},
+    mem::{self, ManuallyDrop, MaybeUninit},
 };
+use futures::stream::Stream;
 use async_trait::async_trait;
+use owning_ref::ArcRef;
 
 
 /// Defines abstractions over Channels and other structures suitable for being used in [Uni]s.\
@@ -92,6 +100,37 @@ pub trait UniChannel<ItemType> {
 
 }
 
+/// To be implemented by `Uni` & `Multi` channels, manages the set of streams that consumes elements from them
+pub trait StreamsManager<'a, ItemType:           'a,
+                             MetaSubscriberType: MetaSubscriber<'a, ItemType>> {
+
+    /// Shares a reference to the backing container used in this channel -- implementing [MetaSubscriber]
+    fn backing_subscriber(self: &Arc<Self>) -> ArcRef<Self, MetaSubscriberType>;
+
+    /// Returns `false` if the Stream was signaled to end its operations, causing it to report as "out-of-elements" as soon as possible.\
+    /// IMPLEMENTERS: always inline
+    fn keep_streams_running(&self) -> bool;
+
+//    fn consumer_stream(&self) -> Option<UniStream>
+
+    /// Registers the `waker` for the given `stream_id`, if not done so already -- for optimal results, typically used on the `Stream`'s `poll_next()`, when None items are ready.\
+    /// IMPLEMENTERS: always inline
+    fn register_stream_waker(&self, stream_id: u32, waker: &Waker);
+
+    /// Informs the manager that the current stream is being dropped and should be removed & cleaned from the internal list.\
+    /// Dropping a single stream, as of 2023-04-15, means that the whole Channel must cease working to avoid undefined behavior.
+    /// Due to the algorithm to wake Streams being based on a unique number assigned to it at the moment of creation,
+    /// if a stream is created and dropped, the `send` functions will still try to awake stream #0 -- the stream number is determined
+    /// based on the elements on the queue before publishing it.
+    /// This is specially bad if the first stream is dropped:
+    ///   1) the channel gets, eventually empty -- all streams will sleep
+    ///   2) An item is sent -- the logic will wake the first stream: since the stream is no longer there, that element won't be consumed!
+    ///   3) Eventually, a second item is sent: now the queue has length 2 and the send logic will wake consumer #1
+    ///   4) Consumer #1, since it was not dropped, will be awaken and will run until the channel is empty again -- consuming both elements.
+    fn report_stream_dropped(&self, stream_id: u32);
+
+}
+
 
 /// IMPORTANT: Hacky solution ahead -- see [UniChannel]'s development note 2 for the reason why this macro should exist!\
 /// This macro receives an `implementer` of [UniChannel] -- such as [], [] or []
@@ -149,7 +188,7 @@ mod tests {
                 let mut stream = channel.consumer_stream().expect("At least one stream should be available -- regardless of the implementation");
                 let send_result = channel.try_send("a");
                 assert!(send_result, "Even couldn't be sent!");
-                exec_future(stream.next(), "receiving", 1.0).await;
+                exec_future(stream.next(), "receiving", 1.0, true).await;
             }
         }
     }
@@ -171,24 +210,25 @@ mod tests {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$uni_channel_type>::new();
                     assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
-                    let mut stream = channel.consumer_stream().unwrap();
-                    assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
+                    let mut stream_1 = channel.clone().consumer_stream().unwrap();
+                    let stream_2 = channel.clone().consumer_stream().unwrap();
+                    assert_eq!(Arc::strong_count(&channel), 5, "Creating a stream should increase the ref count by 2");
                     channel.try_send("a");
                     drop(channel);  // dropping the channel will decrease the Arc reference count by 1
-                    exec_future(stream.next(), "receiving", 1.0).await;
+                    exec_future(stream_1.next(), "receiving", 1.0, true).await;
                 }
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$uni_channel_type>::new();
                     let stream = channel.consumer_stream().unwrap();
-                    assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 2");
+                    assert_eq!(Arc::strong_count(&channel), 3, "`channel` + `stream`: reference count should be 3");
                     drop(stream);
-                    assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
+                    assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 2");
                     let mut stream = channel.consumer_stream().unwrap();
-                    assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
+                    assert_eq!(Arc::strong_count(&channel), 3, "1 `channel` + 1 `stream` again, at this point: reference count should be 3");
                     channel.try_send("a");
                     drop(channel);  // dropping the channel will decrease the Arc reference count by 1
-                    exec_future(stream.next(), "receiving", 1.0).await;
+                    exec_future(stream.next(), "receiving", 1.0, true).await;
                 }
                 // print!("Lazy check with stupid amount of creations and destructions... watch out the process for memory: ");
                 // for i in 0..1234567 {
@@ -240,7 +280,7 @@ mod tests {
 
                 // check each stream gets a different item, in sequence
                 for i in 0..PARALLEL_STREAMS as u32 {
-                    let item = exec_future(streams[i as usize].next(), &format!("receiving on stream #{i}"), 1.0).await;
+                    let item = exec_future(streams[i as usize].next(), &format!("receiving on stream #{i}"), 1.0, true).await;
                     assert_eq!(item, Some(i), "Stream #{i} didn't produce item {i}")
                 }
 
@@ -347,7 +387,8 @@ if counter == count {
                         channel.end_all_streams(Duration::from_secs(5)).await;
                     },
                     format!("Different Task & Thread producer for '{}'", $profiling_name),
-                    20.0)
+                    20.0,
+                    false)
                 );
 
                 let receiver_task = tokio::spawn(
@@ -362,7 +403,8 @@ if counter == count {
                         }
                     },
                     format!("Different Task & Thread consumer for '{}'", $profiling_name),
-                    20.0)
+                    20.0,
+                    false)
                 );
 
                 let (sender_result, receiver_result) = tokio::join!(sender_task, receiver_task);
@@ -396,12 +438,14 @@ if counter == count {
     async fn exec_future<Output: Debug,
                          FutureType: Future<Output=Output>,
                          IntoString: Into<String>>
-                         (fut: FutureType, operation_name: IntoString, timeout_secs: f64) -> Output {
+                         (fut: FutureType, operation_name: IntoString, timeout_secs: f64, verbose: bool) -> Output {
         let operation_name = operation_name.into();
         let timeout = Duration::from_secs_f64(timeout_secs);
         match tokio::time::timeout(timeout, fut).await {
             Ok(non_timed_out_result) => {
-                println!("{operation_name}: {:?}", non_timed_out_result);
+                if verbose {
+                    println!("{operation_name}: {:?}", non_timed_out_result);
+                }
                 non_timed_out_result
             },
             Err(_time_out_err) => {

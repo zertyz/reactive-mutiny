@@ -31,7 +31,7 @@ pub struct AtomicMeta<SlotType,
     pub(crate) enqueuer_tail: AtomicU32,
 }
 
-impl<'a, SlotType:          'a + Clone + Debug,
+impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaQueue<'a, SlotType> for
 AtomicMeta<SlotType, BUFFER_SIZE> {
@@ -47,7 +47,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Clone + Debug,
+impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
 AtomicMeta<SlotType, BUFFER_SIZE> {
@@ -149,13 +149,13 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Clone + Debug,
+impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
 AtomicMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn consume<GetterReturnType,
+    fn consume<GetterReturnType: 'a,
                GetterFn:                   Fn(&'a mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>

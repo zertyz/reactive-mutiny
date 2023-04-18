@@ -10,30 +10,34 @@ use std::{
     time::Duration,
     sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}},
 };
+use std::marker::PhantomData;
 use futures::{Stream};
 use minstant::Instant;
 
 
 /// this is the fastest [UniChannel] for general use, as revealed in performance tests
-type UniChannelType<ItemType,
-                    const BUFFER_SIZE: usize,
-                    const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type UniChannelType<ItemType,
+                        const BUFFER_SIZE: usize,
+                        const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type UniStreamType<'a, ItemType,
+                           const BUFFER_SIZE: usize,
+                           const MAX_STREAMS: usize> = UniStream<'a, ItemType, UniChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>, FullSyncMeta<ItemType, BUFFER_SIZE>>;
 
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
-pub struct Uni<ItemType:          Unpin + Send + Sync + Debug,
+pub struct Uni<ItemType:          Send + Sync + Debug,
                const BUFFER_SIZE: usize,
                const MAX_STREAMS: usize,
                const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
-    pub uni_channel:              Arc<Pin<Box<UniChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>>>,
+    pub uni_channel:              Arc<UniChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>,
     pub stream_executor:          Arc<StreamExecutor<INSTRUMENTS>>,
     pub finished_executors_count: AtomicU32,
 }
 
-impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
-     const BUFFER_SIZE: usize,
-     const MAX_STREAMS: usize,
-     const INSTRUMENTS: usize>
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize,
+         const INSTRUMENTS: usize>
 Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     /// creates & returns a pair (`Uni`, `UniStream`)
@@ -55,7 +59,7 @@ Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
         self.uni_channel.try_send(message)
     }
 
-    pub fn consumer_stream(&self) -> Option<impl Stream<Item=ItemType>> {
+    pub fn consumer_stream(&self) -> Option<UniStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>> {
         self.uni_channel.consumer_stream()
     }
 
@@ -108,4 +112,6 @@ macro_rules! unis_close_async {
     }
 }
 pub use unis_close_async;
+use crate::ogre_std::ogre_queues::full_sync_queues::full_sync_meta::FullSyncMeta;
 use crate::uni::channels;
+use crate::uni::channels::uni_stream::UniStream;

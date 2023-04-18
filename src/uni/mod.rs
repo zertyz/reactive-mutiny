@@ -4,7 +4,7 @@
 //!
 //! Usage:
 //! ```nocompile
-//!    fn on_event(stream: MutinyStream<String>) -> impl Stream<Item=String> {
+//!    fn on_event(stream: impl Stream<Item=String>) -> impl Stream<Item=String> {
 //!        stream
 //!            .inspect(|message| println!("To Zeta: '{}'", message))
 //!            .inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
@@ -56,7 +56,7 @@ mod tests {
     /// exercises the code present on the documentation
     #[cfg_attr(not(feature = "dox"), tokio::test)]
     async fn doc_tests() {
-        fn on_event(stream: MutinyStream<&str>) -> impl Stream<Item=&str> {
+        fn on_event<'r>(stream: impl Stream<Item=&'r str>) -> impl Stream<Item=&'r str> {
             stream
                 .inspect(|message| println!("To Zeta: '{}'", message))
                 .inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
@@ -83,7 +83,7 @@ mod tests {
         // this is the uni to work with our local variable
         let uni: Arc<Uni<u32, 1024, 1>> = UniBuilder::new()
             .on_stream_close(|_| async {})
-            .spawn_non_futures_non_fallible_executor("simple_pipeline() Event", |stream: MutinyStream<u32>| {
+            .spawn_non_futures_non_fallible_executor("simple_pipeline() Event", |stream| {
                     let observed_sum = Arc::clone(&observed_sum);
                     stream
                         .map(move |number| observed_sum.fetch_add(number, Relaxed))
@@ -113,7 +113,7 @@ mod tests {
         // notice how to transform a regular event into a future event &
         // how to pass it down the pipeline. Also notice the required (as of Rust 1.63)
         // moving of Arc local variables so they will be accessible
-        let on_event = |stream: MutinyStream<u32>| {
+        let on_event = |stream: UniStreamType<'static, u32, 1024, 1>| {
             let observed_sum = Arc::clone(&observed_sum);
             stream
                 .map(|number| async move {
@@ -187,8 +187,8 @@ mod tests {
         let uni: Arc<Uni<String, 1024, 1>> = UniBuilder::new()
             .futures_timeout(Duration::from_millis(150))
             .on_stream_close(|_| async {})
-            .spawn_executor(event_name, |stream: MutinyStream<String>| {
-                    stream.map(|payload| async move {
+            .spawn_executor(event_name, |stream| {
+                    stream.map(|payload: String| async move {
                         if payload.contains("unsuccessful") {
                             tokio::time::sleep(Duration::from_millis(50)).await;
                             Err(Box::from(format!("failing the pipeline, as requested")))
@@ -362,7 +362,7 @@ mod tests {
 
         let on_err_count = Arc::new(AtomicU32::new(0));
 
-        fn on_fail_when_odd_event(stream: MutinyStream<u32>) -> impl Stream<Item = impl Future<Output = Result<u32, Box<dyn std::error::Error + Send + Sync>> > + Send> {
+        fn on_fail_when_odd_event(stream: impl Stream<Item=u32>) -> impl Stream<Item = impl Future<Output = Result<u32, Box<dyn std::error::Error + Send + Sync>> > + Send> {
             stream
                 .map(|payload| async move {
                     if payload % 2 == 0 {
@@ -462,27 +462,27 @@ mod tests {
         let profiling_name = "metricfull_non_futures_non_fallible_uni:    ";
         let uni: Arc<Uni<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
-            .spawn_non_futures_non_fallible_executor(profiling_name, |stream: MutinyStream<u32>| stream);
+            .spawn_non_futures_non_fallible_executor(profiling_name, |stream| stream);
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_uni:    ";
         let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
-            .spawn_non_futures_non_fallible_executor(profiling_name, |stream: MutinyStream<u32>| stream);
+            .spawn_non_futures_non_fallible_executor(profiling_name, |stream| stream);
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_uni:";
         let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .concurrency_limit(12)
             .on_stream_close(|_| async {})
-            .spawn_non_futures_non_fallible_executor(profiling_name, |stream: MutinyStream<u32>| stream);
+            .spawn_non_futures_non_fallible_executor(profiling_name, |stream| stream);
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_uni:            ";
         let uni: Arc<Uni<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
-                            |stream: MutinyStream<u32>| {
+                            |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
@@ -494,7 +494,7 @@ mod tests {
         let uni: Arc<Uni<u32, 10240, 1, {Instruments::NoInstruments.into()}>> = UniBuilder::new()
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
-                            |stream: MutinyStream<u32>| {
+                            |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
@@ -507,7 +507,7 @@ mod tests {
             .futures_timeout(Duration::from_millis(100))
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
-                            |stream: MutinyStream<u32>| {
+                            |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
@@ -520,7 +520,7 @@ mod tests {
             .futures_timeout(Duration::from_millis(100))
             .on_stream_close(|_| async {})
             .spawn_executor(profiling_name,
-                            |stream: MutinyStream<u32>| {
+                            |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })

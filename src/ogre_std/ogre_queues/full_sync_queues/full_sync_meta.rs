@@ -35,7 +35,7 @@ pub struct FullSyncMeta<SlotType,
 
 }
 
-impl<'a, SlotType:          'a + Unpin + Debug,
+impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaQueue<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
@@ -53,7 +53,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 
 }
 
-impl<'a, SlotType:          'a + Unpin + Debug,
+impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
@@ -117,13 +117,13 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Unpin + Debug,
+impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn consume<GetterReturnType,
+    fn consume<GetterReturnType: 'a,
                GetterFn:                   FnOnce(&'a mut SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>

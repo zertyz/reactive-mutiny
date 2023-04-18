@@ -18,9 +18,11 @@ use std::{
 use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
 use crate::types::*;
+use crate::uni::channels::uni_stream::UniStream;
+use crate::uni::UniStreamType;
 
 
-pub struct UniBuilder<InType:              Unpin + Send + Sync + 'static,
+pub struct UniBuilder<InType:              Send + Sync + 'static,
                       OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                       CloseVoidAsyncType:  Future<Output=()> + Send + 'static,
                       const BUFFER_SIZE:   usize = 1024,
@@ -37,7 +39,7 @@ pub struct UniBuilder<InType:              Unpin + Send + Sync + 'static,
     _in_type:                     PhantomData<&'static InType>,
 
 }
-impl<InType:              Unpin + Send + Sync + Debug + 'static,
+impl<InType:              Send + Sync + Debug + 'static,
      OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
      CloseVoidAsyncType:  Future<Output=()> + Send + 'static,
      const BUFFER_SIZE:   usize,
@@ -72,16 +74,14 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
 
     pub fn spawn_executor<IntoString:             Into<String>,
                           OutItemType:            Send + Debug,
-                          PipelineBuilderFnType:  FnOnce(MutinyStream<InType>)         -> OutStreamType,
-                          OnErrFnType:            Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
                           ErrVoidAsyncType:       Future<Output=()> + Send + 'static,
                           OutStreamType:          Stream<Item=OutType> + Send + 'static,
                           OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send>
 
                          (self,
                           stream_name:               IntoString,
-                          pipeline_builder:          PipelineBuilderFnType,
-                          on_err_callback:           OnErrFnType)
+                          pipeline_builder:          impl FnOnce(UniStreamType<'static, InType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
+                          on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static)
 
                          -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
@@ -89,7 +89,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
         let handle = Arc::new(Uni::new(Arc::clone(&executor)));
         let in_stream = handle.consumer_stream().expect("At least 1 stream should be provided by the Uni Channel");
         let returned_handle = Arc::clone(&handle);
-        let out_stream = pipeline_builder(MutinyStream { stream: Box::new(in_stream) });
+        let out_stream = pipeline_builder(in_stream);
         let on_stream_close_callback = self.on_stream_close_callback.expect("how could you compile without a 'on_stream_close_callback'?");
         executor
             .spawn_executor(

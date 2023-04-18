@@ -20,6 +20,7 @@ async-trait = "0.1"     # non-zero-cost async traits
 parking_lot = "0.12"    # way faster than std mutex (and tokio mutexes as well)
 crossbeam   = "0.8"     # scoped threads
 memmap      = "0.7"
+owning_ref = "0.4"      # allows Arcs to be used for internal references
 
 
 [dev-dependencies]
@@ -34,7 +35,6 @@ log           = { version = "0.4", features = ["max_level_trace", "release_max_l
 serde      = { version = "1.0", features = ["derive"] }      # typed serialization / deserialization
 ron        = "0.8"                                           # .ron config files
 regex      = "1.5"                                           # for placing docs along with config files
-owning_ref = "0.4.1"                                         # allows Arcs to be used for internal references
 
 # std replacements
 minstant       = "0.1"  # (real) time measurements through RDTSC instruction (without calling the Kernel / without causing a context switch)

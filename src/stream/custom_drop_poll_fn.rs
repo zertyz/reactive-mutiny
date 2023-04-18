@@ -9,14 +9,14 @@ use futures::task::{Context, Poll};
 
 /// Stream for the [`poll_fn`] function.
 #[must_use = "streams do nothing unless polled"]
-pub struct CustomDropPollFn<D: FnOnce(), F> {
+pub struct CustomDropPollFn<D: FnOnce(), F: FnMut(&mut Context<'_>) -> Poll<Option<T>>, T> {
     d: Option<D>,
     f: F,
 }
 
-impl<D: FnOnce(), F> Unpin for CustomDropPollFn<D, F> {}
+impl<D: FnOnce(), F: FnMut(&mut Context<'_>) -> Poll<Option<T>>, T> Unpin for CustomDropPollFn<D, F, T> {}
 
-impl<D: FnOnce(), F> fmt::Debug for CustomDropPollFn<D, F> {
+impl<D: FnOnce(), F: FnMut(&mut Context<'_>) -> Poll<Option<T>>, T> fmt::Debug for CustomDropPollFn<D, F, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CustomDropPollFn").finish()
     }
@@ -28,7 +28,7 @@ impl<D: FnOnce(), F> fmt::Debug for CustomDropPollFn<D, F> {
 ///
 /// When dropped, the provided custom code runs.
 ///
-pub fn custom_drop_poll_fn<D, T, F>(d: D, f: F) -> CustomDropPollFn<D, F>
+pub fn custom_drop_poll_fn<D, T, F>(d: D, f: F) -> CustomDropPollFn<D, F, T>
     where
         D: FnOnce(),
         F: FnMut(&mut Context<'_>) -> Poll<Option<T>>,
@@ -36,7 +36,7 @@ pub fn custom_drop_poll_fn<D, T, F>(d: D, f: F) -> CustomDropPollFn<D, F>
     assert_stream::<T, _>(CustomDropPollFn { d: Some(d), f })
 }
 
-impl<D, T, F> Stream for CustomDropPollFn<D, F>
+impl<D, T, F> Stream for CustomDropPollFn<D, F, T>
     where
         D: FnOnce(),
         F: FnMut(&mut Context<'_>) -> Poll<Option<T>>,
@@ -49,7 +49,7 @@ impl<D, T, F> Stream for CustomDropPollFn<D, F>
     }
 }
 
-impl <D: FnOnce(), F> Drop for CustomDropPollFn<D, F> {
+impl <D: FnOnce(), F: FnMut(&mut Context<'_>) -> Poll<Option<T>>, T> Drop for CustomDropPollFn<D, F, T> {
     fn drop(&mut self) {
         match self.d.take() {
             None => unreachable!("Bug! Custom Drop FnOnce() code didn't reach the drop() function!!"),
