@@ -110,12 +110,11 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
 
     pub fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                    OutItemType:            Send + Debug,
-                                                   PipelineBuilderFnType:  FnOnce(MutinyStream<InType>) -> OutStreamType,
                                                    OutStreamType:          Stream<Item=OutItemType> + Send + 'static>
 
                                                   (self,
                                                    stream_name:              IntoString,
-                                                   pipeline_builder:         PipelineBuilderFnType)
+                                                   pipeline_builder:         impl FnOnce(UniStreamType<'static, InType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType)
 
                                                   -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
@@ -123,7 +122,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
         let handle = Arc::new(Uni::new(Arc::clone(&executor)));
         let in_stream = handle.consumer_stream().expect("At least 1 stream should be provided by the Uni Channel");
         let returned_handle = Arc::clone(&handle);
-        let out_stream = pipeline_builder(MutinyStream { stream: Box::new(in_stream) });
+        let out_stream = pipeline_builder(in_stream);
         executor
             .spawn_non_futures_non_fallible_executor(
                 self.concurrency_limit,

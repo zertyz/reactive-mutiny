@@ -3,17 +3,19 @@
 //! This example is an extension of `uni-microservice`
 
 use reactive_mutiny::{
-    multi::{Multi,MultiBuilder},
+    multi::{MultiStreamType,Multi,MultiBuilder},
     stream_executor::StreamExecutor,
-    MutinyStream,
 };
 use std::{
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU32},
+        mpsc::RecvTimeoutError::Timeout,
+    },
     time::Duration,
+    fmt::Debug,
+
 };
-use std::fmt::Debug;
-use std::sync::atomic::AtomicU32;
-use std::sync::mpsc::RecvTimeoutError::Timeout;
 use futures::{SinkExt, Stream, stream, StreamExt, TryStreamExt};
 
 
@@ -31,11 +33,10 @@ impl MyProcessor {
 
     pub async fn add_listener<IntoString:             Into<String>,
                               OutItemType:            Send + Debug,
-                              PipelineBuilderFnType:  FnOnce(MutinyStream<Arc<String>>)     -> OutStreamType,
                               OutStreamType:          Stream<Item=OutItemType> + Send + 'static>
                              (&self,
                               listener_name:    IntoString,
-                              pipeline_builder: PipelineBuilderFnType)
+                              pipeline_builder: impl FnOnce(MultiStreamType<'static, String, 1024, 16>) -> OutStreamType)
                              -> Result<(), Box<dyn std::error::Error>> {
         self.listeners.spawn_non_futures_non_fallible_executor_ref(1, format!("`MyProcessor` listener '{}'", listener_name.into()), pipeline_builder, |_| async {}).await
             .map_err(|err| Box::from(format!("Error adding a listener to `MyProcessor`: {:?}", err)))

@@ -1,10 +1,17 @@
 //! Resting place for the [OgreFullSyncMPMCQueue] Uni Channel
 
-use crate::ogre_std::ogre_queues::{
-    full_sync_queues::full_sync_meta::FullSyncMeta,
-    meta_publisher::MetaPublisher,
-    meta_subscriber::MetaSubscriber,
-    meta_queue::MetaQueue,
+use crate::{
+    StreamsManager,
+    uni::channels::uni_stream::UniStream,
+    ogre_std::{
+        ogre_queues::{
+            full_sync_queues::full_sync_meta::FullSyncMeta,
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
+            meta_queue::MetaQueue,
+        },
+        ogre_sync,
+    }
 };
 use std::{
     time::Duration,
@@ -21,9 +28,6 @@ use std::marker::PhantomData;
 use futures::{Stream};
 use minstant::Instant;
 use owning_ref::ArcRef;
-use crate::multi;
-use crate::uni::channels::StreamsManager;
-use crate::uni::channels::uni_stream::UniStream;
 
 
 /// This channel uses the fastest of the queues [FullSyncMeta], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
@@ -55,13 +59,13 @@ impl<'a, ItemType:          Send + Sync + Debug + 'a,
 StreamsManager<'a, ItemType, FullSyncMeta<ItemType, BUFFER_SIZE>> for
 OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    fn backing_subscriber(self: &Arc<Self>) -> ArcRef<Self, FullSyncMeta<ItemType, BUFFER_SIZE>> {
+    fn backing_subscriber(self: &Arc<Self>, _stream_id: u32) -> ArcRef<Self, FullSyncMeta<ItemType, BUFFER_SIZE>> {
         ArcRef::from(self.clone())
             .map(|this| &this.queue)
     }
 
     #[inline(always)]
-    fn keep_streams_running(&self) -> bool {
+    fn keep_stream_running(&self, _stream_id: u32) -> bool {
         self.keep_streams_running
     }
 
@@ -69,22 +73,22 @@ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
         // share the waker the first time this runs, so producers may wake this task up when an item is ready
         if let None = &self.wakers[stream_id as usize] {
-            lock(&self.wakers_lock);
+            ogre_sync::lock(&self.wakers_lock);
             if let None = &self.wakers[stream_id as usize] {
                 let waker = waker.clone();
                 let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
                 let _ = mutable_self.wakers[stream_id as usize].insert(waker);
             }
-            unlock(&self.wakers_lock);
+            ogre_sync::unlock(&self.wakers_lock);
         }
     }
 
     fn report_stream_dropped(&self, stream_id: u32) {
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        lock(&self.wakers_lock);
+        ogre_sync::lock(&self.wakers_lock);
         mutable_self.keep_streams_running = false;
         mutable_self.wakers[stream_id as usize] = None;
-        unlock(&self.wakers_lock);
+        ogre_sync::unlock(&self.wakers_lock);
         self.finished_streams_count.fetch_add(1, Relaxed);
     }
 }
@@ -140,11 +144,11 @@ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 Some(waker) => waker.wake_by_ref(),
                 None => {
                     // try again, syncing
-                    lock(&self.wakers_lock);
+                    ogre_sync::lock(&self.wakers_lock);
                     if let Some(waker) = &self.wakers[stream_id as usize] {
                         waker.wake_by_ref();
                     }
-                    unlock(&self.wakers_lock);
+                    ogre_sync::unlock(&self.wakers_lock);
                 }
             }
         }
@@ -244,16 +248,3 @@ for*/ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
 }
-
-#[inline(always)]
-fn lock(flag: &AtomicBool) {
-    while flag.compare_exchange_weak(false, true, Relaxed, Relaxed).is_err() {
-        spin_loop();
-    }
-}
-
-#[inline(always)]
-fn unlock(flag: &AtomicBool) {
-    flag.store(false, Relaxed);
-}
-

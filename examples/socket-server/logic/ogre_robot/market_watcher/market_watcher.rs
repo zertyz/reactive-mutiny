@@ -11,8 +11,7 @@ use std::{
     time::Duration,
 };
 use reactive_mutiny::{
-    multi::MultiBuilder,
-    MutinyStream,
+    multi::{MultiBuilder,MultiStreamType},
 };
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;
@@ -79,12 +78,11 @@ impl MarketWatcher {
 
     pub async fn subscribe<IntoSymbol:             Into<Symbol> + Copy,
                            IntoString:             Into<String>,
-                           PipelineBuilderFnType:  FnOnce(MutinyStream<Arc<DispatcherPayloadType>>) -> OutStreamType,
                            OutStreamType:          Stream<Item=()> + Send + 'static>
                           (&self,
                            symbol:           IntoSymbol,
                            subscriber_name:  IntoString,
-                           pipeline_builder: PipelineBuilderFnType) {
+                           pipeline_builder: impl FnOnce(MultiStreamType<'static, DispatcherPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL>) -> OutStreamType) {
         let mut subscribers = self.subscribers.write().await;
         subscribers
             .entry(symbol.into())

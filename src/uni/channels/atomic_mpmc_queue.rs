@@ -1,11 +1,15 @@
 use crate::{
-    ogre_std::ogre_queues::{
-        atomic_queues::atomic_meta::AtomicMeta,
-        meta_publisher::MetaPublisher,
-        meta_subscriber::MetaSubscriber,
-        meta_queue::MetaQueue,
+    ogre_std::{
+        ogre_queues::{
+            atomic_queues::atomic_meta::AtomicMeta,
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
+            meta_queue::MetaQueue,
+        },
+        ogre_sync,
     },
-    uni::channels::{StreamsManager, uni_stream::UniStream},
+    uni::channels::{uni_stream::UniStream},
+    StreamsManager,
 };
 use std::{
     time::Duration,
@@ -24,7 +28,7 @@ use minstant::Instant;
 use owning_ref::ArcRef;
 
 
-/// A channel backed by an [AtomicMeta], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
+/// A Uni channel, backed by an [AtomicMeta], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct AtomicMPMCQueue<ItemType:          Send + Sync + Debug,
                            const BUFFER_SIZE: usize,
@@ -48,13 +52,13 @@ impl<'a, ItemType:          Send + Sync + Debug + 'a,
 StreamsManager<'a, ItemType, AtomicMeta<ItemType, BUFFER_SIZE>> for
 AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    fn backing_subscriber(self: &Arc<Self>) -> ArcRef<Self, AtomicMeta<ItemType, BUFFER_SIZE>> {
+    fn backing_subscriber(self: &Arc<Self>, _stream_id: u32) -> ArcRef<Self, AtomicMeta<ItemType, BUFFER_SIZE>> {
         ArcRef::from(self.clone())
             .map(|this| &this.queue)
     }
 
     #[inline(always)]
-    fn keep_streams_running(&self) -> bool {
+    fn keep_stream_running(&self, _stream_id: u32) -> bool {
         self.keep_streams_running
     }
 
@@ -62,22 +66,22 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
         // share the waker the first time this runs, so producers may wake this task up when an item is ready
         if let None = &self.wakers[stream_id as usize] {
-            lock(&self.wakers_lock);
+            ogre_sync::lock(&self.wakers_lock);
             if let None = &self.wakers[stream_id as usize] {
                 let waker = waker.clone();
                 let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
                 let _ = mutable_self.wakers[stream_id as usize].insert(waker);
             }
-            unlock(&self.wakers_lock);
+            ogre_sync::unlock(&self.wakers_lock);
         }
     }
 
     fn report_stream_dropped(&self, stream_id: u32) {
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        lock(&self.wakers_lock);
+        ogre_sync::lock(&self.wakers_lock);
         mutable_self.keep_streams_running = false;
         mutable_self.wakers[stream_id as usize] = None;
-        unlock(&self.wakers_lock);
+        ogre_sync::unlock(&self.wakers_lock);
         self.finished_streams_count.fetch_add(1, Relaxed);
     }
 }
@@ -212,16 +216,4 @@ for*/ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.queue.available_elements() as u32
     }
 
-}
-
-#[inline(always)]
-fn lock(flag: &AtomicBool) {
-    while flag.compare_exchange_weak(false, true, Relaxed, Relaxed).is_err() {
-        spin_loop();
-    }
-}
-
-#[inline(always)]
-fn unlock(flag: &AtomicBool) {
-    flag.store(false, Relaxed);
 }

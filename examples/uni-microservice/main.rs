@@ -2,18 +2,19 @@
 
 use reactive_mutiny::{
     uni::{Uni, UniBuilder},
-    MutinyStream,
 };
 use std::{
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::AtomicU32,
+    },
     time::Duration,
 };
-use std::sync::atomic::AtomicU32;
 use futures::{SinkExt, Stream, StreamExt};
 
 
 /// Queue consumer function, set to receive elements from "Queue A" and send responses to "Queue B" -- both in JSON format.
-fn consume_and_answer(incoming_json_events_stream: MutinyStream<String>) -> impl Stream<Item=String> {
+fn consume_and_answer(incoming_json_events_stream: impl Stream<Item=String>) -> impl Stream<Item=String> {
     process( incoming_json_events_stream
                   .map(|json_event| deserialize(json_event)) )
         .map(|output_event| serialize(output_event))

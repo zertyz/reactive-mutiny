@@ -51,6 +51,7 @@ mod tests {
         stream::{self, Stream, StreamExt}
     };
     use minstant::Instant;
+    use crate::uni::channels::uni_stream::UniStream;
 
 
     /// exercises the code present on the documentation
@@ -235,7 +236,7 @@ mod tests {
 
         // SIX event
         let six_fire_count_ref = Arc::clone(&six_fire_count);
-        let on_six_event = move |stream: MutinyStream<()>| {
+        let on_six_event = move |stream: UniStreamType<'static, (), 1024, 1>| {
             stream.inspect(move |_| {
                 six_fire_count_ref.fetch_add(1, Relaxed);
             })
@@ -257,7 +258,7 @@ mod tests {
         });
 
         // TWO event
-        let on_two_event = |stream: MutinyStream<u32>| {
+        let on_two_event = |stream: UniStreamType<'static, u32, 1024, 1>| {
             let two_fire_count = Arc::clone(&two_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_uni = Arc::clone(&six_uni);
@@ -295,7 +296,7 @@ mod tests {
         let two_producer = |item| two_uni.try_send(item);
 
         // FOUR event
-        let on_four_event = |stream: MutinyStream<u32>| {
+        let on_four_event = |stream: UniStreamType<'static, u32, 1024, 1>| {
             let four_fire_count = Arc::clone(&four_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_uni = Arc::clone(&six_uni);
@@ -445,7 +446,7 @@ mod tests {
             //let producer = uni.producer_closure();
             for e in 0..count {
                 while !uni.try_send(e) {
-                    std::hint::spin_loop();
+                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
                 };
             }
             uni.close(Duration::from_secs(5)).await;

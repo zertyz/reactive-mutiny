@@ -2,6 +2,7 @@
 
 pub mod ogre_queues;
 pub mod ogre_stacks;
+pub mod ogre_sync;
 
 mod benchmarks;
 mod instruments;

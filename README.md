@@ -50,6 +50,7 @@ If you're familiar with SmallRye's Mutiny, here are some key differences:
   - Executors & their settings are set when the pair producer/pipeline are created (when the `Uni` / `Multi` object is created): there
     is no .merge() nor .executeAt() to call in the pipeline
   - No Multi/Uni pipeline conversion and the corresponding plethora of functions -- they are simply not needed
+  - No Uni retries, as it just doesn't make sense to restrict retries to a particular type. See more at the end of this README.
   - No timeouts are set in the pipeline -- they are a matter for the executor, which will simply cancel events (that are `Future`s) that take longer than the configured executor's maximum
     (SmallRye's Uni timeouts are attainable using Tokio's "futures" timeouts, just like one would do for any async function call)
   - Incredibly faster: Rust's compiler makes your pipelines (and most of this library) behave as a zero-cost abstraction (when compiled in Release mode). Const generics play a great
@@ -59,3 +60,5 @@ If you're familiar with SmallRye's Mutiny, here are some key differences:
     - `Tokio` (to get responses from Futures and to specify timeouts in async calls, async sleeps... saving a ton of APIs for this crate)
     - Streams (the original Mutiny kind of mixes Multi & Stream functionalities -- which, in practice, leads to inefficient abuses of
       the original library's abstractions -- for using a new instance of their Multi where a Stream or Iterator could be used is a common bad parctice / anti-pattern)
+    - A general retry mechanism to simulate what SmallRye's Uni have -- but for all `Result<>` types rathar than just for a particular type --
+      see it in action in `examples/error-handing-and-retrying` and observe the meaningful & contextful error messages.

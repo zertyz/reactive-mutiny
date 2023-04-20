@@ -18,23 +18,26 @@ use tokio::{
 type MultiChannelType<ItemType,
                       const BUFFER_SIZE: usize,
                       const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiStreamType<'a, ItemType,
+                             const BUFFER_SIZE: usize,
+                             const MAX_STREAMS: usize> = MultiStream<'a, Arc<ItemType>, MultiChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>>;
 
 
 /// Contains the producer-side [Multi] handle used to interact with the multi event
 /// -- for closing the stream, requiring stats, ...
-pub struct Multi<ItemType:          Clone + Unpin + Send + Sync + Debug,
+pub struct Multi<ItemType:          Send + Sync + Debug,
                  const BUFFER_SIZE: usize,
                  const MAX_STREAMS: usize,
                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
     pub stream_name:    String,
-    pub channel:        Arc<Pin<Box<MultiChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>>>,
+    pub channel:        Arc<MultiChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>,
     pub executor_infos: RwLock<IndexMap<String, ExecutorInfo<INSTRUMENTS>>>,
 }
 
-impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
-     const BUFFER_SIZE: usize,
-     const MAX_STREAMS: usize,
-     const INSTRUMENTS: usize>
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize,
+         const INSTRUMENTS: usize>
 Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub fn new<IntoString: Into<String>>(stream_name: IntoString) -> Self {
@@ -46,11 +49,11 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
         }
     }
 
-    pub fn stream_name<'r>(self: &'r Self) -> &'r String {
+    pub fn stream_name(self: &Self) -> &str {
         &self.stream_name
     }
 
-    pub fn listener_stream(&self) -> (impl Stream<Item=Arc<ItemType>>, u32) {
+    pub fn listener_stream(&self) -> (MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>, u32) {
         self.channel.listener_stream()
     }
 
@@ -155,3 +158,5 @@ use crate::{
     multi::channels,
     stream_executor::StreamExecutor,
 };
+use crate::multi::channels::multi_stream::MultiStream;
+use crate::ogre_std::ogre_queues::full_sync_queues::full_sync_meta::FullSyncMeta;

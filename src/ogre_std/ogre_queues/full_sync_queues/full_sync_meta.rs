@@ -1,10 +1,13 @@
 //! Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
 //! full synchronization through an atomic flag, with a clever & experimentally tuned efficient locking mechanism.
 
-use crate::ogre_std::ogre_queues::{
-    meta_publisher::MetaPublisher,
-    meta_subscriber::MetaSubscriber,
-    meta_queue::MetaQueue,
+use crate::ogre_std::{
+    ogre_queues::{
+        meta_publisher::MetaPublisher,
+        meta_subscriber::MetaSubscriber,
+        meta_queue::MetaQueue,
+    },
+    ogre_sync,
 };
 use std::{
     fmt::Debug,
@@ -72,12 +75,12 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 
         // lock & acquire a slot to set the item
         loop {
-            lock(&self.concurrency_guard);
+            ogre_sync::lock(&self.concurrency_guard);
             len_before = self.tail.overflowing_sub(self.head).0;
             if len_before < BUFFER_SIZE as u32 {
                 break
             } else {
-                unlock(&self.concurrency_guard);
+                ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_full = report_full_fn();
                 if !maybe_no_longer_full {
                     return false;
@@ -88,7 +91,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         setter_fn(&mut mutable_self.buffer[self.tail as usize % BUFFER_SIZE]);
         mutable_self.tail = self.tail.overflowing_add(1).0;
 
-        unlock(&self.concurrency_guard);
+        ogre_sync::unlock(&self.concurrency_guard);
         report_len_after_enqueueing_fn(len_before+1);
         true
     }
@@ -137,12 +140,12 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 
         let mut len_before;
         loop {
-            lock(&self.concurrency_guard);
+            ogre_sync::lock(&self.concurrency_guard);
             len_before = self.available_elements() as i32;
             if len_before > 0 {
                 break
             } else {
-                unlock(&self.concurrency_guard);
+                ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_empty = report_empty_fn();
                 if !maybe_no_longer_empty {
                     return None;
@@ -153,7 +156,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         let ret_val = getter_fn(&mut mutable_self.buffer[self.head as usize % BUFFER_SIZE]);
         mutable_self.head = self.head.overflowing_add(1).0;
 
-        unlock(&self.concurrency_guard);
+        ogre_sync::unlock(&self.concurrency_guard);
         report_len_after_dequeueing_fn(len_before-1);
         Some(ret_val)
     }
@@ -181,31 +184,6 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         }
     }
 
-}
-
-/// Returns when the lock was acquired -- inspired by `parking-lot`
-/// Unlocked: false; locked: true
-#[inline(always)]
-fn lock(raw_mutex: &AtomicBool) {
-    // attempt to lock -- spinning for 10 times, relaxing the CPU between attempts
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if raw_mutex.compare_exchange_weak(false, true, Relaxed, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    // no deal -- fallback without using the _weak version of compare_exchange
-    while !raw_mutex.compare_exchange(false, true, Relaxed, Relaxed).is_ok() { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-}
-
-/// Releases any locks, returning immediately
-#[inline(always)]
-fn unlock(raw_mutex: &AtomicBool) {
-    raw_mutex.store(false, Relaxed);
 }
 
 

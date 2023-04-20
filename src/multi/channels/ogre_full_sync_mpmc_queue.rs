@@ -12,7 +12,9 @@ use crate::{
             meta_subscriber::MetaSubscriber,
             meta_queue::MetaQueue,
         },
+        ogre_sync,
     },
+    StreamsManager,
 };
 use std::{
     time::Duration,
@@ -29,6 +31,8 @@ use std::{
 use futures::{Stream};
 use minstant::Instant;
 use log::{warn};
+use owning_ref::ArcRef;
+use crate::multi::channels::multi_stream::MultiStream;
 
 
 /// [InternalOgreFullSyncMPMCQueue] with defaults.\
@@ -49,9 +53,9 @@ pub type OgreFullSyncMPMCQueue<ItemType,
 /// See also [multi::channels::ogre_full_sync_mpmc_queue].\
 /// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Unpin + Send + Sync + Debug,
-                                        const BUFFER_SIZE: usize,
-                                        const MAX_STREAMS: usize> {
+pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Send + Sync + Debug,
+                                         const BUFFER_SIZE: usize,
+                                         const MAX_STREAMS: usize> {
     /// General non-blocking full sync queues -- one for each Multi
     queues:                 [FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>; MAX_STREAMS],
     /// simple metrics
@@ -76,74 +80,65 @@ pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Unpin + Send + Sync 
     channel_name:           String,
 }
 
-impl<ItemType:          Unpin + Send + Sync + Debug + 'static,
-     const BUFFER_SIZE: usize,
-     const MAX_STREAMS: usize>
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+StreamsManager<'a, Arc<ItemType>, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, Option<Arc<ItemType>>> for
 InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    /// Returns a `Stream` -- may create as many streams as requested, provided the specified limit [MAX_STREAMS] is respected.\
+    fn backing_subscriber(self: &Arc<Self>, stream_id: u32) -> ArcRef<Self, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>> {
+        ArcRef::from(self.clone())
+            .map(|this| &this.queues[stream_id as usize])
+    }
+
+    #[inline(always)]
+    fn keep_stream_running(&self, stream_id: u32) -> bool {
+        self.keep_stream_running[stream_id as usize]
+    }
+
+    #[inline(always)]
+    fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
+        // share the waker the first time this runs, so producers may wake this task up when an item is ready
+        if let None = &self.wakers[stream_id as usize] {
+            ogre_sync::lock(&self.wakers_lock);
+            if let None = &self.wakers[stream_id as usize] {
+                let waker = waker.clone();
+                let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+                let _ = mutable_self.wakers[stream_id as usize].insert(waker);
+            }
+            ogre_sync::unlock(&self.wakers_lock);
+        }
+    }
+
+    fn report_stream_dropped(&self, stream_id: u32) {
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        ogre_sync::lock(&self.wakers_lock);
+        mutable_self.wakers[stream_id as usize] = None;
+        ogre_sync::unlock(&self.wakers_lock);
+        mutable_self.finished_streams_count.fetch_add(1, Relaxed);
+        mutable_self.vacant_streams.enqueue(stream_id);
+        mutable_self.sync_vacant_and_used_streams();
+    }
+}
+
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    /// Returns a `Stream` -- as many streams as requested may be create, provided the specified limit [MAX_STREAMS] is respected.\
     /// Each stream will see all payloads sent through this channel.
-    pub fn listener_stream(self: &Arc<Pin<Box<Self>>>) -> (impl Stream<Item=Arc<ItemType>>, u32) {
-        // safety: Unwraps the Arc to return the required Pin<Self> to Stream::next(),
-        //         which is guaranteed not to mutate Self (our queue don't require it) or to do it
-        //         in a safe manner using AtomicPtrs to Wakers
+    pub fn listener_stream(self: &Arc<Self>) -> (MultiStream<'a, Arc<ItemType>, Self, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>>, u32) {
         self.created_streams_count.fetch_add(1, Relaxed);
         let stream_id = match self.vacant_streams.dequeue() {
             Some(stream_id) => stream_id,
-            None => panic!("OgreMPMCQueue: This multi channel has a MAX_STREAMS of {MAX_STREAMS} -- which just got exhausted: program called `listener_stream()` {} times & {} of these where dropped. Please, increase the limit or fix the LOGIC BUG!",
+            None => panic!("OgreFullSyncMPMCQueue: This multi channel has a MAX_STREAMS of {MAX_STREAMS} -- which just got exhausted: program called `listener_stream()` {} times & {} of these where dropped. Please, increase the limit or fix the LOGIC BUG!",
                            self.created_streams_count.load(Relaxed), self.finished_streams_count.load(Relaxed)),
         };
-        self.sync_vacant_and_used_streams();
-        let cloned_self = self.clone();
-        let pin_ptr = Arc::as_ptr(&cloned_self);
-        let pinned = unsafe { core::ptr::read(pin_ptr) };
-        let boxed = unsafe { Pin::into_inner_unchecked(pinned) };
-        let original_self = Box::into_raw(boxed);
-        let mutable_self_for_drop = unsafe {&mut *((original_self as *const Self) as *mut Self)};
-        let mutable_self = unsafe {&mut *((original_self as *const Self) as *mut Self)};
+        let mutable_self = unsafe {&mut *((self.as_ref() as *const Self) as *mut Self)};
         mutable_self.keep_stream_running[stream_id as usize] = true;
-        mem::forget(original_self); // this is managed by the Arc
-        (
-            super::super::super::stream::custom_drop_poll_fn::custom_drop_poll_fn(
-                move || {
-                    lock(&mutable_self_for_drop.wakers_lock);
-                    mutable_self_for_drop.wakers[stream_id as usize] = None;
-                    unlock(&mutable_self_for_drop.wakers_lock);
-                    mutable_self_for_drop.finished_streams_count.fetch_add(1, Relaxed);
-                    mutable_self_for_drop.vacant_streams.enqueue(stream_id);
-                    mutable_self_for_drop.sync_vacant_and_used_streams();
-                    drop(cloned_self);     // forces the Arc to be moved & dropped here instead of on the upper method `listener_stream()`, so `mutable_self` is guaranteed to be valid while the stream executes
-                },
-                move |cx| {
-                    let element = mutable_self.queues[stream_id as usize].consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
-                                                                                  || false,
-                                                                                  |_| {});
-
-                    let next = match element {
-                        Some(element) => Poll::Ready(Some(element)),
-                        None => {
-                            if mutable_self.keep_stream_running[stream_id as usize] {
-                                // share the waker the first time this runs, so producers may wake this task up (when an item is ready)
-                                if let None = &mutable_self.wakers[stream_id as usize] {
-                                    // try again, syncing
-                                    lock(&mutable_self.wakers_lock);
-                                    if let None = &mutable_self.wakers[stream_id as usize] {
-                                        let waker = cx.waker().clone();
-                                        let _ = mutable_self.wakers[stream_id as usize].insert(waker);
-                                    }
-                                    unlock(&mutable_self.wakers_lock);
-                                }
-                                Poll::Pending
-                            } else {
-                                Poll::Ready(None)
-                            }
-                        },
-                    };
-                    next
-                }
-            ),
-            stream_id
-        )
+        self.sync_vacant_and_used_streams();
+        (MultiStream::new(stream_id, self), stream_id)
     }
 
     #[inline(always)]
@@ -167,18 +162,18 @@ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
             Some(waker) => waker.wake_by_ref(),
             None => {
                 // try again, syncing
-                lock(&self.wakers_lock);
+                ogre_sync::lock(&self.wakers_lock);
                 if let Some(waker) = &self.wakers[stream_id as usize] {
                     waker.wake_by_ref();
                 }
-                unlock(&self.wakers_lock);
+                ogre_sync::unlock(&self.wakers_lock);
             }
         }
     }
 
     /// rebuilds the `used_streams` list based of the current `vacant_items`
     fn sync_vacant_and_used_streams(&self) {
-        lock(&self.streams_lock);
+        ogre_sync::lock(&self.streams_lock);
         let mut vacant = unsafe { self.vacant_streams.peek_remaining().concat() };
         vacant.sort_unstable();
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
@@ -205,21 +200,21 @@ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
         for i in (last_used_stream_id + 1) as usize .. MAX_STREAMS {
             mutable_self.used_streams[i] = u32::MAX;
         }
-        unlock(&self.streams_lock);
+        ogre_sync::unlock(&self.streams_lock);
     }
 
 }
 
 //#[async_trait]
 /// implementation note: Rust 1.63 does not yet support async traits. See [super::MultiChannel]
-impl<ItemType:          Clone + Unpin + Send + Sync + Debug + 'static,
-     const BUFFER_SIZE: usize,
-     const MAX_STREAMS: usize>
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
 /*MultiChannel<ItemType>
 for*/ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    pub fn new<IntoString: Into<String>>(channel_name: IntoString) -> Arc<Pin<Box<Self>>> {
-        let instance = Arc::new(Box::pin(Self {
+    pub fn new<IntoString: Into<String>>(channel_name: IntoString) -> Arc<Self> {
+        let instance = Arc::new(Self {
             queues:                 {
                                          let mut queues: [FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>; MAX_STREAMS] = unsafe { MaybeUninit::zeroed().assume_init() };
                                          for i in 0..queues.len() {
@@ -242,7 +237,7 @@ for*/ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
             streams_lock:           AtomicBool::new(false),
             wakers_lock:            AtomicBool::new(false),
             channel_name:           channel_name.into(),
-        }));
+        });
         instance
     }
 
@@ -354,18 +349,6 @@ for*/ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
             .sum::<usize>() as u32
     }
 
-}
-
-#[inline(always)]
-fn lock(flag: &AtomicBool) {
-    while flag.compare_exchange_weak(false, true, Relaxed, Relaxed).is_err() {
-        spin_loop();
-    }
-}
-
-#[inline(always)]
-fn unlock(flag: &AtomicBool) {
-    flag.store(false, Relaxed);
 }
 
 

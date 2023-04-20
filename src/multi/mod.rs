@@ -209,7 +209,7 @@ mod tests {
         // how to pass it down the pipeline. Also notice the required (as of Rust 1.63)
         // moving of Arc local variables so they will be accessible
 
-        let pipeline1_builder = |stream: MutinyStream<Arc<u32>>| {
+        let pipeline1_builder = |stream: MultiStreamType<'static, u32, 1024, 2>| {
             let observed_sum = Arc::clone(&observed_sum_1);
             stream
                 .map(|number| async move {
@@ -230,7 +230,7 @@ mod tests {
                     Ok(number)
                 })
         };
-        let pipeline2_builder = |stream: MutinyStream<Arc<u32>>| {
+        let pipeline2_builder = |stream: MultiStreamType<'static, u32, 1024, 2>| {
             let observed_sum = Arc::clone(&observed_sum_2);
             stream
                 .map(|number| async move {
@@ -363,7 +363,7 @@ mod tests {
         let six_fire_count = Arc::new(AtomicU32::new(0));
 
         // SIX event
-        let on_six_event = |stream: MutinyStream<Arc<bool>>| {
+        let on_six_event = |stream: MultiStreamType<'static, bool, 1024, 2>| {
             let six_fire_count = Arc::clone(&six_fire_count);
             stream.inspect(move |_| {
                 six_fire_count.fetch_add(1, Relaxed);
@@ -388,7 +388,7 @@ mod tests {
         });
 
         // TWO event
-        let on_two_event = |stream: MutinyStream<Arc<u32>>| {
+        let on_two_event = |stream: MultiStreamType<'static, u32, 1024, 2>| {
             let two_fire_count = Arc::clone(&two_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_multi = Arc::clone(&six_multi);
@@ -431,7 +431,7 @@ mod tests {
         let two_producer = |item| two_multi.send(item);
 
         // FOUR event
-        let on_four_event = |stream: MutinyStream<Arc<u32>>| {
+        let on_four_event = |stream: MultiStreamType<'static, u32, 1024, 2>| {
             let four_fire_count = Arc::clone(&four_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_multi = Arc::clone(&six_multi);
