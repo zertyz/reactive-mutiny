@@ -345,18 +345,15 @@ if counter == count {
                 let mut stream = channel.consumer_stream().expect("Asking for the first stream");
                 let start = Instant::now();
 
-                let sender_task = tokio::spawn(
-                    exec_future(async move {
+                let sender_task = tokio::task::spawn_blocking(
+                    move || {
                         for e in 0..count {
                             while !channel.try_send(e) {
                                 std::hint::spin_loop();
                             }
                         }
-                        channel.end_all_streams(Duration::from_secs(5)).await;
-                    },
-                    format!("Different Task & Thread producer for '{}'", $profiling_name),
-                    20.0,
-                    false)
+                        //channel.end_all_streams(Duration::from_secs(5)).await;
+                    }
                 );
 
                 let receiver_task = tokio::spawn(
@@ -393,13 +390,13 @@ if counter == count {
         profile_different_task_same_thread_channel!(TokioMPSC::<u32, 10240>::new(), "TokioMPSC ", 10240*FACTOR);
         profile_different_task_different_thread_channel!(TokioMPSC::<u32, 10240>::new(), "TokioMPSC ", 10240*FACTOR);
 
-        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
-
         profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
         profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
         profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
+
+        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
+        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
+        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, 409600, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
     }
 
     /// executes the given `fut`ure, tracking timeouts

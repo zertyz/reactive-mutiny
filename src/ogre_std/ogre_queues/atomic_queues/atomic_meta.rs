@@ -8,7 +8,7 @@ use super::super::{
 };
 use std::{
     fmt::Debug,
-    sync::atomic::{AtomicU32,Ordering::Relaxed},
+    sync::atomic::{AtomicU32,Ordering::{Acquire,Relaxed,Release}},
     mem::MaybeUninit,
 };
 
@@ -86,7 +86,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 //     }
 // }
                 // queue is full: restabilish the correct `enqueuer_tail` (receeding it to its original value)
-                match self.enqueuer_tail.compare_exchange(slot_id + 1, slot_id, Relaxed, Relaxed) {
+                match self.enqueuer_tail.compare_exchange(slot_id + 1, slot_id, Release, Acquire) {
                     Ok(_) => {
                         // report the queue is full, allowing a retry, if the method says we recovered from the condition
                         if !report_full_fn() {
@@ -112,7 +112,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 
         // strong sync tail
         loop {
-            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
+            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Acquire) {
                 Ok(_) => break,
                 Err(reloaded_tail) => {
                     if slot_id > reloaded_tail {
@@ -181,7 +181,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                 break
             } else {
                 // queue is empty: restabilish the correct `dequeuer_head` (receeding it to its original value)
-                match self.dequeuer_head.compare_exchange(slot_id + 1, slot_id, Relaxed, Relaxed) {
+                match self.dequeuer_head.compare_exchange(slot_id + 1, slot_id, Release, Acquire) {
                     Ok(_) => {
                         if !report_empty_fn() {
                             return None;
@@ -203,7 +203,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 
         // strong sync head
         loop {
-            match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
+            match self.head.compare_exchange_weak(slot_id, slot_id + 1, Release, Acquire) {
                 Ok(_) => break,
                 Err(reloaded_head) => {
                     if slot_id > reloaded_head {
