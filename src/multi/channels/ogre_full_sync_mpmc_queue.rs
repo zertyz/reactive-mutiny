@@ -378,7 +378,9 @@ mod tests {
             let channel = OgreFullSyncMPMCQueue::<&str>::new("stream_and_channel_dropping");
             assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
             let (mut stream, _stream_id) = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
+            assert_eq!(Arc::strong_count(&channel), 3, "Creating a stream should increase the ref count by 2");
+            let (mut _stream_2, _stream_id_2) = channel.listener_stream();
+            assert_eq!(Arc::strong_count(&channel), 5, "Creating a stream should increase the ref count by 2");
             channel.send("a");
             drop(channel);  // dropping the channel will decrease the Arc reference count by 1
             println!("received: {}", stream.next().await.unwrap());
@@ -387,11 +389,11 @@ mod tests {
             print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
             let channel = OgreFullSyncMPMCQueue::<&str>::new("stream_and_channel_dropping");
             let stream = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 2");
+            assert_eq!(Arc::strong_count(&channel), 3, "`channel` + `stream`: reference count should be 3");
             drop(stream);
-            assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
+            assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 2");
             let (mut stream, _stream_id) = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
+            assert_eq!(Arc::strong_count(&channel), 3, "1 `channel` + 1 `stream` again, at this point: reference count should be 3");
             channel.send("a");
             drop(channel);  // dropping the channel will decrease the Arc reference count by 1
             println!("received: {}", stream.next().await.unwrap());
