@@ -14,14 +14,14 @@ use std::{
     sync::Arc,
 };
 use reactive_mutiny::{
-    multi::MultiBuilder,
+    multi::Multi,
     multis_close_async
 };
 use log::warn;
 
 
 /// Default Mutiny type for "per client" events
-type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = MultiBuilder<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = Multi<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 /// Can I refer to internal fields?
@@ -52,28 +52,28 @@ impl Events {
 
     pub fn new() -> Self {
         Self {
-            identified_client_connected: MultiBuilder::new("Identified client just connected"),
-            client_disconnected:         MultiBuilder::new("Client (was) disconnected"),
+            identified_client_connected: Multi::new("Identified client just connected"),
+            client_disconnected:         Multi::new("Client (was) disconnected"),
 
-            market_data:                 MultiBuilder::new("Client shared some Market Data"),
+            market_data:                 Multi::new("Client shared some Market Data"),
 
-            decision_maker_order:        MultiBuilder::new("Scheduled Order (by the DecisionMaker, to be approved by the RiskManager)"),
+            decision_maker_order:        Multi::new("Scheduled Order (by the DecisionMaker, to be approved by the RiskManager)"),
 
-            risk_manager_intervention:   MultiBuilder::new("Risk Manager intervention"),
-            risk_managed_order:          MultiBuilder::new("Risk Managed Order (audited and ready to be executed)"),
+            risk_manager_intervention:   Multi::new("Risk Manager intervention"),
+            risk_managed_order:          Multi::new("Risk Managed Order (audited and ready to be executed)"),
         }
     }
 
     pub async fn shutdown(&self) {
         // make sure all events are here
         multis_close_async!(std::time::Duration::from_secs(5),
-            self.identified_client_connected.handle,
-            self.identified_client_connected.handle,
-            self.client_disconnected.handle,
-            self.market_data.handle,
-            self.decision_maker_order.handle,
-            self.risk_manager_intervention.handle,
-            self.risk_managed_order.handle
+            self.identified_client_connected,
+            self.identified_client_connected,
+            self.client_disconnected,
+            self.market_data,
+            self.decision_maker_order,
+            self.risk_manager_intervention,
+            self.risk_managed_order
         );
     }
 

@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 use reactive_mutiny::{
-    multi::{MultiBuilder,MultiStreamType},
+    multi::{Multi,MultiStreamType},
 };
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;
@@ -45,7 +45,7 @@ type SubscriberPayloadType = (AccountToken, MarketData);
 
 
 /// Default Mutiny type for "per client" events
-type SubscribersMulti = MultiBuilder<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type SubscribersMulti = Multi<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 pub struct MarketWatcher {
@@ -72,7 +72,7 @@ impl MarketWatcher {
     pub async fn shutdown(&self) {
         let mut subscribers = self.subscribers.write().await;
         for (symbol, multi) in subscribers.drain() {
-            multi.handle.close(TIMEOUT).await;
+            multi.close(TIMEOUT).await;
         }
     }
 
@@ -86,7 +86,7 @@ impl MarketWatcher {
         let mut subscribers = self.subscribers.write().await;
         subscribers
             .entry(symbol.into())
-            .or_insert_with(|| MultiBuilder::new(format!("MarketData multi for symbol '{}'", symbol.into())))
+            .or_insert_with(|| Multi::new(format!("MarketData multi for symbol '{}'", symbol.into())))
             .spawn_non_futures_non_fallible_executor_ref(1, subscriber_name,
                                                          pipeline_builder,
                                                         |_| async {}).await
@@ -102,7 +102,7 @@ impl MarketWatcher {
                 let (symbol, _market_data) = (&subscriber_payload.0, &subscriber_payload.1);
                 let subscribers = cloned_self.subscribers.read().await;
                 match subscribers.get(symbol) {
-                    Some(multi) => multi.handle.channel.send_arc(subscriber_payload),
+                    Some(multi) => multi.channel.send_arc(subscriber_payload),
                     None                        => {},
                 }
                 Ok(())

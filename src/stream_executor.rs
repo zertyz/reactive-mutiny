@@ -21,13 +21,20 @@ use super::{
     instruments::Instruments,
     incremental_averages::AtomicIncrementalAverage64,
 };
-use std::{sync::{
-    Arc,
-    atomic::{
-        AtomicU64,
-        Ordering::{Relaxed},
+use std::{
+    sync::{
+        Arc,
+        atomic::{
+            AtomicU64,
+            Ordering::{Relaxed},
+        },
     },
-}, future::Future, fmt::Debug, time::{Duration}, error::Error, future};
+    future::Future,
+    fmt::Debug,
+    time::{Duration},
+    error::Error,
+    future,
+};
 use atomic_enum::atomic_enum;
 use futures::{
     stream::{Stream,StreamExt}
