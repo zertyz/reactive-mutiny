@@ -151,13 +151,13 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = Queue::<u32, 102400, false, false>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
+        let queue = Queue::<u32, 65536, false, false>::new("'multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = Queue::<u32, 128, false, false>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
+        let queue = Queue::<u32, 65536, false, false>::new("'multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
     }
 }

@@ -154,7 +154,7 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     fn multiple_producers_and_consumers_single_in_and_out() {
-        let stack = Stack::<u32, 128, false, false>::new("concurrency_single_in_and_out test stack".to_string());
+        let stack = Stack::<u32, 65536, false, false>::new("concurrency_single_in_and_out test stack".to_string());
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| stack.push(e), || stack.pop());
     }
 

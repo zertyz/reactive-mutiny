@@ -181,7 +181,7 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = NonBlockingQueue::<u32, 128, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue");
+        let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue");
         test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
     }
 
