@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread: time measurements go south
+    #[ignore]   // flaky if ran in multi-thread: timeout measurements go south
     fn test_blocking() {
         const TIMEOUT_MILLIS: usize = 100;
         const QUEUE_SIZE:     usize = 16;
