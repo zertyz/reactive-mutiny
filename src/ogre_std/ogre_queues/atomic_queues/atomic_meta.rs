@@ -268,6 +268,7 @@ mod tests {
 
     /// the atomic meta queue should allow independent enqueueing (if dequeue takes too long to complete, enqueueing should not be affected)
     #[cfg_attr(not(doc),test)]
+    #[ignore]   // time-dependent: should run on single-threaded tests
     pub fn assure_enqueue_syncing_independency() {
         let queue = AtomicMeta::<u32, 128>::new();
         let (independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(

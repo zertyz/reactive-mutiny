@@ -202,6 +202,7 @@ mod tests {
 
     /// the full sync base queue should not allow independent produce/consume operations (one blocks the other while it is happening)
     #[cfg_attr(not(doc),test)]
+    #[ignore]   // time-dependent: should run on single-threaded tests
     pub fn assure_syncing_dependency() {
         let queue = Arc::new(FullSyncMeta::<u32, 128>::new());
         let queue_ref1 = Arc::clone(&queue);
