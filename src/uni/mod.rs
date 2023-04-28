@@ -428,7 +428,7 @@ mod tests {
 
     /// assures performance won't be degraded when we make changes
     #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     async fn performance_measurements() {
 
         #[cfg(not(debug_assertions))]

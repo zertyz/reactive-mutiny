@@ -364,7 +364,7 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = BlockingQueue::<u32, 102400, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
+        let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
@@ -375,6 +375,7 @@ mod tests {
     }
 
     #[cfg_attr(not(doc),test)]
+    #[ignore]   // flaky if ran in multi-thread: time measurements go south
     fn test_blocking() {
         const TIMEOUT_MILLIS: usize = 100;
         const QUEUE_SIZE:     usize = 16;

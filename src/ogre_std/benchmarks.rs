@@ -240,7 +240,7 @@ mod benchmark_stacks {
     impl_benchmarkable_container_for!(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<SlotType, BUFFER_SIZE, false, false>);
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn all_in_and_out_benchmarks() {
         println!();
         for n_threads in 1..=4 {
@@ -250,7 +250,7 @@ mod benchmark_stacks {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn single_in_and_out_benchmarks() {
         println!();
         for n_threads in 1..=4 {
@@ -260,7 +260,7 @@ mod benchmark_stacks {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn single_producer_multiple_consumers_benchmarks() {
         println!();
         for n_threads in 2..=5 {
@@ -270,7 +270,7 @@ mod benchmark_stacks {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn multiple_producers_single_consumer_benchmarks() {
         println!();
         for n_threads in 2..=5 {
@@ -343,7 +343,7 @@ mod benchmark_queues {
     impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn all_in_and_out_benchmarks() {
         println!();
         for n_threads in 1..=4 {
@@ -355,7 +355,7 @@ mod benchmark_queues {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn single_in_and_out_benchmarks() {
         println!();
         for n_threads in 1..=4 {
@@ -367,7 +367,7 @@ mod benchmark_queues {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn single_producer_multiple_consumers_benchmarks() {
         println!();
         for n_threads in 2..=5 {
@@ -379,7 +379,7 @@ mod benchmark_queues {
     }
 
     #[cfg_attr(not(doc),test)]
-    #[ignore]
+    #[ignore]   // must run in a single thread for accurate measurements
     fn multiple_producers_single_consumer_benchmarks() {
         println!();
         for n_threads in 2..=5 {
