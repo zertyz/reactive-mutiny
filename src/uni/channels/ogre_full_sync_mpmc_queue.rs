@@ -71,15 +71,31 @@ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
-        // share the waker the first time this runs, so producers may wake this task up when an item is ready
-        if let None = &self.wakers[stream_id as usize] {
-            ogre_sync::lock(&self.wakers_lock);
-            if let None = &self.wakers[stream_id as usize] {
+
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+
+        macro_rules! set {
+            () => {
                 let waker = waker.clone();
-                let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-                let _ = mutable_self.wakers[stream_id as usize].insert(waker);
+                ogre_sync::lock(&mutable_self.wakers_lock);
+                let waker = mutable_self.wakers[stream_id as usize].insert(waker);
+                ogre_sync::unlock(&mutable_self.wakers_lock);
+                // the producer might have just woken the old version of the waker,
+                // so the following waking up line is needed to assure the consumers won't ever hang
+                // (as demonstrated by tests)
+                waker.wake_by_ref();
             }
-            ogre_sync::unlock(&self.wakers_lock);
+        }
+
+        match &mut mutable_self.wakers[stream_id as usize] {
+            Some(registered_waker) => {
+                if !registered_waker.will_wake(waker) {
+                    set!();
+                }
+            },
+            None => {
+                set!();
+            },
         }
     }
 

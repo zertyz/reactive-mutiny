@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{
     AtomicBool,
-    Ordering::{AcqRel, Release, Relaxed},
+    Ordering::{Acquire, Release, Relaxed},
 };
 
 
@@ -11,18 +11,18 @@ use std::sync::atomic::{
 #[inline(always)]
 pub fn lock(flag: &AtomicBool) {
     // attempt to lock -- spinning for 10 times, relaxing the CPU between attempts
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
-    if flag.compare_exchange_weak(false, true, AcqRel, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
     // no deal -- fallback without using the _weak version of compare_exchange
-    while !flag.compare_exchange(false, true, AcqRel, Relaxed).is_ok() { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    while !flag.compare_exchange(false, true, Acquire, Relaxed).is_ok() { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
 }
 
 /// Releases any locks, returning immediately

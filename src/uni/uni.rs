@@ -63,6 +63,10 @@ Uni<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
         self.uni_channel.consumer_stream()
     }
 
+    pub async fn flush(&self, duration: Duration) -> u32 {
+        self.uni_channel.flush(duration).await
+    }
+
     /// closes this Uni, in isolation -- flushing pending events, closing the producers,
     /// waiting for all events to be fully processed and calling the "on close" callback.\
     /// If this Uni share resources with another one (which will get dumped by the "on close"

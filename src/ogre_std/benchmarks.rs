@@ -81,9 +81,9 @@ pub fn single_producer_multiple_consumers_benchmark(container: &(dyn Benchmarkab
                                                                  &deadline,
                                                                  container_size as u64,
                                                                  || {
-                                                                     for i in 0..container_size {
-                                                                         while !container.add(i) {
-                                                                             std::hint::spin_loop();
+                                                                     for i in 0..(container_size*64) {
+                                                                         if !container.add(i) {
+                                                                             break
                                                                          }
                                                                      }
                                                                  });
@@ -113,9 +113,9 @@ pub fn multiple_producers_single_consumer_benchmark(container: &(dyn Benchmarkab
                                                                   &deadline,
                                                                   container_size as u64,
                                                                   || {
-                                                                      for _ in 0..container_size {
+                                                                      for _ in 0..container_size*64 {
                                                                           if container.remove().is_none() {
-                                                                              std::hint::spin_loop();
+                                                                              break
                                                                           }
                                                                       }
                                                                   });
@@ -143,11 +143,6 @@ pub fn multiple_producers_single_consumer_benchmark(container: &(dyn Benchmarkab
 // auxiliary functions
 //////////////////////
 
-// TODO: IMPROVE FEEDBACK & DIAGNOSTICS FOR HALTING TESTS: copy the method to "keep_looping", then refactor this method to
-// "compute_operations_per_second" -- which should print (and flush) the "running" feedback, then hand over to
-// "keep_looping", then output the final measurement
-// --> Verify that aotmic_queue::BlockingQueue (introduced in 19e8091) is hanging... Verify that
-// the other queues are OK after my several changes and fix the new queue from there.
 fn compute_operations_per_second(benchmark_name:      String,
                                  deadline:            &Duration,
                                  loops_per_iteration: u64,
@@ -243,7 +238,7 @@ mod benchmark_stacks {
     #[ignore]   // must run in a single thread for accurate measurements
     fn all_in_and_out_benchmarks() {
         println!();
-        for n_threads in 1..=4 {
+        for n_threads in [1, 2, 4] {
             println!("{n_threads} threads:");
             all_in_and_out_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
@@ -253,7 +248,7 @@ mod benchmark_stacks {
     #[ignore]   // must run in a single thread for accurate measurements
     fn single_in_and_out_benchmarks() {
         println!();
-        for n_threads in 1..=4 {
+        for n_threads in [1, 2, 4] {
             println!("{n_threads} threads:");
             single_in_and_out_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
@@ -263,7 +258,7 @@ mod benchmark_stacks {
     #[ignore]   // must run in a single thread for accurate measurements
     fn single_producer_multiple_consumers_benchmarks() {
         println!();
-        for n_threads in 2..=5 {
+        for n_threads in [2, 3, 5] {
             println!("{n_threads} threads:");
             single_producer_multiple_consumers_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
@@ -273,7 +268,7 @@ mod benchmark_stacks {
     #[ignore]   // must run in a single thread for accurate measurements
     fn multiple_producers_single_consumer_benchmarks() {
         println!();
-        for n_threads in 2..=5 {
+        for n_threads in [2, 3, 5] {
             println!("{n_threads} threads:");
             multiple_producers_single_consumer_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
@@ -346,7 +341,7 @@ mod benchmark_queues {
     #[ignore]   // must run in a single thread for accurate measurements
     fn all_in_and_out_benchmarks() {
         println!();
-        for n_threads in 1..=4 {
+        for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
             all_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             all_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
@@ -358,7 +353,7 @@ mod benchmark_queues {
     #[ignore]   // must run in a single thread for accurate measurements
     fn single_in_and_out_benchmarks() {
         println!();
-        for n_threads in 1..=4 {
+        for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
             single_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             single_in_and_out_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
@@ -370,7 +365,7 @@ mod benchmark_queues {
     #[ignore]   // must run in a single thread for accurate measurements
     fn single_producer_multiple_consumers_benchmarks() {
         println!();
-        for n_threads in 2..=5 {
+        for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
             single_producer_multiple_consumers_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             single_producer_multiple_consumers_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
@@ -382,7 +377,7 @@ mod benchmark_queues {
     #[ignore]   // must run in a single thread for accurate measurements
     fn multiple_producers_single_consumer_benchmarks() {
         println!();
-        for n_threads in 2..=5 {
+        for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
             multiple_producers_single_consumer_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));
             multiple_producers_single_consumer_benchmark(Pin::into_inner(super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string())).as_ref(), n_threads, Duration::from_secs(5));

@@ -47,6 +47,7 @@ mod tests {
         time::Duration,
         future::Future
     };
+    use std::io::Write;
     use futures::{
         stream::{self, Stream, StreamExt}
     };
@@ -165,7 +166,7 @@ mod tests {
     async fn stats() {
 
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
-        // counters but no average futures resolution time measurements
+        // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
         let uni: Arc<Uni<String, 1024, 1>> = UniBuilder::new()
             .on_stream_close(|_| async {})
@@ -184,26 +185,27 @@ mod tests {
         assert_eq!(timeouts_avg_futures_resolution_duration, 0.0,  "avg futures resolution time of timed out '{}' events is wrong -- since it is a non-future event,, avg timeouts should be always 0.0", event_name);
 
         // asserts spawn_executor() register statistics appropriately:
-        // counters but no average futures resolution time measurements
+        // with counters & with average futures resolution time measurements
         let event_name = "future & fallible event";
         let uni: Arc<Uni<String, 1024, 1>> = UniBuilder::new()
             .futures_timeout(Duration::from_millis(150))
             .on_stream_close(|_| async {})
-            .spawn_executor(event_name, |stream| {
-                    stream.map(|payload: String| async move {
-                        if payload.contains("unsuccessful") {
-                            tokio::time::sleep(Duration::from_millis(50)).await;
-                            Err(Box::from(format!("failing the pipeline, as requested")))
-                        } else if payload.contains("timeout") {
-                            tokio::time::sleep(Duration::from_millis(200)).await;
-                            Ok("this answer will never make it -- stream executor times out after 100ms".to_string())
-                        } else {
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            Ok(payload)
-                        }
-                    })
-                },
-                |_| async {},
+            .spawn_executor(event_name,
+                            |stream| {
+                                stream.map(|payload: String| async move {
+                                    if payload.contains("unsuccessful") {
+                                        tokio::time::sleep(Duration::from_millis(50)).await;
+                                        Err(Box::from(format!("failing the pipeline, as requested")))
+                                    } else if payload.contains("timeout") {
+                                        tokio::time::sleep(Duration::from_millis(200)).await;
+                                        Ok("this answer will never make it -- stream executor times out after 100ms".to_string())
+                                    } else {
+                                        tokio::time::sleep(Duration::from_millis(100)).await;
+                                        Ok(payload)
+                                    }
+                                })
+                            },
+                            |_| async {},
             );
         let producer = |item| uni.try_send(item);
         // for this test, produce each event twice
@@ -428,7 +430,7 @@ mod tests {
     }
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[cfg_attr(not(doc),tokio::test(flavor="multi_thread", worker_threads=2))]
     #[ignore]   // must run in a single thread for accurate measurements
     async fn performance_measurements() {
 
@@ -444,17 +446,39 @@ mod tests {
                             (uni:            Arc<Uni<u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>,
                              profiling_name: &str,
                              count:          u32) {
+            print!("{profiling_name} "); std::io::stdout().flush().unwrap();
+            let mut full_count = 0u32;
             let start = Instant::now();
-            //let producer = uni.producer_closure();
             for e in 0..count {
                 while !uni.try_send(e) {
                     std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+                    full_count += 1;
+                    if full_count % (1<<28) == 0 {
+                        let flushed = uni.flush(Duration::from_secs(5)).await;
+                        if flushed > 0 {
+                            let msg = format!("awakening the Stream via `flush()` -- consumed {flushed} elements. Chase the BUG preventing the Stream from being awaken");
+                            println!("({msg})");
+                            panic!("Hanging was recovered after {msg}");
+                        } else {
+                            print!("!");
+                        }
+                        std::io::stdout().flush().unwrap();
+                    } else if full_count % (1<<27) == 0 {
+                        print!("(still stuck at e #{e}? reverting to tokio yield...)"); std::io::stdout().flush().unwrap();
+                        // if this fixes the hanging, means that tokio started the executor at the same thread the producer is executing
+                        for i in 0..e {
+                            tokio::task::yield_now().await;
+                        }
+                    } else if full_count % (1<<24) == 0 {
+                        print!("(stuck at e #{e}?)"); std::io::stdout().flush().unwrap();
+                    } else if full_count % (1<<20) == 0 {
+                        print!("."); std::io::stdout().flush().unwrap();
+                    }
                 };
             }
             uni.close(Duration::from_secs(5)).await;
             let elapsed = start.elapsed();
-            println!("{} {:10.2}/s -- {} items processed in {:?}",
-                     profiling_name,
+            println!("{:10.2}/s -- {} items processed in {:?}",
                      count as f64 / elapsed.as_secs_f64(),
                      count,
                      elapsed);

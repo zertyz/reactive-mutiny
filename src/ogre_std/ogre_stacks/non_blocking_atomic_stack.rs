@@ -48,7 +48,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
     fn push(&self, element: SlotType) -> bool {
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         loop {
-            let in_use = self.flag.swap(true, Ordering::Relaxed);
+            let in_use = self.flag.swap(true, Ordering::Acquire);
             if !in_use {
                 if self.head >= BUFFER_SIZE as u32 {
                     // stack is full
@@ -60,7 +60,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
                 }
                 mutable_self.buffer[self.head as usize] = element;
                 mutable_self.head += 1;
-                self.flag.store(false, Ordering::Relaxed);
+                self.flag.store(false, Ordering::Release);
                 if METRICS {
                     self.push_count.fetch_add(1, Ordering::Relaxed);
                 }
@@ -80,7 +80,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
     fn pop(&self) -> Option<SlotType> {
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         loop {
-            let in_use = self.flag.swap(true, Ordering::Relaxed);
+            let in_use = self.flag.swap(true, Ordering::Acquire);
             if !in_use {
                 if self.head == 0 {
                     // empty stack
@@ -92,7 +92,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
                 }
                 mutable_self.head -= 1;
                 let element = self.buffer[self.head as usize];
-                self.flag.store(false, Ordering::Relaxed);
+                self.flag.store(false, Ordering::Release);
                 if METRICS {
                     self.pop_count.fetch_add(1, Ordering::Relaxed);
                 }
@@ -152,19 +152,19 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     fn single_producer_multiple_consumers() {
-        let stack = Stack::<u32, 102400, false, false>::new("single_producer_multiple_consumers test stack".to_string());
+        let stack = Stack::<u32, 65536, false, false>::new("single_producer_multiple_consumers test stack".to_string());
         test_commons::container_single_producer_multiple_consumers(|e| stack.push(e), || stack.pop());
     }
 
     #[cfg_attr(not(doc),test)]
     fn multiple_producers_single_consumer() {
-        let stack = Stack::<u32, 102400, false, false>::new("multiple_producers_single_consumer test stack".to_string());
+        let stack = Stack::<u32, 65536, false, false>::new("multiple_producers_single_consumer test stack".to_string());
         test_commons::container_multiple_producers_single_consumer(|e| stack.push(e), || stack.pop());
     }
 
     #[cfg_attr(not(doc),test)]
     fn multiple_producers_and_consumers_all_in_and_out() {
-        let stack = Stack::<u32, 102400, false, false>::new("multiple_producers_and_consumers_all_in_and_out test stack".to_string());
+        let stack = Stack::<u32, 65536, false, false>::new("multiple_producers_and_consumers_all_in_and_out test stack".to_string());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, stack.buffer_size(), |e| stack.push(e), || stack.pop());
     }
 

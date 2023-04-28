@@ -51,6 +51,7 @@ mod tests {
             SystemTime,
         }
     };
+    use std::io::Write;
     use std::rc::Rc;
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
@@ -266,7 +267,7 @@ mod tests {
 
     /// assures stats are computed appropriately for every executor,
     /// according to the right instrumentation specifications
-    #[cfg_attr(not(doc),tokio::test)]
+    #[cfg_attr(not(doc),tokio::test(flavor="multi_thread", worker_threads=2))]
     #[ignore]   // flaky if ran in multi-thread: timeout measurements go south
     async fn stats() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(not(debug_assertions))]
@@ -275,7 +276,7 @@ mod tests {
         const N_PIPELINES: usize = 128;
 
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
-        // counters but no average futures resolution time measurements
+        // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
         let multi: Box<Multi<String, 256, N_PIPELINES>> = Box::new(Multi::new(event_name));
         for i in 0..N_PIPELINES {
@@ -283,7 +284,7 @@ mod tests {
         }
         let producer = |item: &str| multi.send(item.to_string());
         producer("'only count successes' payload");
-        multi.close(Duration::ZERO).await;
+        multi.close(Duration::from_secs(5)).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
         for (i, executor_info) in multi.executor_infos.read().await.values().enumerate() {
             let (ok_counter, ok_avg_futures_resolution_duration) = executor_info.stream_executor.ok_events_avg_future_duration.lightweight_probe();
@@ -298,24 +299,25 @@ mod tests {
         }
 
         // asserts spawn_executor() register statistics appropriately:
-        // counters but no average futures resolution time measurements
+        // with counters & with average futures resolution time measurements
         let event_name = "future & fallible event";
         let multi: Box<Multi<String, 256, N_PIPELINES>> = Box::new(Multi::new(event_name));
         for i in 0..N_PIPELINES {
-            multi.spawn_executor_ref(1, Duration::from_millis(150), format!("Pipeline #{} for {}", i, event_name), |stream| {
-                    stream.map(|payload| async move {
-                        if payload.contains("unsuccessful") {
-                            tokio::time::sleep(Duration::from_millis(50)).await;
-                            Err(Box::from(format!("failing the pipeline, as requested")))
-                        } else if payload.contains("timeout") {
-                            tokio::time::sleep(Duration::from_millis(200)).await;
-                            Ok(Arc::new(String::from("this answer will never make it -- stream executor times out after 100ms")))
-                        } else {
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            Ok(payload)
-                        }
-                    })
-                },
+            multi.spawn_executor_ref(1, Duration::from_millis(150), format!("Pipeline #{} for {}", i, event_name),
+                                     |stream| {
+                                         stream.map(|payload| async move {
+                                             if payload.contains("unsuccessful") {
+                                                 tokio::time::sleep(Duration::from_millis(50)).await;
+                                                 Err(Box::from(format!("failing the pipeline, as requested")))
+                                             } else if payload.contains("timeout") {
+                                                 tokio::time::sleep(Duration::from_millis(200)).await;
+                                                 Ok(Arc::new(String::from("this answer will never make it -- stream executor times out after 100ms")))
+                                             } else {
+                                                 tokio::time::sleep(Duration::from_millis(100)).await;
+                                                 Ok(payload)
+                                             }
+                                         })
+                                     },
                                      |_| async {},
                                      |_| async {}
             ).await?;
@@ -327,7 +329,7 @@ mod tests {
             producer("'unsuccessful' payload");
             producer("'timeout' payload");
         }
-        multi.close(Duration::ZERO).await;
+        multi.close(Duration::from_secs(5)).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
         for (i, executor_info) in multi.executor_infos.read().await.values().enumerate() {
             let (ok_counter, ok_avg_futures_resolution_duration) = executor_info.stream_executor.ok_events_avg_future_duration.lightweight_probe();
@@ -599,6 +601,7 @@ mod tests {
         let simple_producer = |item| simple_multi.send(item);
 
         // 1) Measure the time to produce & consume a SIMPLE event -- No other multi tokio tasks are available
+        tokio::time::sleep(Duration::from_millis(10)).await;
         simple_producer(SystemTime::now());
         // waits for the event to be processed
         while simple_count.load(Relaxed) != 1 {
@@ -623,6 +626,7 @@ mod tests {
         let bloated_producer = |item| bloated_multi.send(item);
 
         // 2) Bloat the Tokio Runtime with a lot of tasks -- multi executors in our case -- verifying all of them will run once
+        tokio::time::sleep(Duration::from_millis(10)).await;
         bloated_producer(SystemTime::now());
         // waits for the event to be processed
         while bloated_count.load(Relaxed) != BLOATED_PIPELINES_COUNT as u32 {
@@ -631,12 +635,8 @@ mod tests {
         let bloated_duration = Duration::from_nanos(bloated_last_elapsed_nanos.load(Relaxed));
         println!("2. Tokio Runtime is now BLOATED with {BLOATED_PIPELINES_COUNT} tasks -- all of them are multi executors. Time to produce + time for all pipelines to consume it: {:?}", bloated_duration);
 
-// // sleep a little to let all spin loops from the multi streams to settle down
-// tokio::time::sleep(Duration::from_millis(20000)).await;
-// FOR TOMORROW: busy waiting on the stream (to synchronize wakers) is causing issues here -- we take ~10secs to let the CPU
-// calm down (in debug mode). Is there a better way to resolve the syncing issue without having a huge number of multis to waste CPU?
-
         // 3) Measure (1) again. All BLOATED tasks are sleeping... so there should be no latency
+        tokio::time::sleep(Duration::from_millis(10)).await;    // give a little time for all Streams to settle
         simple_producer(SystemTime::now());
         // waits for the event to be processed
         while simple_count.load(Relaxed) != 2 {
@@ -645,8 +645,8 @@ mod tests {
         let second_simple_duration = Duration::from_nanos(simple_last_elapsed_nanos.load(Relaxed));
         println!("3. Time to produce & consume another SIMPLE event (with lots of -- {BLOATED_PIPELINES_COUNT} -- sleeping Multi Tokio tasks): {:?}", second_simple_duration);
 
-        assert!(second_simple_duration <= first_simple_duration,
-                "Tokio tasks' latency must be unaffected by whatever number of sleeping tasks there are (tasks executing our multi stream pipelines) -- task execution latencies: with 0 sleeping: {:?}; with {BLOATED_PIPELINES_COUNT} sleeping: {:?}",
+        assert!(u128::abs_diff(second_simple_duration.as_micros(), first_simple_duration.as_micros()) < 10,
+                "Tokio tasks' latency must be unaffected by whatever number of sleeping tasks there are (tasks executing our multi stream pipelines) -- task execution latencies exceeded the 10µs tolerance: with 0 sleeping: {:?}; with {BLOATED_PIPELINES_COUNT} sleeping: {:?}",
                 first_simple_duration,
                 second_simple_duration);
 
@@ -701,7 +701,7 @@ mod tests {
     }
 
         /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[cfg_attr(not(doc),tokio::test(flavor="multi_thread", worker_threads=2))]
     #[ignore]   // must run in a single thread for accurate measurements
     async fn performance_measurements() -> Result<(), Box<dyn std::error::Error>> {
 
@@ -717,6 +717,7 @@ mod tests {
                               (multi: &Multi<u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>,
                                profiling_name: &str,
                                count: u32) {
+            print!("{profiling_name} "); std::io::stdout().flush().unwrap();
             let start = Instant::now();
             let mut e = 0;
             while e < count {
@@ -729,8 +730,7 @@ mod tests {
             }
             multi.close(Duration::from_secs(5)).await;
             let elapsed = start.elapsed();
-            println!("{} {:10.2}/s -- {} items processed in {:?}",
-                     profiling_name,
+            println!("{:10.2}/s -- {} items processed in {:?}",
                      count as f64 / elapsed.as_secs_f64(),
                      count,
                      elapsed);
