@@ -90,13 +90,13 @@ pub fn ron_deserializer<T: for<'a> Deserialize<'a>>(message: &[u8]) -> Result<T,
 
 
 /// Unit tests for our socket server [serde](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
 
 
     /// assures RON serialization / deserialization works for all client / server messages
-    #[test]
+    #[cfg_attr(not(doc),test)]
     fn ron_serde_for_server_only() {
         let message = ServerMessages::UnknownMessage(String::from("This is an error message"));
         let expected = "UnknownMessage(\"This is an error message\")\n";

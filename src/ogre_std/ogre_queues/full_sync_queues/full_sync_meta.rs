@@ -187,7 +187,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 }
 
 
-#[cfg(any(test, feature="dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     //! Unit tests for [full_sync_meta](super) module
 
@@ -201,7 +201,7 @@ mod tests {
     };
 
     /// the full sync base queue should not allow independent produce/consume operations (one blocks the other while it is happening)
-    #[test]
+    #[cfg_attr(not(doc),test)]
     pub fn assure_syncing_dependency() {
         let queue = Arc::new(FullSyncMeta::<u32, 128>::new());
         let queue_ref1 = Arc::clone(&queue);

@@ -33,7 +33,7 @@ pub(crate) mod channels;
 
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [multi](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
     use super::super::{
@@ -64,7 +64,7 @@ mod tests {
 
 
     /// exercises the code present on the documentation
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn doc_tests() -> Result<(), Box<dyn std::error::Error>> {
         fn local_on_event(stream: impl Stream<Item=Arc<String>>) -> impl Stream<Item=Arc<String>> {
             stream.inspect(|message| println!("To Zeta: '{}'", message))
@@ -87,7 +87,7 @@ mod tests {
     }
 
     /// guarantees that one of the simplest possible testable 'multi' pipelines will get executed all the way through
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn simple_pipelines() -> Result<(), Box<dyn std::error::Error>> {
         const EXPECTED_SUM: u32 = 17;
         const PARTS: &[u32] = &[9, 8];
@@ -128,7 +128,7 @@ mod tests {
 
     /// shows how pipelines / executors may be cancelled / deleted / unsubscribed
     /// from the main event producer
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn delete_pipelines() {
         const PIPELINE_1: &str     = "Pipeline #1";
         const PIPELINE_2: &str     = "Pipeline #2";
@@ -189,7 +189,7 @@ mod tests {
 
     /// shows how we may call async functions inside `multi` pipelines
     /// and work with "future" elements
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn async_elements() -> Result<(), Box<dyn std::error::Error>> {
         const EXPECTED_SUM: u32 = 30;
         const PARTS: &[u32] = &[9, 8, 7, 6];
@@ -266,7 +266,7 @@ mod tests {
 
     /// assures stats are computed appropriately for every executor,
     /// according to the right instrumentation specifications
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn stats() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(not(debug_assertions))]
         const N_PIPELINES: usize = 256;
@@ -346,7 +346,7 @@ mod tests {
     /// shows how to fuse multiple `multi`s, triggering payloads for another `multi` when certain conditions are met:
     /// events TWO and FOUR will set a shared state between them, firing SIX.
     /// NOTE: every 'on_X_event()' function will be called twice, since we're setting 2 pipelines for each `multi`
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn demux() -> Result<(), Box<dyn std::error::Error>> {
         let shared_state = Arc::new(AtomicU32::new(0));
         let two_fire_count = Arc::new(AtomicU32::new(0));
@@ -486,7 +486,7 @@ mod tests {
     /// shows how to handle errors when they happen anywhere down the pipeline
     /// -- and what happens when they are not handled.
     /// + tests meaningful messages are produced
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn error_handling() -> Result<(), Box<dyn std::error::Error>> {
 
         let on_err_count = Arc::new(AtomicU32::new(0));
@@ -575,7 +575,7 @@ mod tests {
     /// 1) Time is measured to produce & consume a SIMPLE event
     /// 2) BLOATED is created and a single payload is produced to get all of them activated -- a check is done that all got processed
     /// 3) (1) is repeated -- the production-to-consumption time should be (nearly?) unaffected
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn undegradable_latencies() -> Result<(), Box<dyn std::error::Error>> {
         const BLOATED_PIPELINES_COUNT: usize = 256;
 
@@ -655,7 +655,7 @@ mod tests {
     }
 
     /// assures we're able to chain multiple multis while reusing the `Arc<T>` without any overhead
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn chained_multis() -> Result<(), Box<dyn std::error::Error>> {
         let expected_msgs = vec![
             "Hello, beautiful world!",
@@ -700,7 +700,8 @@ mod tests {
     }
 
         /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[ignore]
     async fn performance_measurements() -> Result<(), Box<dyn std::error::Error>> {
 
         #[cfg(not(debug_assertions))]

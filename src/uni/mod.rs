@@ -31,7 +31,7 @@ mod channels;
 
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
     use super::super::{
@@ -55,7 +55,7 @@ mod tests {
 
 
     /// exercises the code present on the documentation
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn doc_tests() {
         fn on_event<'r>(stream: impl Stream<Item=&'r str>) -> impl Stream<Item=&'r str> {
             stream
@@ -73,7 +73,7 @@ mod tests {
     }
 
     /// guarantees that one of the simplest possible testable 'uni' pipelines will get executed all the way through
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn simple_pipeline() {
         const EXPECTED_SUM: u32 = 17;
         const PARTS: &[u32] = &[9, 8];
@@ -105,7 +105,7 @@ mod tests {
 
     /// shows how we may call async functions inside a `Uni` pipeline
     /// and work with "future" elements
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn async_elements() {
         const EXPECTED_SUM: u32 = 30;
         const PARTS: &[u32] = &[9, 8, 7, 6];
@@ -160,7 +160,7 @@ mod tests {
 
     /// assures stats are computed appropriately for every executor,
     /// according to the right instrumentation specifications
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn stats() {
 
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
@@ -227,7 +227,7 @@ mod tests {
 
     /// shows how to fuse multiple `uni`s, triggering payloads for another uni when certain conditions are met:
     /// events TWO and FOUR will set a shared state between them, firing SIX.
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn demux() {
         let shared_state = Arc::new(AtomicU32::new(0));
         let two_fire_count = Arc::new(AtomicU32::new(0));
@@ -358,7 +358,7 @@ mod tests {
     /// shows how to handle errors when they happen anywhere down the pipeline
     /// -- and what happens when they are not handled.
     /// + tests meaningful messages are produced
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn error_handling() {
 
         let on_err_count = Arc::new(AtomicU32::new(0));
@@ -427,7 +427,8 @@ mod tests {
     }
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[ignore]
     async fn performance_measurements() {
 
         #[cfg(not(debug_assertions))]

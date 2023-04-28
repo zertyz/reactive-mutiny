@@ -202,7 +202,7 @@ fn iterate(start: usize, finish: usize, step: usize, callback: impl Fn(u32) -> (
     }
 }
 
-#[cfg(any(test, feature="dox"))]
+#[cfg(any(test,doc))]
 mod benchmark_stacks {
     //! Benchmarks all known stacks
 
@@ -239,7 +239,7 @@ mod benchmark_stacks {
 
     impl_benchmarkable_container_for!(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<SlotType, BUFFER_SIZE, false, false>);
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn all_in_and_out_benchmarks() {
         println!();
@@ -249,7 +249,7 @@ mod benchmark_stacks {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn single_in_and_out_benchmarks() {
         println!();
@@ -259,7 +259,7 @@ mod benchmark_stacks {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn single_producer_multiple_consumers_benchmarks() {
         println!();
@@ -269,7 +269,7 @@ mod benchmark_stacks {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn multiple_producers_single_consumer_benchmarks() {
         println!();
@@ -282,7 +282,7 @@ mod benchmark_stacks {
 }
 
 
-#[cfg(any(test, feature="dox"))]
+#[cfg(any(test,doc))]
 mod benchmark_queues {
     //! Benchmarks all known queues
 
@@ -342,7 +342,7 @@ mod benchmark_queues {
     impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);
     impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn all_in_and_out_benchmarks() {
         println!();
@@ -354,7 +354,7 @@ mod benchmark_queues {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn single_in_and_out_benchmarks() {
         println!();
@@ -366,7 +366,7 @@ mod benchmark_queues {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn single_producer_multiple_consumers_benchmarks() {
         println!();
@@ -378,7 +378,7 @@ mod benchmark_queues {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     #[ignore]
     fn multiple_producers_single_consumer_benchmarks() {
         println!();

@@ -7,5 +7,5 @@ pub mod ogre_sync;
 mod benchmarks;
 mod instruments;
 
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod test_commons;

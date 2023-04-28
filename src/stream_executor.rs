@@ -438,7 +438,7 @@ impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
 
 /// Unit tests & enforces the requisites of the [stream_executor](self) module.\
 /// Tests here mixes manual & automated assertions -- you should manually inspect the output of each one and check if the log outputs make sense
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicU32;
@@ -455,42 +455,42 @@ mod tests {
         info!("minstant: is TSC / RDTSC instruction available for time measurement? {}", minstant::is_tsc_available());
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_logs_and_metrics() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_metrics_and_no_logs() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_logs_and_no_metrics() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_no_logs_and_no_metrics() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_logs_and_metrics() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::with_futures_timeout("executor with logs & metrics", Duration::from_millis(100))).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_metrics_and_no_logs() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::with_futures_timeout("executor with metrics & NO logs", Duration::from_millis(100))).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_logs_and_no_metrics() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::with_futures_timeout("executor with logs & NO metrics", Duration::from_millis(100))).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_timeout_futures_fallible_executor_with_no_logs_and_no_metrics() {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::with_futures_timeout("executor with NO logs & NO metrics", Duration::from_millis(100))).await;
     }
@@ -529,22 +529,22 @@ mod tests {
 
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_logs_and_metrics() {
         assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_metrics_and_no_logs() {
         assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_logs_and_no_metrics() {
         assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
     }
 
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_futures_non_fallible_executor_with_no_logs_and_no_metrics() {
         assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
     }

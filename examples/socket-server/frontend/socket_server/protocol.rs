@@ -279,13 +279,13 @@ impl SocketServerDeserializer<ServerMessages> for ServerMessages {
 
 
 /// Unit tests the [protocol](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
 
 
     /// assures serialization / deserialization works for all client messages
-    #[test]
+    #[cfg_attr(not(doc),test)]
     fn serde_for_client_messages() {
         // keep this in sync with all available ClientMessages variants, in the order they are declared there
         let client_messages = vec![
@@ -317,7 +317,7 @@ mod tests {
     }
 
     /// assures serialization / deserialization works for all server messages
-    #[test]
+    #[cfg_attr(not(doc),test)]
     fn serde_for_server_messages() {
         // keep this in sync with all available ServerMessages variants, in the order they are declared there
         let server_messages = vec![

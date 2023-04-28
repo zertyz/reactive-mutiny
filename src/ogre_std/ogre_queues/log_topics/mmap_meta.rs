@@ -200,12 +200,12 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
 
 
 /// Unit tests the [mmap_meta](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
 
     /// Simple mmap open/close capabilities
-    #[cfg_attr(not(feature = "dox"), test)]
+    #[cfg_attr(not(doc),test)]
     fn happy_path() {
         #[derive(Debug,PartialEq)]
         struct MyData {
@@ -290,7 +290,7 @@ mod tests {
     }
 
     /// Checks the mmap file would be able to fill all the storage, if needed
-    #[cfg_attr(not(feature = "dox"), test)]
+    #[cfg_attr(not(doc),test)]
     fn indefinite_growth() {
 
         const N_ELEMENTS: u64 = 2 * 1024 * 1024;
@@ -343,7 +343,7 @@ mod tests {
     }
 
     /// Checks that dropping leaves no dangling references behind
-    #[cfg_attr(not(feature = "dox"), test)]
+    #[cfg_attr(not(doc),test)]
     fn safe_lifetimes<'a>() {
         const EXPECTED_ELEMENT: u128 = 1928384756;
 

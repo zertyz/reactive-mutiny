@@ -23,6 +23,10 @@ memmap      = "0.7"
 owning_ref = "0.4"      # allows Arcs to be used for internal references
 
 
+# doc-dependencies
+ctor          = "0.2"    # setup and teardown for modules
+
+
 [dev-dependencies]
 ctor          = "0.2"    # setup and teardown for modules
 simple_logger = "4.0"    # a dirty console logger

@@ -153,13 +153,13 @@ fn ron_extensions() -> ron::extensions::Extensions {
 }
 
 /// Unit tests the [config](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
 
     const TEST_CONFIG_FILE: &str = "/tmp/kickass-app-template-tests.config.ron";
 
-    #[cfg_attr(not(feature = "dox"), test)]
+    #[cfg_attr(not(doc),test)]
     fn file_load_and_save() {
         fs::remove_file(TEST_CONFIG_FILE).unwrap_or(());
 
@@ -190,7 +190,7 @@ mod tests {
     }
 
     /// assures [merge_configs()] addresses all cases
-    #[test]
+    #[cfg_attr(not(doc),test)]
     fn merging_completenes() {
 
         // checks high priority is honored

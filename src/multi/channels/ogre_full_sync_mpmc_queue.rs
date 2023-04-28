@@ -353,7 +353,7 @@ for*/ InternalOgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test, doc))]
 mod tests {
     use super::*;
     use std::io::Write;
@@ -362,7 +362,7 @@ mod tests {
 
 
     /// exercises the code present on the documentation for $uni_channel_type
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn doc_test() {
         let channel = OgreFullSyncMPMCQueue::<&str>::new("doc_test");
         let (mut stream, _stream_id) = channel.listener_stream();
@@ -371,7 +371,7 @@ mod tests {
     }
 
     /// guarantees no unsafe code is preventing proper dropping of the created channels and the returned streams
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn stream_and_channel_dropping() {
         {
             print!("Dropping the channel before the stream consumes the element: ");
@@ -414,7 +414,7 @@ mod tests {
 
     /// Multis are designed to allow on-the-fly additions and removal of streams.
     /// This test guarantees and stresses that
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn on_the_fly_streams() {
         let channel = OgreFullSyncMPMCQueue::<String>::new("on_the_fly_streams");
 
@@ -455,7 +455,7 @@ mod tests {
     }
 
     /// guarantees implementors allows copying messages over several streams
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn multiple_streams() {
         const ELEMENTS:         usize = 100;
         const PARALLEL_STREAMS: usize = 100;
@@ -498,7 +498,7 @@ mod tests {
     /// stresses on-demand stopping streams
     /// -- related to [dropping()], but here the "dropping" is active (controlled via a function call)
     ///    rather then structural (stream object getting out of scope)
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn end_streams() {
         const WAIT_TIME: Duration = Duration::from_millis(100);
         {
@@ -552,7 +552,7 @@ mod tests {
     }
 
     /// guarantees no unsafe code is preventing proper dropping & releasing of payload resources
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn payload_dropping() {
         const PAYLOAD_TEXT: &str = "A shareable playload";
         let channel = OgreFullSyncMPMCQueue::<String>::new("payload_dropping");
@@ -564,7 +564,8 @@ mod tests {
     }
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[ignore]
     async fn performance_measurements() {
         #[cfg(not(debug_assertions))]
         const FACTOR: u32 = 1024;

@@ -127,13 +127,13 @@ impl Drop for AtomicIncrementalAverage64 {
 }
 
 /// Unit tests the [stream_executors](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use super::*;
 
     /// Rudimentarily tests [AtomicIncrementalAverage64]:
     /// counts from 0 to `ELEMENTS` and compares the incremental averages to the theoretical one
-    #[cfg_attr(not(feature = "dox"), test)]
+    #[cfg_attr(not(doc),test)]
     fn incremental_averages() {
         const ELEMENTS: u32 = 12345679;
         let expected_average = |elements| (elements as f32 - 1.0) / 2.0;

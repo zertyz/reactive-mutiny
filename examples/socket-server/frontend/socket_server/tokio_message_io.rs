@@ -352,7 +352,7 @@ FastSender<MessagesType, DisconnectionReasonType> {
 
 
 /// Unit tests the [tokio_message_io](self) module
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use std::time::SystemTime;
     use futures::future::BoxFuture;
@@ -371,7 +371,7 @@ mod tests {
 
 
     /// assures connection & dialogs work
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn connect_and_disconnect() {
         const CLIENT_SECRET: &str = "open, sesame";
         const SERVER_SECRET: &str = "now the 40 of you may enter";
@@ -438,8 +438,7 @@ mod tests {
     /// Assures the minimum acceptable latency values -- either for Debug & Release modes.\
     /// One sends Ping(n); the other receives it and send Pong(n); the first receives it and sends Ping(n+1) and so on...\
     /// Latency is computed dividing the number of seconds per n*2 (we care about the server leg of the latency, while here we measure the round trip client<-->server)
-    //#[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test)]
     async fn latency_measurements() {
         const TEST_DURATION_MS: u64 = 2000;
         const TEST_DURATION_NS: u64 = TEST_DURATION_MS * 1e6 as u64;
@@ -514,8 +513,7 @@ mod tests {
     /// When a client floods the server with messages, it should, at most, screw just that client up... or, maybe, not even that!\
     /// This test works like the latency test, but we don't wait for the answer to come to send another one -- we just do it like crazy\
     /// (currently, as of 2022-10-29, a flooding client won't have all its messages processed, for some reason that should be still investigated and improved upon)
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread"))]
-    //#[cfg_attr(not(feature = "dox"), tokio::test)]
+    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread"))]
     async fn message_flooding_throughput_test() {
         const TEST_DURATION_MS: u64 = 2000;
         const TEST_DURATION_NS: u64 = TEST_DURATION_MS * 1e6 as u64;

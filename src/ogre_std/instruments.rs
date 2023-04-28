@@ -92,14 +92,14 @@ impl Instruments {
     }
 }
 
-#[cfg(any(test, feature="dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     //! Unit tests for [container_instruments](super) module
 
     use super::*;
 
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     fn exhaustive_from_and_into_conversions() {
         let all_variants = [
             Instruments::NoInstruments,
@@ -118,7 +118,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[cfg_attr(not(doc),test)]
     fn invalid_from() {
         // as soon as Rust allows it, the code bellow should not even compile
         assert_eq!(Instruments::from(127), Instruments::NoInstruments);

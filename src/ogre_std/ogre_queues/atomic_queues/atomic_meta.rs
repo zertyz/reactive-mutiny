@@ -253,7 +253,7 @@ fn relaxed_wait<SlotType>(_wait_factor: u32) {
     // }
 }
 
-#[cfg(any(test, feature="dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     //! Unit tests for [atomic_meta](super) module
 
@@ -267,7 +267,7 @@ mod tests {
     };
 
     /// the atomic meta queue should allow independent enqueueing (if dequeue takes too long to complete, enqueueing should not be affected)
-    #[test]
+    #[cfg_attr(not(doc),test)]
     pub fn assure_enqueue_syncing_independency() {
         let queue = AtomicMeta::<u32, 128>::new();
         let (independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(

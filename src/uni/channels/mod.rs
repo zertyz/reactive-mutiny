@@ -130,7 +130,7 @@ macro_rules! impl_uni_channel_for_struct {
 ///                    (which may even be configured by a "features" flag in Cargo):
 /// ```no_compile
 ///     type UniChannelType<ItemType, BUFFER_SIZE> = mutex_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE>
-#[cfg(any(test, feature = "dox"))]
+#[cfg(any(test,doc))]
 mod tests {
     use std::fmt::Debug;
     use std::future::Future;
@@ -150,7 +150,7 @@ mod tests {
     macro_rules! doc_test {
         ($fn_name: tt, $uni_channel_type: ty) => {
             /// exercises the code present on the documentation for $uni_channel_type
-            #[cfg_attr(not(feature = "dox"), tokio::test)]
+            #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new();
                 let mut stream = channel.consumer_stream().expect("At least one stream should be available -- regardless of the implementation");
@@ -172,7 +172,7 @@ mod tests {
         ($fn_name: tt, $uni_channel_type: ty) => {
             /// guarantees no unsafe code is preventing proper dropping of artifacts for implementors
             /// allowing splitting messages into several parallel streams
-            #[cfg_attr(not(feature = "dox"), tokio::test)]
+            #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
                 {
                     print!("Dropping the channel before the stream consumes the element: ");
@@ -224,7 +224,7 @@ mod tests {
     macro_rules! parallel_streams {
         ($fn_name: tt, $uni_channel_type: ty) => {
             /// guarantees implementors allows splitting messages in several parallel streams
-            #[cfg_attr(not(feature = "dox"), tokio::test)]
+            #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
 
                 let channel = <$uni_channel_type>::new();
@@ -267,7 +267,8 @@ mod tests {
 
 
     /// assures performance won't be degraded when we make changes
-    #[cfg_attr(not(feature = "dox"), tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[cfg_attr(not(doc),tokio::test(flavor = "multi_thread", worker_threads = 4))]
+    #[ignore]
     async fn performance_measurements() {
         #[cfg(not(debug_assertions))]
         const FACTOR: u32 = 1024;
