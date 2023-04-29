@@ -42,15 +42,15 @@ impl<SlotType:          Unpin + Debug,
 OgreQueue<SlotType>
 for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
-    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized {
-        Box::pin(Self {
+    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self {
+        Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             base_queue:         FullSyncMeta::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),
-        })
+        }
     }
 
     #[inline(always)]

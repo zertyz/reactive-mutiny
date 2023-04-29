@@ -44,6 +44,10 @@ MetaQueue<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
+        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
+        // if !BUFFER_SIZE.is_power_of_two() {
+        //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
+        // }
         Self {
             full_guard:        AtomicBool::new(false),
             concurrency_guard: AtomicBool::new(false),
@@ -94,6 +98,18 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         ogre_sync::unlock(&self.concurrency_guard);
         report_len_after_enqueueing_fn(len_before+1);
         true
+    }
+
+    fn leak_slot(&self) -> Option<&SlotType> {
+        todo!()
+    }
+
+    fn publish_leaked(&'a self, slot: &'a SlotType) {
+        todo!()
+    }
+
+    fn unleak_slot(&'a self, slot: &'a SlotType) {
+        todo!()
     }
 
     #[inline(always)]
@@ -161,6 +177,14 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         Some(ret_val)
     }
 
+    fn consume_leaking(&'a self) -> Option<&'a SlotType> {
+        todo!()
+    }
+
+    fn release_leaked(&'a self, slot: &'a SlotType) {
+        todo!()
+    }
+
     #[inline(always)]
     unsafe fn peek_remaining(&self) -> [&[SlotType];2] {
         let head_index = self.head as usize % BUFFER_SIZE;
@@ -183,6 +207,15 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
             }
         }
     }
+
+}
+
+impl<'a, SlotType:          'a + Debug,
+         const BUFFER_SIZE: usize>
+FullSyncMeta<SlotType, BUFFER_SIZE> {
+
+    /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
+    const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
 
 }
 

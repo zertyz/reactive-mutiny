@@ -54,7 +54,7 @@ NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         let dequeuer_head         = self.base_queue.dequeuer_head.load(Relaxed);
         let enqueuer_tail         = self.base_queue.enqueuer_tail.load(Relaxed);
 
-        if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % 1024000 == 0 {
+        if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % (1<<20) == 0 {
             println!("Atomic BlockingQueue '{}'", self.queue_name);
             println!("    STATE:        head: {:8}, tail: {:8}, dequeuer_head: {:8}, enqueuer_tail: {:8} ", head, tail, dequeuer_head, enqueuer_tail);
             println!("    CONTENTS:     {:12} elements,   {:12} buffer", len, BUFFER_SIZE);
@@ -71,15 +71,15 @@ impl<SlotType:          Copy+Debug,
 OgreQueue<SlotType>
 for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
-    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized {
-        Box::pin(Self {
+    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self {
+        Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             base_queue:         AtomicMeta::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),
-        })
+        }
     }
 
     #[inline(always)]

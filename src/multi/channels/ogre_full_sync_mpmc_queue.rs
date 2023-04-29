@@ -51,7 +51,7 @@ pub type OgreFullSyncMPMCQueue<ItemType,
 /// making this channel a typical best fit for small & trivial types.\
 /// Please, measure your `Multi`s using all available channels [OgreFullSyncMPMCQueue], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
 /// See also [multi::channels::ogre_full_sync_mpmc_queue].\
-/// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
+/// Refresher: the backing queue requires `BUFFER_SIZE` to be a power of 2 -- the same applies to `MAX_STREAMS`, which will also have its own queue
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Send + Sync + Debug,
                                          const BUFFER_SIZE: usize,
@@ -66,7 +66,7 @@ pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Send + Sync + Debug,
     streams_lock:           AtomicBool,
     /// the id # of streams that can be created are stored here.\
     /// synced with `used_streams`, so creating & dropping streams occurs as fast as possible, as well as enqueueing elements
-    vacant_streams:         Pin<Box<NonBlockingQueue<u32, MAX_STREAMS>>>,
+    vacant_streams:         NonBlockingQueue<u32, MAX_STREAMS>,
     /// this is synced with `vacant_streams` to be its counter-part -- so enqueueing is optimized:
     /// it holds the stream ids that are active, `u32::MAX` being used to indicate a premature end of the list
     used_streams:           [u32; MAX_STREAMS],
@@ -474,7 +474,7 @@ mod tests {
     #[cfg_attr(not(doc),tokio::test)]
     async fn multiple_streams() {
         const ELEMENTS:         usize = 100;
-        const PARALLEL_STREAMS: usize = 100;
+        const PARALLEL_STREAMS: usize = 128;
 
         let channel = OgreFullSyncMPMCQueue::<u32, 128, PARALLEL_STREAMS>::new("multiple_streams");
 
@@ -704,9 +704,9 @@ mod tests {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new("profile_same_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new("profile_different_task_same_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new("profile_different_task_different_thread_channel"), "OgreMPMCQueue ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "OgreMPMCQueue ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "OgreMPMCQueue ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "OgreMPMCQueue ", 16384*FACTOR);
     }
 
 }

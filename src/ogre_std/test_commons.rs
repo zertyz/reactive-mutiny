@@ -351,10 +351,10 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
         //     for _ in 0..5 {
         //         std::thread::sleep(std::time::Duration::from_secs(2));
         //         println!("###Not done yet????");
-        //         println!("    PRODUCTION:   {:12} successful, {:12} reported queue was full",
+        //         println!("    PRODUCTION:   {:12} successful, {:12} reported container was full",
         //                  observed_successful_productions.load(Relaxed),
         //                  observed_productions.load(Relaxed) - observed_successful_productions.load(Relaxed));
-        //         println!("    CONSUMPTION:  {:12} successful, {:12} reported queue was empty",
+        //         println!("    CONSUMPTION:  {:12} successful, {:12} reported container was empty",
         //                  observed_successful_consumptions.load(Relaxed),
         //                  observed_consumptions.load(Relaxed) - observed_successful_consumptions.load(Relaxed));
         //         //queue.debug();
@@ -364,10 +364,10 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
 
 
     println!("'container_multiple_producers_single_consumer' test concluded with:");
-    println!("    PRODUCTION:   {:12} successful, {:12} reported stack was full",
+    println!("    PRODUCTION:   {:12} successful, {:12} reported container was full",
              observed_successful_productions.load(Relaxed),
              observed_productions.load(Relaxed)- observed_successful_productions.load(Relaxed));
-    println!("    CONSUMPTION:  {:12} successful, {:12} reported stack was empty",
+    println!("    CONSUMPTION:  {:12} successful, {:12} reported container was empty",
              observed_successful_consumptions.load(Relaxed),
              observed_consumptions.load(Relaxed)- observed_successful_consumptions.load(Relaxed));
 

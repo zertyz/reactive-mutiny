@@ -13,7 +13,7 @@ pub mod log_topics;
 
 /// multi-producer / multi-consumer queue
 pub trait OgreQueue<SlotType> {
-    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized;
+    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self;
     /// Attempts to add `element` to queue, returning immediately for non-blocking queues... possibly blocking otherwise.
     /// Returns `true` if the element was added, `false` if the queue was full... blocking queues might never return `false`.
     fn enqueue(&self, element: SlotType) -> bool;

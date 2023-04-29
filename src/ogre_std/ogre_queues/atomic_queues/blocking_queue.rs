@@ -152,7 +152,7 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         let dequeue_count         = self.dequeue_count.load(Relaxed);
         let queue_empty_count     = self.queue_empty_count.load(Relaxed);
 
-        if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % 1024000 == 0 {
+        if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % (1<<20) == 0 {
             println!("Atomic BlockingQueue '{}' state:", self.queue_name);
             println!("    CONTENTS:     {:12} elements,   {:12} buffer -- locks: enqueueing={locked_for_enqueueing}; dequeueing={locked_for_dequeueing}", len, BUFFER_SIZE);
             println!("    PRODUCTION:   {:12} successful, {:12} reported queue was full",  enqueue_count, queue_full_count);
@@ -169,8 +169,8 @@ impl<SlotType:                  Copy+Debug,
 OgreQueue<SlotType>
 for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
-    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> where Self: Sized {
-        let instance = Box::pin(Self {
+    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self {
+        let instance = Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             full_guard:         RawMutex::INIT,
@@ -179,7 +179,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),
-        });
+        };
         instance.full_guard.try_lock();
         instance.empty_guard.try_lock();
         instance

@@ -387,17 +387,17 @@ if counter == count {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(TokioMPSC::<u32, 10240>::new(), "TokioMPSC ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(TokioMPSC::<u32, 10240>::new(), "TokioMPSC ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(TokioMPSC::<u32, 10240>::new(), "TokioMPSC ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(TokioMPSC::<u32, 262144>::new(), "TokioMPSC ", 262144*FACTOR);
+        profile_different_task_same_thread_channel!(TokioMPSC::<u32, 262144>::new(), "TokioMPSC ", 262144*FACTOR);
+        profile_different_task_different_thread_channel!(TokioMPSC::<u32, 262144>::new(), "TokioMPSC ", 262144*FACTOR);
 
-        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 10240, 1>::new(), "OgreFullSyncMPMCQueue ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 262144, 1>::new(), "OgreFullSyncMPMCQueue ", 262144*FACTOR);
+        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 262144, 1>::new(), "OgreFullSyncMPMCQueue ", 262144*FACTOR);
+        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 262144, 1>::new(), "OgreFullSyncMPMCQueue ", 262144*FACTOR);
 
-        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
-        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, 10240, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
-        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, 409600, 1>::new(), "AtomicMPMCQueue ", 10240*FACTOR);
+        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, 262144, 1>::new(), "AtomicMPMCQueue ", 262144*FACTOR);
+        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, 262144, 1>::new(), "AtomicMPMCQueue ", 262144*FACTOR);
+        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, 262144, 1>::new(), "AtomicMPMCQueue ", 262144*FACTOR);
     }
 
     /// executes the given `fut`ure, tracking timeouts

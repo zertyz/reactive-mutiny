@@ -147,6 +147,18 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
         true
     }
 
+    fn leak_slot(&self) -> Option<&SlotType> {
+        todo!()
+    }
+
+    fn publish_leaked(&'a self, slot: &'a SlotType) {
+        todo!()
+    }
+
+    fn unleak_slot(&'a self, slot: &'a SlotType) {
+        todo!()
+    }
+
     fn available_elements(&self) -> usize {
         todo!()
     }
@@ -191,6 +203,14 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
         let slot_ref = &mut mutable_self.buffer[head];
         Some(getter_fn(slot_ref))
 
+    }
+
+    fn consume_leaking(&'a self) -> Option<&'a SlotType> {
+        todo!()
+    }
+
+    fn release_leaked(&'a self, slot: &'a SlotType) {
+        todo!()
     }
 
     unsafe fn peek_remaining(&self) -> [&[SlotType]; 2] {

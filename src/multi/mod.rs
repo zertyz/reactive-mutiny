@@ -76,7 +76,7 @@ mod tests {
         fn earth_on_event(stream: impl Stream<Item=Arc<String>>) -> impl Stream<Item=Arc<String>> {
             stream.inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
         }
-        let multi: Multi<String, 1024, 3> = Multi::new("doc_test() event")
+        let multi: Multi<String, 1024, 4> = Multi::new("doc_test() event")
             .spawn_non_futures_non_fallible_executor(1, "local screen", local_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "zeta receiver", zeta_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "earth snapper", earth_on_event, |_| async {}).await?;
@@ -645,8 +645,9 @@ mod tests {
         let second_simple_duration = Duration::from_nanos(simple_last_elapsed_nanos.load(Relaxed));
         println!("3. Time to produce & consume another SIMPLE event (with lots of -- {BLOATED_PIPELINES_COUNT} -- sleeping Multi Tokio tasks): {:?}", second_simple_duration);
 
-        assert!(u128::abs_diff(second_simple_duration.as_micros(), first_simple_duration.as_micros()) < 10,
-                "Tokio tasks' latency must be unaffected by whatever number of sleeping tasks there are (tasks executing our multi stream pipelines) -- task execution latencies exceeded the 10µs tolerance: with 0 sleeping: {:?}; with {BLOATED_PIPELINES_COUNT} sleeping: {:?}",
+        const TOLERANCE_MICROS: u128 = 1;
+        assert!(second_simple_duration < first_simple_duration || second_simple_duration.as_micros() - first_simple_duration.as_micros() < TOLERANCE_MICROS,
+                "Tokio tasks' latency must be unaffected by whatever number of sleeping tasks there are (tasks executing our multi stream pipelines) -- task execution latencies exceeded the {TOLERANCE_MICROS}µs tolerance: with 0 sleeping: {:?}; with {BLOATED_PIPELINES_COUNT} sleeping: {:?}",
                 first_simple_duration,
                 second_simple_duration);
 
@@ -667,7 +668,7 @@ mod tests {
         let second_multi_msgs = Arc::new(std::sync::Mutex::new(vec![]));
         let second_multi_msgs_ref = Arc::clone(&second_multi_msgs);
 
-        let second_multi: Multi<String, 1024, 3> = Multi::new("second chained multi, receiving the Arc-wrapped event -- with no copying (and no additional Arc cloning)")
+        let second_multi: Multi<String, 1024, 4> = Multi::new("second chained multi, receiving the Arc-wrapped event -- with no copying (and no additional Arc cloning)")
             .spawn_non_futures_non_fallible_executor(1, "second executor", move |stream| {
                 stream.map(move |message| {
                     println!("`second_multi` received '{:?}'", message);
@@ -678,7 +679,7 @@ mod tests {
             }, |_| async {}).await?;
         let second_multi = Arc::new(second_multi);
         let second_multi_ref = Arc::clone(&second_multi);
-        let first_multi: Multi<String, 1024, 3> = Multi::new("first chained multi, receiving the original events")
+        let first_multi: Multi<String, 1024, 4> = Multi::new("first chained multi, receiving the original events")
             .spawn_non_futures_non_fallible_executor(1, "first executor", move |stream| {
                 stream.map(move |message: Arc<String>| {
                     println!("`first_multi` received '{:?}'", message);
@@ -739,22 +740,22 @@ mod tests {
         println!();
 
         let profiling_name = "metricfull_non_futures_non_fallible_multi:    ";
-        let multi: Multi<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
             .spawn_non_futures_non_fallible_executor(1, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_multi:    ";
-        let multi: Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
             .spawn_non_futures_non_fallible_executor(1, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_multi:";
-        let multi: Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
             .spawn_non_futures_non_fallible_executor(12, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_multi:            ";
-        let multi: Multi<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::ZERO, "",
                             |stream| {
                                 stream.map(|number| async move {
@@ -766,7 +767,7 @@ mod tests {
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_futures_fallible_multi:            ";
-        let multi: Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::ZERO, "",
                             |stream| {
                                 stream.map(|number| async move {
@@ -778,7 +779,7 @@ mod tests {
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "timeoutable_metricfull_futures_fallible_multi:";
-        let multi: Multi<u32, 10240, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::from_millis(100), "",
                             |stream| {
                                  stream.map(|number| async move {
@@ -790,7 +791,7 @@ mod tests {
         profile_multi(&multi, profiling_name, 768*FACTOR).await;
 
         let profiling_name = "timeoutable_metricless_futures_fallible_multi:";
-        let multi: Multi<u32, 10240, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::from_millis(100), "",
                             |stream| {
                                 stream.map(|number| async move {

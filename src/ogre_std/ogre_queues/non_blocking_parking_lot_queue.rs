@@ -33,8 +33,8 @@ pub struct Queue<SlotType, const BUFFER_SIZE: usize, const METRICS: bool, const 
 }
 impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const DEBUG: bool>
 OgreQueue<SlotType> for Queue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
-    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Pin<Box<Self>> {
-        Box::pin(Self {
+    fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self {
+        Self {
             buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
             concurrency_guard:    RawMutex::INIT,
             head:                 0,
@@ -46,7 +46,7 @@ OgreQueue<SlotType> for Queue<SlotType, BUFFER_SIZE, METRICS, DEBUG> {
             queue_full_count:     0,
             queue_empty_count:    0,
             queue_name:           queue_name.into(),
-        })
+        }
     }
 
     #[inline(always)]

@@ -37,6 +37,7 @@ MetaQueue<'a, SlotType> for
 AtomicMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
+        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
         Self {
             head:                 AtomicU32::new(0),
             tail:                 AtomicU32::new(0),
@@ -45,6 +46,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
             buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
         }
     }
+
 }
 
 impl<'a, SlotType:          'a + Debug,
@@ -62,67 +64,35 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
               -> bool {
 
-        let mutable_buffer = unsafe {
-            let const_ptr = self.buffer.as_ptr();
-            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
-            &mut *mut_ptr
+        match self.leak_slot_internal(report_full_fn) {
+            Some( (slot, slot_id, len_before) ) => {
+                setter_fn(slot);
+                self.publish_leaked_internal(slot_id);
+                report_len_after_enqueueing_fn(len_before+1);
+                true
+            },
+            None => false,
+        }
+    }
+
+    #[inline(always)]
+    fn leak_slot(&self) -> Option<&SlotType> {
+        self.leak_slot_internal(|| false)
+            .map(|(slot_ref, _slot_id, _len_before)| &*slot_ref)
+    }
+
+    #[inline(always)]
+    fn publish_leaked(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        self.publish_leaked_internal(slot_id)
+    }
+
+    #[inline(always)]
+    fn unleak_slot(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        while !self.try_unleak_slot_internal(slot_id) {
+            std::hint::spin_loop();
         };
-        let mut slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
-        let mut len_before;
-        loop {
-            let head = self.head.load(Relaxed);
-            len_before = slot_id.overflowing_sub(head).0;
-            // is queue full?
-            if len_before < BUFFER_SIZE as u32 {
-                break
-            } else {
-// concurrency bug instrumentation
-// if len_before > BUFFER_SIZE as u32 {
-//     let current_enqueuer_tail = self.enqueuer_tail.load(Relaxed);
-//     let current_dequeuer_tail = self.dequeuer_tail.load(Relaxed);
-//     let concurrent_enqueuers = self.concurrent_enqueuers.load(Relaxed);
-//     if current_enqueuer_tail - current_dequeuer_tail > concurrent_enqueuers {
-//         println!("## current_enqueuer_tail: {current_enqueuer_tail}; current_dequeuer_tail: {current_dequeuer_tail}; concurrent_enqueuers: {concurrent_enqueuers}");
-//     }
-// }
-                // queue is full: restabilish the correct `enqueuer_tail` (receeding it to its original value)
-                match self.enqueuer_tail.compare_exchange(slot_id + 1, slot_id, Release, Acquire) {
-                    Ok(_) => {
-                        // report the queue is full, allowing a retry, if the method says we recovered from the condition
-                        if !report_full_fn() {
-                            return false;
-                        } else {
-                            slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
-                        }
-                    },
-                    Err(reloaded_enqueuer_tail) => {
-                        if reloaded_enqueuer_tail > slot_id {
-                            // a new cmp_exch will be attempted due to concurrent modification of the variable
-                            // we'll relax the cpu proportional to our position in the "concurrent modification order"
-                            relaxed_wait::<SlotType>(reloaded_enqueuer_tail - slot_id);
-                        } else {
-                            panic!(" SHOULD NOT HAPPEN ");
-                        }
-                    },
-                }
-            }
-        }
-
-        setter_fn(&mut mutable_buffer[slot_id as usize % BUFFER_SIZE]);
-
-        // strong sync tail
-        loop {
-            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Acquire) {
-                Ok(_) => break,
-                Err(reloaded_tail) => {
-                    if slot_id > reloaded_tail {
-                        relaxed_wait::<SlotType>(slot_id - reloaded_tail)
-                    }
-                },
-            }
-        }
-        report_len_after_enqueueing_fn(len_before+1);
-        true
     }
 
     #[inline(always)]
@@ -216,6 +186,14 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         Some(ret_val)
     }
 
+    fn consume_leaking(&'a self) -> Option<&'a SlotType> {
+        todo!()
+    }
+
+    fn release_leaked(&'a self, slot: &'a SlotType) {
+        todo!()
+    }
+
     unsafe fn peek_remaining(&self) -> [&[SlotType]; 2] {
         let head_index = self.head.load(Relaxed) as usize % BUFFER_SIZE;
         let tail_index = self.tail.load(Relaxed) as usize % BUFFER_SIZE;
@@ -238,6 +216,100 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         }
     }
 
+}
+
+impl<'a, SlotType:          'a + Debug,
+         const BUFFER_SIZE: usize>
+AtomicMeta<SlotType, BUFFER_SIZE> {
+
+    /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
+    const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
+
+
+    /// Gets hold of one of the slots available in the pool,\
+    /// returning: (a mutable reference to the data, the slot id, the current count of elements available for consumption).\
+    /// If the pool is empty, `report_full_fn()` is called to inform the condition. If it was able to release any items,
+    /// it should return `true`, which will cause this algorithm to try again instead of giving up with `None`.\
+    /// This implementation allows slots to be returned to the pool while there are allocated (but still unpublished slots) around,
+    /// allowing the publication & consumption operations not happen in parallel.
+    #[inline(always)]
+    fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&mut SlotType, /*slot_id:*/ u32, /*len_before:*/ u32)> {
+        let mutable_buffer = unsafe {
+            let const_ptr = self.buffer.as_ptr();
+            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
+            &mut *mut_ptr
+        };
+        let mut slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
+        let mut len_before;
+        loop {
+            let head = self.head.load(Relaxed);
+            len_before = slot_id.overflowing_sub(head).0;
+            // is queue full?
+            if len_before < BUFFER_SIZE as u32 {
+                break
+            } else {
+                // queue is full: reestablish the correct `enqueuer_tail` (receding it to its original value)
+                if self.try_unleak_slot_internal(slot_id) {
+                    // report the queue is full (allowing a retry) if the method says we recovered from the condition
+                    if report_full_fn() {
+                        slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
+                    } else {
+                        return None;
+                    }
+                }
+            }
+        }
+        Some( (&mut mutable_buffer[slot_id as usize % BUFFER_SIZE], slot_id, len_before) )
+    }
+
+    /// Marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
+    /// that started with a call to [leak_slot_internal()]
+    #[inline(always)]
+    fn publish_leaked_internal(&'a self, slot_id: u32) {
+        loop {
+            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Acquire) {
+                Ok(_) => break,
+                Err(reloaded_tail) => {
+                    if slot_id > reloaded_tail {
+                        relaxed_wait::<SlotType>(slot_id - reloaded_tail)
+                    }
+                },
+            }
+        }
+    }
+
+    /// Attempt to return the slot at `slot_id` to the pool of available slots -- disrupting the publishing of an event
+    /// that was started with a call to [leak_slot_internal()].\
+    #[inline(always)]
+    fn try_unleak_slot_internal(&'a self, slot_id: u32) -> bool {
+        match self.enqueuer_tail.compare_exchange_weak(slot_id + 1, slot_id, Relaxed, Relaxed) {
+            Ok(_) => true,
+            Err(reloaded_enqueuer_tail) => {
+                if reloaded_enqueuer_tail > slot_id {
+                    // a new cmp_exch will be attempted due to concurrent modification of the variable
+                    // we'll relax the cpu proportional to our position in the "concurrent modification order"
+                    relaxed_wait::<SlotType>(reloaded_enqueuer_tail - slot_id);
+                } else {
+                    //#[cfg(debug_assertions)]
+                    panic!("AtomicMeta: unleak_slot_internal: AN ERROR THAT SHOULD NOT HAPPEN!");
+                    //panic!("Detected an attempt to `unleak_slot(#{slot_id}` after another allocation (issueing slot #{reloaded_enqueuer_tail})`");
+                }
+                false
+            }
+        }
+    }
+
+    /// Returns the id (within the Ring Buffer) that the given `slot` reference occupies
+    #[inline(always)]
+    fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
+        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.as_ptr() as *const SlotType) } ) as usize) as u32
+    }
+
+    /// Returns a reference to the slot pointed to by `slot_id`
+    #[inline(always)]
+    fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
+        &self.buffer[slot_id as usize % BUFFER_SIZE]
+    }
 }
 
 // NOTE: spin_loop instruction disabled for now, as Tokio is faster without it (frees the CPU to do other tasks)

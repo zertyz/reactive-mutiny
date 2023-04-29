@@ -1,7 +1,11 @@
 //! Resting place for the [MetaPublisher] trait.
 
 
-/// API for producing elements to a [meta_queue] or [meta_topic].
+/// API for producing elements to a [meta_queue] or [meta_topic].\
+/// Two zero-copy patterns are available:
+///   1) `publish()` is the simplest & safest: a callback closure is provided to fill in the data;
+///   2) `leak_slot()` / `publish_leaked()` offers a more flexible (but more dangerous) option,
+///      allowing the allocated slot to participate in more complex logics.
 pub trait MetaPublisher<'a, SlotType: 'a> {
 
     /// Zero-copy enqueue method with the following characteristics:
@@ -26,6 +30,30 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
                report_full_fn:                 ReportFullFn,
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
               -> bool;
+
+    /// Advanced method to publish an element: allocates a slot from the pool, returning a reference to it.\
+    /// Once called, either [publish_leaked()] or [unleak_slot()] should also be, eventually, called
+    /// --  or else the slot will never be returned to the pool for reuse.
+    fn leak_slot(&self) -> Option<&SlotType>;
+
+    /// Advanced method to publish a slot (previously allocated with [leak_slot()]) and filled by the caller.\
+    /// The slot will proceed to b handed over to consumers, and returned to the pool afterwards.\
+    /// Please note some caveats:
+    ///   1) Ring-Buffer based implementors will, typically, enforce that this method will be executed in the same order in which
+    ///      [leak_slot()] was called -- this may either be done through a context-switch or by simply spinning. This is of concern only
+    ///      if parallel production is being used and, in this case, publishers will be efficient only if they all take the same time between
+    ///      the calls of the two methods;
+    ///   2) Nor Log-based nor Array-based implementors suffer any of the restrictions stated above.
+    fn publish_leaked(&'a self, slot: &'a SlotType);
+
+    /// Advanced method to return a slot (obtained by [allocate_slot()]) to the pool, so it may be reused.\
+    /// Note that not all implementors allow using this method.\
+    /// It is known that:
+    ///   1) Ring-Buffer based implementors will only accept back the `slot` if no other allocation has been done after that one
+    ///      -- they will fail silently if this is attempted, by hanging forever: so this should only be used on single-thread producers;
+    ///   2) Log-based implementors won't reuse the cancelled slot, so excessive calling this method may cause the application to consume more resources;
+    ///   3) Array-based implementors will deal optimally with the cancelled slots: they will be immediately returned to the pool.
+    fn unleak_slot(&'a self, slot: &'a SlotType);
 
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)

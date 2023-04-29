@@ -1,7 +1,10 @@
 //! Resting place for the [MetaSubscriber] trait.
 
 
-/// API for consuming elements from a [meta_queue] or [meta_topic].
+/// API for consuming elements from a [meta_queue] or [meta_topic].\
+/// Two zero-copy patterns are available:
+///   1) `consume()` is the simples & safest: a callback closure is provided, which receives a reference to the data -- with the ability to return a value, also returned by `consume()`;
+///   2) `consume_leaking()` / `release_leaked()` offers a more flexible (but more dangerous) option, allowing the reference slot to participate in more complex logics.
 pub trait MetaSubscriber<'a, SlotType: 'a> {
 
     /// Zero-copy dequeue method with the following characteristics:
@@ -21,6 +24,25 @@ pub trait MetaSubscriber<'a, SlotType: 'a> {
                report_empty_fn:                ReportEmptyFn,
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType>;
+
+    /// Advanced method to "consume" the next element from the pool, returning a reference to the data.\
+    /// The slot in which the data sits won't be put back into the pool (for reuse) until [release_leaked()] is called.\
+    /// Please notice that misuse of this method may bring the underlying container into an unusable state, as it may run out of slots
+    /// for new elements to be published in.\
+    /// Additional caveats:
+    ///   1) Ring-Buffer implementors will, typically, enforce that [release_leaked()] will be executed in the same order in which
+    ///      this method was called -- this may either be done through a context-switch or by simply spinning. This is of concern only
+    ///      if parallel consumption is being used and, in this case, consumers will be efficient only if they all take the same time
+    ///      between the calls of the two methods;
+    ///   2) Log-based implementors don't suffer any restrictions -- they don't even require the call to [release_leaked()], as elements
+    ///      from these kind of implementors won't ever reuse a slot;
+    ///   3) Array-based implementors don't suffer from the ordering requirements above, nor any real-time guarantees to be efficient,
+    ///      but do require [release_leaked()] to be called.
+    fn consume_leaking(&'a self) -> Option<&'a SlotType>;
+
+    /// Put the `slot` returned by [consume_leaking()] back into the pool, so it may be reused.\
+    /// See the mentioned method for more info.
+    fn release_leaked(&'a self, slot: &'a SlotType);
 
     /// Considering parallelism, this method *might* provide access to all elements available for [consume()].\
     /// This method is totally not thread safe for ring-buffer based implementations -- the moment it returns, all those elements might have already
