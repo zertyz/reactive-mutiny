@@ -303,7 +303,7 @@ mod tests {
             known_number_of_descendents: u32,
         }
 
-        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/indefinite_growth.test.mmap", 1024 * 1024 * 1024 * 1024)
+        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/indefinite_growth.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
         let consumer = meta_log_topic.subscribe(true);
 
@@ -347,7 +347,7 @@ mod tests {
     fn safe_lifetimes<'a>() {
         const EXPECTED_ELEMENT: u128 = 1928384756;
 
-        let mut meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024 * 1024)
+        let mut meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
         let consumer = meta_log_topic.subscribe(true);
         meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT,

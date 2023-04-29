@@ -236,8 +236,8 @@ impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
             futures_timeout,
             creation_time:                        Instant::now(),
             executor_status:                      AtomicExecutorStatus::new(ExecutorStatus::NotStarted),
-            execution_start_delta_nanos:          AtomicU64::new(0),
-            execution_finish_delta_nanos:         AtomicU64::new(0),
+            execution_start_delta_nanos:          AtomicU64::new(u64::MAX),
+            execution_finish_delta_nanos:         AtomicU64::new(u64::MAX),
             ok_events_avg_future_duration:        AtomicIncrementalAverage64::new(),
             failed_events_avg_future_duration:    AtomicIncrementalAverage64::new(),
             timed_out_events_avg_future_duration: AtomicIncrementalAverage64::new(),
@@ -588,8 +588,8 @@ mod tests {
                  if Instruments::from(INSTRUMENTS).metrics() {""} else {" -- metrics are DISABLED"},
                  if Instruments::from(INSTRUMENTS).logging() {" -- verify these values against the \"executor closed\" message"} else {" -- logs are DISABLED"});
 
-        assert!(execution_start_delta_nanos  > 0, "'execution_start_delta_nanos' wasn't set");
-        assert!(execution_finish_delta_nanos > 0, "'execution_finish_delta_nanos' wasn't set");
+        assert_ne!(execution_start_delta_nanos,  u64::MAX, "'execution_start_delta_nanos' wasn't set");
+        assert_ne!(execution_finish_delta_nanos, u64::MAX, "'execution_finish_delta_nanos' wasn't set");
         assert!(execution_finish_delta_nanos >= execution_start_delta_nanos, "INSTRUMENTATION ERROR: 'execution_start_delta_nanos' was set after 'execution_finish_delta_nanos'");
 
         if Instruments::from(INSTRUMENTS).metrics() {
