@@ -13,7 +13,7 @@ use std::{
 };
 
 
-/// BUFFER_SIZE mut be a power of 2
+/// BUFFER_SIZE must be a power of 2
 // #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
 pub struct AtomicMeta<SlotType,
                       const BUFFER_SIZE: usize> {
@@ -46,7 +46,6 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
             buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
         }
     }
-
 }
 
 impl<'a, SlotType:          'a + Debug,
@@ -135,63 +134,27 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
-        let mutable_buffer = unsafe {
-            let const_ptr = self.buffer.as_ptr();
-            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
-            &mut *mut_ptr
-        };
-        let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
-        let mut len_before;
-
-        loop {
-            let tail = self.tail.load(Relaxed);
-            len_before = tail.overflowing_sub(slot_id).0 as i32;
-            // is queue empty?
-            if len_before > 0 {
-                break
-            } else {
-                // queue is empty: restabilish the correct `dequeuer_head` (receeding it to its original value)
-                match self.dequeuer_head.compare_exchange(slot_id + 1, slot_id, Release, Acquire) {
-                    Ok(_) => {
-                        if !report_empty_fn() {
-                            return None;
-                        } else {
-                            slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
-                        }
-                    },
-                    Err(reloaded_dequeuer_head) => {
-                        if reloaded_dequeuer_head > slot_id {
-                            relaxed_wait::<SlotType>(reloaded_dequeuer_head - slot_id);
-                        }
-                    }
-                }
+        match self.consume_leaking_internal(report_empty_fn) {
+            Some( (slot_ref, slot_id, len_before) ) => {
+                let ret_val = getter_fn(slot_ref);
+                self.release_leaked_internal(slot_id);
+                report_len_after_dequeueing_fn(len_before-1);
+                Some(ret_val)
             }
+            None => None
         }
-
-        let slot_value = &mut mutable_buffer[slot_id as usize % BUFFER_SIZE];
-        let ret_val = getter_fn(slot_value);
-
-        // strong sync head
-        loop {
-            match self.head.compare_exchange_weak(slot_id, slot_id + 1, Release, Acquire) {
-                Ok(_) => break,
-                Err(reloaded_head) => {
-                    if slot_id > reloaded_head {
-                        relaxed_wait::<SlotType>(slot_id - reloaded_head);
-                    }
-                }
-            }
-        }
-        report_len_after_dequeueing_fn(len_before-1);
-        Some(ret_val)
     }
 
+    #[inline(always)]
     fn consume_leaking(&'a self) -> Option<&'a SlotType> {
-        todo!()
+        self.consume_leaking_internal(|| false)
+            .map(|(slot_ref, slot_id, _len_before)| &*slot_ref)
     }
 
+    #[inline(always)]
     fn release_leaked(&'a self, slot: &'a SlotType) {
-        todo!()
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        self.release_leaked_internal(slot_id);
     }
 
     unsafe fn peek_remaining(&self) -> [&[SlotType]; 2] {
@@ -226,11 +189,11 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
 
 
-    /// Gets hold of one of the slots available in the pool,\
+    /// gets hold of one of the slots available in the pool,\
     /// returning: (a mutable reference to the data, the slot id, the current count of elements available for consumption).\
     /// If the pool is empty, `report_full_fn()` is called to inform the condition. If it was able to release any items,
     /// it should return `true`, which will cause this algorithm to try again instead of giving up with `None`.\
-    /// This implementation allows slots to be returned to the pool while there are allocated (but still unpublished slots) around,
+    /// This implementation enables other slots to be returned to the pool while there are allocated (but still unpublished) slots around,
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&mut SlotType, /*slot_id:*/ u32, /*len_before:*/ u32)> {
@@ -262,7 +225,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         Some( (&mut mutable_buffer[slot_id as usize % BUFFER_SIZE], slot_id, len_before) )
     }
 
-    /// Marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
+    /// marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
     /// that started with a call to [leak_slot_internal()]
     #[inline(always)]
     fn publish_leaked_internal(&'a self, slot_id: u32) {
@@ -278,7 +241,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         }
     }
 
-    /// Attempt to return the slot at `slot_id` to the pool of available slots -- disrupting the publishing of an event
+    /// attempt to return the slot at `slot_id` to the pool of available slots -- disrupting the publishing of an event
     /// that was started with a call to [leak_slot_internal()].\
     #[inline(always)]
     fn try_unleak_slot_internal(&'a self, slot_id: u32) -> bool {
@@ -299,13 +262,71 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         }
     }
 
-    /// Returns the id (within the Ring Buffer) that the given `slot` reference occupies
+    /// gets hold of a reference to the slot containing the next data to be processed,\
+    /// returning: (a mutable reference to the data, the slot id, the count of elements that were available for consumption before this method was executed).\
+    /// If the queue is empty, `report_empty_fn()` is called to inform the condition. If it was able to produce any items, it should return true,
+    /// which will cause this algorithm to try again instead of giving up with `None`.\
+    /// This implementation enables other slots to be allocated from the pool while there are references (still not released) hanging around,
+    /// allowing the publication & consumption operations not happen in parallel.
+    #[inline(always)]
+    fn consume_leaking_internal(&self, report_empty_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*slot_id:*/ u32, /*len_before:*/ i32)> {
+        let mutable_buffer = unsafe {
+            let const_ptr = self.buffer.as_ptr();
+            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
+            &mut *mut_ptr
+        };
+        let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
+        let mut len_before;
+        loop {
+            let tail = self.tail.load(Relaxed);
+            len_before = tail.overflowing_sub(slot_id).0 as i32;
+            // is queue empty?
+            if len_before > 0 {
+                let slot_value = &mut mutable_buffer[slot_id as usize % BUFFER_SIZE];
+                break Some( (slot_value, slot_id, len_before) )
+            } else {
+                // queue is empty: reestablish the correct `dequeuer_head` (receding it to its original value)
+                match self.dequeuer_head.compare_exchange(slot_id + 1, slot_id, Release, Acquire) {
+                    Ok(_) => {
+                        if !report_empty_fn() {
+                            return None;
+                        } else {
+                            slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
+                        }
+                    },
+                    Err(reloaded_dequeuer_head) => {
+                        if reloaded_dequeuer_head > slot_id {
+                            relaxed_wait::<SlotType>(reloaded_dequeuer_head - slot_id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// makes the `slot_id` available to the pool, for reuse,
+    /// after the referenced data has been processed (aka, consumed)
+    #[inline(always)]
+    fn release_leaked_internal(&self, slot_id: u32) {
+        loop {
+            match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
+                Ok(_) => break,
+                Err(reloaded_head) => {
+                    if slot_id > reloaded_head {
+                        relaxed_wait::<SlotType>(slot_id - reloaded_head);
+                    }
+                }
+            }
+        }
+    }
+
+    /// returns the id (within the Ring Buffer) that the given `slot` reference occupies
     #[inline(always)]
     fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
         (( unsafe { (slot as *const SlotType).offset_from(self.buffer.as_ptr() as *const SlotType) } ) as usize) as u32
     }
 
-    /// Returns a reference to the slot pointed to by `slot_id`
+    /// returns a reference to the slot pointed to by `slot_id`
     #[inline(always)]
     fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
         &self.buffer[slot_id as usize % BUFFER_SIZE]
