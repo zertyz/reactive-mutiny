@@ -1,5 +1,4 @@
-//! Basis for multiple producer / multiple consumer queues using atomics for synchronization,
-//! allowing enqueueing syncing to be (almost) fully detached from the dequeueing syncing
+//! Resting place for [AtomicMeta]
 
 use super::super::{
     meta_publisher::MetaPublisher,
@@ -13,7 +12,15 @@ use std::{
 };
 
 
-/// BUFFER_SIZE must be a power of 2
+/// Basis for multiple producer / multiple consumer queues using atomics for synchronization,
+/// allowing enqueueing syncing to be (almost) fully detached from the dequeueing syncing.
+///
+/// Allows multiple-producer / multiple-consumers when using both patterns --
+/// either the `publish()` / `consume()` pattern or\
+/// the `leak_slot()` & `publish_leaked()` / `consume_leaking()` & `release_leaked()` one --
+/// although the best performance is attainable if all publishers take the same time & all consumers take the same time as well.\
+/// If that is not acceptable, see [BufferedBase] -- for an array backed ring buffer queue, which might be a little slower, but is
+/// efficient if the publication & consumption of elements takes variable time.
 // #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
 pub struct AtomicMeta<SlotType,
                       const BUFFER_SIZE: usize> {
@@ -38,6 +45,9 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
+        // if !BUFFER_SIZE.is_power_of_two() {
+        //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
+        // }
         Self {
             head:                 AtomicU32::new(0),
             tail:                 AtomicU32::new(0),
@@ -141,7 +151,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                 report_len_after_dequeueing_fn(len_before-1);
                 Some(ret_val)
             }
-            None => None
+            None => None,
         }
     }
 
