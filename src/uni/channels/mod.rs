@@ -5,6 +5,7 @@ pub mod ogre_full_sync_mpmc_queue;
 
 use crate::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
 use std::{
+    io::Write,
     pin::Pin,
     sync::Arc,
     time::Duration,
@@ -144,6 +145,11 @@ mod tests {
     use minstant::Instant;
 
 
+    #[ctor::ctor]
+    fn suite_setup() {
+        simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
+    }
+
     // *_doc_test for all known `UniChannel`s
     /////////////////////////////////////////
 
@@ -270,6 +276,7 @@ mod tests {
     #[cfg_attr(not(doc),tokio::test(flavor="multi_thread", worker_threads=2))]
     #[ignore]   // must run in a single thread for accurate measurements
     async fn performance_measurements() {
+        const BUFFER_SIZE: usize = 1<<14;
         #[cfg(not(debug_assertions))]
         const FACTOR: u32 = 1024;
         #[cfg(debug_assertions)]
@@ -281,6 +288,10 @@ mod tests {
                 let profiling_name = $profiling_name;
                 let count = $count;
                 let mut stream = channel.consumer_stream().expect("Asking for the first stream");
+
+                print!("{} (same task / same thread):           ", profiling_name);
+                std::io::stdout().flush().unwrap();
+
                 let start = Instant::now();
                 for e in 0..count {
                     channel.try_send(e);
@@ -291,8 +302,8 @@ mod tests {
                     }
                 }
                 let elapsed = start.elapsed();
-                println!("{} (same task / same thread): {:10.2}/s -- {} items processed in {:?}",
-                         profiling_name,
+
+                println!("{:12.2}/s -- {} items processed in {:?}",
                          count as f64 / elapsed.as_secs_f64(),
                          count,
                          elapsed);
@@ -327,11 +338,14 @@ if counter == count {
                     }
                 };
 
-                tokio::join!(sender_future, receiver_future);
+                print!("{} (different task / same thread):      ", profiling_name);
+                std::io::stdout().flush().unwrap();
 
+                let start = Instant::now();
+                tokio::join!(sender_future, receiver_future);
                 let elapsed = start.elapsed();
-                println!("{} (different task / same thread): {:10.2}/s -- {} items processed in {:?}",
-                         profiling_name,
+
+                println!("{:12.2}/s -- {} items processed in {:?}",
                          count as f64 / elapsed.as_secs_f64(),
                          count,
                          elapsed);
@@ -344,18 +358,16 @@ if counter == count {
                 let profiling_name = $profiling_name;
                 let count = $count;
                 let mut stream = channel.consumer_stream().expect("Asking for the first stream");
-                let start = Instant::now();
 
-                let sender_task = tokio::task::spawn_blocking(
-                    move || {
-                        for e in 0..count {
-                            while !channel.try_send(e) {
-                                std::hint::spin_loop();
-                            }
+                let sender_task = tokio::task::spawn_blocking(move || {
+                    for e in 0..count {
+                        while !channel.try_send(e) {
+                            std::hint::spin_loop();
                         }
-                        //channel.end_all_streams(Duration::from_secs(5)).await;
                     }
-                );
+                    //channel.end_all_streams(Duration::from_secs(5)).await;
+                    channel.sig_end_all_streams();
+                });
 
                 let receiver_task = tokio::spawn(
                     exec_future(async move {
@@ -369,17 +381,20 @@ if counter == count {
                         }
                     },
                     format!("Different Task & Thread consumer for '{}'", $profiling_name),
-                    20.0,
+                    300.0,
                     false)
                 );
 
-                let (sender_result, receiver_result) = tokio::join!(sender_task, receiver_task);
+                print!("{} (different task / different thread): ", profiling_name);
+                std::io::stdout().flush().unwrap();
+
+                let start = Instant::now();
+                let (receiver_result, sender_result) = tokio::join!(receiver_task, sender_task);
                 receiver_result.expect("receiver task");
                 sender_result.expect("sender task");
-
                 let elapsed = start.elapsed();
-                println!("{} (different task / different thread): {:10.2}/s -- {} items processed in {:?}",
-                         profiling_name,
+
+                println!("{:12.2}/s -- {} items processed in {:?}",
                          count as f64 / elapsed.as_secs_f64(),
                          count,
                          elapsed);
@@ -387,17 +402,17 @@ if counter == count {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(TokioMPSC::<u32, 262144>::new(), "TokioMPSC ", 262144*FACTOR);
-        profile_different_task_same_thread_channel!(TokioMPSC::<u32, 262144>::new(), "TokioMPSC ", 262144*FACTOR);
-        profile_different_task_different_thread_channel!(TokioMPSC::<u32, 262144>::new(), "TokioMPSC ", 262144*FACTOR);
+        profile_same_task_same_thread_channel!(TokioMPSC::<u32, BUFFER_SIZE>::new(), "TokioMPSC            ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(TokioMPSC::<u32, BUFFER_SIZE>::new(), "TokioMPSC            ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(TokioMPSC::<u32, BUFFER_SIZE>::new(), "TokioMPSC            ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 262144, 1>::new(), "OgreFullSyncMPMCQueue ", 262144*FACTOR);
-        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 262144, 1>::new(), "OgreFullSyncMPMCQueue ", 262144*FACTOR);
-        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, 262144, 1>::new(), "OgreFullSyncMPMCQueue ", 262144*FACTOR);
+        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, 262144, 1>::new(), "AtomicMPMCQueue ", 262144*FACTOR);
-        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, 262144, 1>::new(), "AtomicMPMCQueue ", 262144*FACTOR);
-        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, 262144, 1>::new(), "AtomicMPMCQueue ", 262144*FACTOR);
+        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
     }
 
     /// executes the given `fut`ure, tracking timeouts
@@ -421,6 +436,5 @@ if counter == count {
             }
         }
     }
-
 
 }

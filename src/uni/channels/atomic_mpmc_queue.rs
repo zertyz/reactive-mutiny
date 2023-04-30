@@ -1,16 +1,12 @@
-use crate::{
-    ogre_std::{
-        ogre_queues::{
-            atomic_queues::atomic_meta::AtomicMeta,
-            meta_publisher::MetaPublisher,
-            meta_subscriber::MetaSubscriber,
-            meta_queue::MetaQueue,
-        },
-        ogre_sync,
+use crate::{ogre_std::{
+    ogre_queues::{
+        atomic_queues::atomic_meta::AtomicMeta,
+        meta_publisher::MetaPublisher,
+        meta_subscriber::MetaSubscriber,
+        meta_queue::MetaQueue,
     },
-    uni::channels::{uni_stream::UniStream},
-    StreamsManager,
-};
+    ogre_sync,
+}, uni::channels::{uni_stream::UniStream}, StreamsManager, Instruments};
 use std::{
     time::Duration,
     sync::atomic::AtomicU32,
@@ -64,15 +60,31 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
-        // share the waker the first time this runs, so producers may wake this task up when an item is ready
-        if let None = &self.wakers[stream_id as usize] {
-            ogre_sync::lock(&self.wakers_lock);
-            if let None = &self.wakers[stream_id as usize] {
+
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+
+        macro_rules! set {
+            () => {
                 let waker = waker.clone();
-                let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-                let _ = mutable_self.wakers[stream_id as usize].insert(waker);
+                ogre_sync::lock(&mutable_self.wakers_lock);
+                let waker = mutable_self.wakers[stream_id as usize].insert(waker);
+                ogre_sync::unlock(&mutable_self.wakers_lock);
+                // the producer might have just woken the old version of the waker,
+                // so the following waking up line is needed to assure the consumers won't ever hang
+                // (as demonstrated by tests)
+                waker.wake_by_ref();
             }
-            ogre_sync::unlock(&self.wakers_lock);
+        }
+
+        match &mut mutable_self.wakers[stream_id as usize] {
+            Some(registered_waker) => {
+                if !registered_waker.will_wake(waker) {
+                    set!();
+                }
+            },
+            None => {
+                set!();
+            },
         }
     }
 
@@ -135,8 +147,12 @@ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
             match &self.wakers[stream_id as usize] {
                 Some(waker) => waker.wake_by_ref(),
                 None => {
-                    // here we assume streams will finish when we're about to close
-                    // (keep streams running is false)... so we won't take any remedy for now
+                    // try again, syncing
+                    ogre_sync::lock(&self.wakers_lock);
+                    if let Some(waker) = &self.wakers[stream_id as usize] {
+                        waker.wake_by_ref();
+                    }
+                    ogre_sync::unlock(&self.wakers_lock);
                 }
             }
         }
@@ -167,7 +183,10 @@ for*/ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     pub unsafe fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
         self.queue.publish(item_builder,
-                           || false,
+                           || {
+                                              self.wake_all_streams();
+                                              false
+                                          },
                            |len| self.wake_stream(len-1))
     }
 
@@ -201,14 +220,16 @@ for*/ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
         self.flush(timeout).await;
-        {
-            let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-            mutable_self.keep_streams_running = false;
-        }
+        self.sig_end_all_streams();
         self.flush(timeout).await;
         self.wake_all_streams();
         let running_streams_count = self.created_streams_count.load(Relaxed) - self.finished_streams_count.load(Relaxed);
         running_streams_count
+    }
+
+    pub fn sig_end_all_streams(&self) {
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        mutable_self.keep_streams_running = false;
     }
 
     #[inline(always)]

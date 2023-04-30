@@ -236,10 +236,7 @@ for*/ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
     pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
         let start = Instant::now();
         self.flush(timeout).await;
-        {
-            let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-            mutable_self.keep_streams_running = false;
-        }
+        self.sig_end_all_streams();
         self.flush(timeout).await;
         self.wake_all_streams();
         loop {
@@ -252,6 +249,11 @@ for*/ OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 break running_streams
             }
         }
+    }
+
+    pub fn sig_end_all_streams(&self) {
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        mutable_self.keep_streams_running = false;
     }
 
     pub fn running_streams_count(&self) -> u32 {

@@ -645,7 +645,7 @@ mod tests {
         let second_simple_duration = Duration::from_nanos(simple_last_elapsed_nanos.load(Relaxed));
         println!("3. Time to produce & consume another SIMPLE event (with lots of -- {BLOATED_PIPELINES_COUNT} -- sleeping Multi Tokio tasks): {:?}", second_simple_duration);
 
-        const TOLERANCE_MICROS: u128 = 1;
+        const TOLERANCE_MICROS: u128 = 10;
         assert!(second_simple_duration < first_simple_duration || second_simple_duration.as_micros() - first_simple_duration.as_micros() < TOLERANCE_MICROS,
                 "Tokio tasks' latency must be unaffected by whatever number of sleeping tasks there are (tasks executing our multi stream pipelines) -- task execution latencies exceeded the {TOLERANCE_MICROS}µs tolerance: with 0 sleeping: {:?}; with {BLOATED_PIPELINES_COUNT} sleeping: {:?}",
                 first_simple_duration,

@@ -105,6 +105,9 @@ impl<ItemType: Debug, const BUFFER_SIZE: usize> /*UniChannel<ItemType> for*/ Tok
         }
     }
 
+    pub fn sig_end_all_streams(&self) {
+        // noop
+    }
 
     pub fn pending_items_count(&self) -> u32 {
         (BUFFER_SIZE - self.tx.capacity()) as u32
