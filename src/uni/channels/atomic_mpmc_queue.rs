@@ -3,7 +3,7 @@ use crate::{ogre_std::{
         atomic_queues::atomic_meta::AtomicMeta,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
-        meta_queue::MetaQueue,
+        meta_container::MetaContainer,
     },
     ogre_sync,
 }, uni::channels::{uni_stream::UniStream}, StreamsManager, Instruments};

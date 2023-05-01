@@ -7,7 +7,7 @@ use super::super::super::{
         full_sync_queues::full_sync_meta::FullSyncMeta,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
-        meta_queue::MetaQueue,
+        meta_container::MetaContainer,
     },
 };
 use std::{

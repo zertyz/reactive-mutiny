@@ -3,7 +3,7 @@
 use super::super::{
     meta_publisher::MetaPublisher,
     meta_subscriber::MetaSubscriber,
-    meta_queue::MetaQueue,
+    meta_container::MetaContainer,
 };
 use std::{
     fmt::Debug,
@@ -40,7 +40,7 @@ pub struct AtomicMeta<SlotType,
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MetaQueue<'a, SlotType> for
+MetaContainer<'a, SlotType> for
 AtomicMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {

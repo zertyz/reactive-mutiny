@@ -45,7 +45,7 @@ type SubscriberPayloadType = (AccountToken, MarketData);
 
 
 /// Default Mutiny type for "per client" events
-type SubscribersMulti = Multi<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type SubscribersMulti = Multi<'static, SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 pub struct MarketWatcher {

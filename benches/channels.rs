@@ -6,6 +6,7 @@
 //! # Analysis 2023-04-30
 //!
 //!   - our Atomic is the winner for Intel(R) Core(TM) i5-10500H CPU, showing zero-copy pays off. The next best is Crossbeam's, which wins for smaller payloads < 1024 bytes.
+//!   - for lower grades CPUs (including ARM), our Atomic wins with an even larger margin
 //!
 //!
 
@@ -21,7 +22,7 @@ use ogre_std::ogre_queues::{
 use reactive_mutiny::{uni, multi, ogre_std};
 use futures::{Stream, stream};
 use reactive_mutiny::ogre_std::ogre_queues::meta_publisher::MetaPublisher;
-use reactive_mutiny::ogre_std::ogre_queues::meta_queue::MetaQueue;
+use reactive_mutiny::ogre_std::ogre_queues::meta_container::MetaContainer;
 use reactive_mutiny::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
 
 

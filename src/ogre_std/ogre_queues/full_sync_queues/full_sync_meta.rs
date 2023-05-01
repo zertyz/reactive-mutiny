@@ -4,7 +4,7 @@ use crate::ogre_std::{
     ogre_queues::{
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
-        meta_queue::MetaQueue,
+        meta_container::MetaContainer,
     },
     ogre_sync,
 };
@@ -40,7 +40,7 @@ pub struct FullSyncMeta<SlotType,
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MetaQueue<'a, SlotType> for
+MetaContainer<'a, SlotType> for
 FullSyncMeta<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {

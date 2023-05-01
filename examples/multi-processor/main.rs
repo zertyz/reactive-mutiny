@@ -55,7 +55,7 @@ const MAX_STREAMS: usize = 16;
 /// The processor of [AnalysisEvent]s, generating [Order] events for our [Multi]
 struct DecisionMaker {
     /// the handler for our [Multi] events
-    orders_event_handler: Multi<OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
+    orders_event_handler: Multi<'static, OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
 }
 
 impl DecisionMaker {

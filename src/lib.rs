@@ -12,6 +12,7 @@ pub use types::*;
 
 mod incremental_averages;
 mod stream;
+mod streams_manager;
 
 // pub for criterion usage
 pub mod ogre_std;

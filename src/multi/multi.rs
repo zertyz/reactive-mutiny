@@ -21,12 +21,12 @@ use tokio::{
 
 
 /// this is the fastest [MultiChannel] for general use, as revealed in performance tests
-type MultiChannelType<ItemType,
-                      const BUFFER_SIZE: usize,
-                      const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS>;
+type MultiChannelType<'a, ItemType,
+                          const BUFFER_SIZE: usize,
+                          const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type MultiStreamType<'a, ItemType,
                              const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize> = MultiStream<'a, Arc<ItemType>, MultiChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>>;
+                             const MAX_STREAMS: usize> = MultiStream<'a, ItemType, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, MAX_STREAMS>;
 
 
 /// `Multi` is an event handler capable of having several "listeners" -- all of which receives all events.\
@@ -37,12 +37,12 @@ pub type MultiStreamType<'a, ItemType,
 /// Example:
 /// ```nocompile
 /// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
-pub struct Multi<ItemType:          Send + Sync + Debug,
-                 const BUFFER_SIZE: usize,
-                 const MAX_STREAMS: usize,
-                 const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
+pub struct Multi<'a, ItemType:          Send + Sync + Debug,
+                     const BUFFER_SIZE: usize,
+                     const MAX_STREAMS: usize,
+                     const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
     pub multi_name:     String,
-    pub channel:        Arc<MultiChannelType<ItemType, BUFFER_SIZE, MAX_STREAMS>>,
+    pub channel:        MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>,
     pub executor_infos: RwLock<IndexMap<String, ExecutorInfo<INSTRUMENTS>>>,
 }
 
@@ -50,7 +50,7 @@ impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize,
          const INSTRUMENTS: usize>
-Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
+Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
         let multi_name = multi_name.into();
@@ -101,7 +101,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                 on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                    -> ErrVoidAsyncType   + Send + Sync + 'static,
                                 on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                -> Result<Self, Box<dyn std::error::Error>> {
+                                -> Result</*Self*/Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
 
         self.spawn_executor_ref(concurrency_limit, futures_timeout, pipeline_name, pipeline_builder, on_err_callback, on_close_callback).await?;
         Ok(self)
@@ -124,7 +124,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                     on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                    -> ErrVoidAsyncType   + Send + Sync + 'static,
                                     on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                    -> Result<&Self, Box<dyn std::error::Error>> {
+                                    -> Result</*&Self*/&Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.stream_name(), pipeline_name.into()), futures_timeout);
         let (in_stream, in_stream_id) = self.channel.listener_stream();
@@ -152,7 +152,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                                          pipeline_builder:         impl FnOnce(MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
                                                          on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                                        -> Result<Self, Box<dyn std::error::Error>> {
+                                                        -> Result</*Self*/Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
         self.spawn_non_futures_non_fallible_executor_ref(concurrency_limit, pipeline_name, pipeline_builder, on_close_callback).await?;
         Ok(self)
     }
@@ -170,7 +170,7 @@ Multi<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                                              pipeline_builder:         impl FnOnce(MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
                                                              on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                                            -> Result<&Self, Box<dyn std::error::Error>> {
+                                                            -> Result</*&Self*/&Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
         let (in_stream, in_stream_id) = self.channel.listener_stream();

@@ -18,30 +18,32 @@ use std::{
 use std::marker::PhantomData;
 use futures::stream::Stream;
 use owning_ref::ArcRef;
+use crate::ogre_std::ogre_queues::meta_container::MetaContainer;
+use crate::streams_manager::StreamsManagerBase;
 
 
 /// Special type to allow the compiler to fully optimize the whole event consumption chain -- the following paths are covered:
 /// from the container's `consume()` (providing `InItemType` items), passing through this Stream implementation, then through the user provided `pipeline_builder()` and, finally, to the `StreamExecutor`,
 /// allowing all of them to behave as a single function, that gets optimized together.
 pub struct MultiStream<'a, ItemType:           Debug + 'a,
-                           StreamsManagerType: StreamsManager<'a, ItemType, MetaSubscriberType, Option<ItemType>> + 'a,
-                           MetaSubscriberType: MetaSubscriber<'a, Option<ItemType>> + 'a> {
+                           MetaContainerType:  MetaContainer<'a, Option<Arc<ItemType>>> + 'a,
+                           const MAX_STREAMS:  usize> {
 
     stream_id:         u32,
-    streams_manager:   Arc<StreamsManagerType>,
-    backing_container: ArcRef<StreamsManagerType, MetaSubscriberType>,
+    streams_manager:   Arc<StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>> >>,
+    backing_container: ArcRef<StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>>>, MetaContainerType>,
     _phantom:          PhantomData<&'a ItemType>,
 
 }
 
 impl<'a, ItemType:           Debug,
-         StreamsManagerType: StreamsManager<'a, ItemType, MetaSubscriberType, Option<ItemType>> + 'a,
-         MetaSubscriberType: MetaSubscriber<'a, Option<ItemType>> + 'a>
-MultiStream<'a, ItemType, StreamsManagerType, MetaSubscriberType> {
+         MetaContainerType:  MetaContainer<'a, Option<Arc<ItemType>>> + 'a,
+         const MAX_STREAMS:  usize>
+MultiStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
 
-    pub fn new(stream_id: u32, streams_manager: &Arc<StreamsManagerType>) -> Self {
+    pub fn new(stream_id: u32, streams_manager: &Arc<StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>>>>) -> Self {
         let streams_manager = Arc::clone(&streams_manager);
-        let backing_container = streams_manager.backing_subscriber(stream_id);
+        let backing_container = streams_manager.backing_container(stream_id);
         Self {
             stream_id,
             streams_manager,
@@ -53,12 +55,12 @@ MultiStream<'a, ItemType, StreamsManagerType, MetaSubscriberType> {
 }
 
 impl<'a, ItemType:           Debug + 'a,
-         StreamsManagerType: StreamsManager<'a, ItemType, MetaSubscriberType, Option<ItemType>>,
-         MetaSubscriberType: MetaSubscriber<'a, Option<ItemType>>>
+         MetaContainerType:  MetaContainer<'a, Option<Arc<ItemType>>> + 'a,
+         const MAX_STREAMS:  usize>
 Stream for
-MultiStream<'a, ItemType, StreamsManagerType, MetaSubscriberType> {
+MultiStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
 
-    type Item = ItemType;
+    type Item = Arc<ItemType>;
 
     #[inline(always)]
     fn poll_next(mut self: Pin<&mut Self>, mut cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -80,10 +82,10 @@ MultiStream<'a, ItemType, StreamsManagerType, MetaSubscriberType> {
     }
 }
 
-impl<'a, ItemType:          Debug,
-         StreamsManagerType: StreamsManager<'a, ItemType, MetaSubscriberType, Option<ItemType>>,
-         MetaSubscriberType: MetaSubscriber<'a, Option<ItemType>>>
-Drop for MultiStream<'a, ItemType, StreamsManagerType, MetaSubscriberType> {
+impl<'a, ItemType:           Debug,
+         MetaContainerType:  MetaContainer<'a, Option<Arc<ItemType>>> + 'a,
+         const MAX_STREAMS:  usize>
+Drop for MultiStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
     fn drop(&mut self) {
         self.streams_manager.report_stream_dropped(self.stream_id);
     }

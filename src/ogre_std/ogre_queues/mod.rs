@@ -3,7 +3,7 @@ use parking_lot::RawMutex;
 
 pub mod meta_publisher;
 pub mod meta_subscriber;
-pub mod meta_queue;
+pub mod meta_container;
 pub mod meta_topic;
 pub mod non_blocking_parking_lot_queue;
 pub mod atomic_queues;
