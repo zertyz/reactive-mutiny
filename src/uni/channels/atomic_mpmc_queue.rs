@@ -25,7 +25,6 @@ use owning_ref::ArcRef;
 
 
 /// A Uni channel, backed by an [AtomicMeta], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
-#[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct AtomicMPMCQueue<ItemType:          Send + Sync + Debug,
                            const BUFFER_SIZE: usize,
                            const MAX_STREAMS: usize> {

@@ -52,7 +52,6 @@ pub type OgreFullSyncMPMCQueue<ItemType,
 /// Please, measure your `Multi`s using all available channels [OgreFullSyncMPMCQueue], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
 /// See also [multi::channels::ogre_full_sync_mpmc_queue].\
 /// Refresher: the backing queue requires `BUFFER_SIZE` to be a power of 2 -- the same applies to `MAX_STREAMS`, which will also have its own queue
-#[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct InternalOgreFullSyncMPMCQueue<ItemType:          Send + Sync + Debug,
                                          const BUFFER_SIZE: usize,
                                          const MAX_STREAMS: usize> {

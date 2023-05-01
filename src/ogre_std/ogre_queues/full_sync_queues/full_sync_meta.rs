@@ -25,20 +25,16 @@ use std::{
 /// Allows multiple-producer / multiple-consumers when the `publish()` / `consume()` pattern is in use;\
 /// but only single-producer / single-consumer when using `leak_slot()` & `publish_leaked()` / `consume_leaking()` & `release_leaked()`
 /// -- if that is unacceptable, see [AtomicMeta] (although it might be a bit slower for the single threaded case in some machines).
-// #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
+#[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct FullSyncMeta<SlotType,
                         const BUFFER_SIZE: usize> {
 
-    /// locked when the queue is full, unlocked when it is no longer full
-    full_guard: AtomicBool,
+    head: u32,
+    tail: u32,
     /// guards critical regions to allow concurrency
     concurrency_guard: AtomicBool,
-    tail: u32,
     /// holder for the elements
     buffer: [ManuallyDrop<SlotType>; BUFFER_SIZE],
-    head: u32,
-    /// locked when the queue is empty, unlocked when it is no longer empty
-    empty_guard: AtomicBool,
 
 }
 
@@ -53,12 +49,10 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
         // }
         Self {
-            full_guard:        AtomicBool::new(false),
-            concurrency_guard: AtomicBool::new(false),
-            tail:              0,
-            buffer:            unsafe { MaybeUninit::zeroed().assume_init() },
             head:              0,
-            empty_guard:       AtomicBool::new(false),
+            tail:              0,
+            concurrency_guard: AtomicBool::new(false),
+            buffer:            unsafe { MaybeUninit::zeroed().assume_init() },
         }
     }
 
@@ -128,11 +122,9 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     }
 
     fn debug_info(&self) -> String {
-        let Self {full_guard, concurrency_guard, tail, buffer: _, head, empty_guard} = self;
-        let full_guard = full_guard.load(Relaxed);
+        let Self {concurrency_guard, tail, buffer: _, head} = self;
         let concurrency_guard = concurrency_guard.load(Relaxed);
-        let empty_guard = empty_guard.load(Relaxed);
-        format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), empty: {empty_guard}, full: {full_guard}, locked: {concurrency_guard}, elements: {{{}}}'}}",
+        format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), locked: {concurrency_guard}, elements: {{{}}}'}}",
                 self.available_elements(),
                 unsafe {self.peek_remaining()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));

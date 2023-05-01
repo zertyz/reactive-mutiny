@@ -21,21 +21,21 @@ use std::{
 /// although the best performance is attainable if all publishers take the same time & all consumers take the same time as well.\
 /// If that is not acceptable, see [BufferedBase] -- for an array backed ring buffer queue, which might be a little slower, but is
 /// efficient if the publication & consumption of elements takes variable time.
-// #[repr(C,align(64))]      // users of this class, if uncertain, are advised to declare this as their first field and have this annotation to cause alignment to cache line sizes, for a careful control over false-sharing performance degradation
+#[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct AtomicMeta<SlotType,
                       const BUFFER_SIZE: usize> {
     /// marks the first element of the queue, ready for dequeue -- increasing when dequeues are complete
     pub(crate) head: AtomicU32,
-    /// increase-before-load field, marking where the next element should be retrieved from
-    /// -- may receed if it gets ahead of the published `tail`
-    pub(crate) dequeuer_head: AtomicU32,
-    /// holder for the queue elements
-    pub(crate) buffer: [SlotType; BUFFER_SIZE],
-    /// marks the last element of the queue, ready for dequeue -- increasing when enqueues are complete
-    pub(crate) tail: AtomicU32,
     /// increase-before-load field, marking where the next element should be written to
     /// -- may receed if exceeded the buffer capacity
     pub(crate) enqueuer_tail: AtomicU32,
+    /// holder for the queue elements
+    pub(crate) buffer: [SlotType; BUFFER_SIZE],
+    /// increase-before-load field, marking where the next element should be retrieved from
+    /// -- may receed if it gets ahead of the published `tail`
+    pub(crate) dequeuer_head: AtomicU32,
+    /// marks the last element of the queue, ready for dequeue -- increasing when enqueues are complete
+    pub(crate) tail: AtomicU32,
 }
 
 impl<'a, SlotType:          'a + Debug,
