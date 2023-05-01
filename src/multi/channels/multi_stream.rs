@@ -31,7 +31,6 @@ pub struct MultiStream<'a, ItemType:           Debug + 'a,
 
     stream_id:         u32,
     streams_manager:   Arc<StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>> >>,
-    backing_container: ArcRef<StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>>>, MetaContainerType>,
     _phantom:          PhantomData<&'a ItemType>,
 
 }
@@ -42,12 +41,9 @@ impl<'a, ItemType:           Debug,
 MultiStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
 
     pub fn new(stream_id: u32, streams_manager: &Arc<StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>>>>) -> Self {
-        let streams_manager = Arc::clone(&streams_manager);
-        let backing_container = streams_manager.backing_container(stream_id);
         Self {
             stream_id,
-            streams_manager,
-            backing_container,
+            streams_manager: streams_manager.clone(),
             _phantom: PhantomData::default(),
         }
     }
@@ -64,9 +60,11 @@ MultiStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
 
     #[inline(always)]
     fn poll_next(mut self: Pin<&mut Self>, mut cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let event = self.backing_container.consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
-                                                                       || false,
-                                                                       |_| {});
+        let event = self.streams_manager.for_backing_container(self.stream_id, |container| {
+            container.consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
+                              || false,
+                              |_| {})
+        });
 
         match event {
             Some(_) => Poll::Ready(event),

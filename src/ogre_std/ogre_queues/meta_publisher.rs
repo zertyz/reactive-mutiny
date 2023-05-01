@@ -58,7 +58,7 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
     /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
-    fn available_elements(&self) -> usize;
+    fn available_elements_count(&self) -> usize;
 
     /// Returns the maximum number of elements this `meta_publisher` can hold -- \
     /// 0, if the implementor offers an unbounded container,\

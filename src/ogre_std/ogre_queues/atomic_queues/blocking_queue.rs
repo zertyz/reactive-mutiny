@@ -229,7 +229,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     #[inline(always)]
     fn len(&self) -> usize {
-        self.base_queue.available_elements()
+        self.base_queue.available_elements_count()
     }
 
     #[inline(always)]
@@ -329,7 +329,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                                     if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                                         self.metrics_diagnostics();
                                     }
-                                    if len == self.base_queue.available_elements() as i32 - 1 {
+                                    if len == self.base_queue.available_elements_count() as i32 - 1 {
                                         self.report_no_longer_full();
                                     }
                                 })

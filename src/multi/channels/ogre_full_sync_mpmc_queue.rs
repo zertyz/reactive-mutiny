@@ -68,7 +68,7 @@ InternalOgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     /// Each stream will see all payloads sent through this channel.
     pub fn listener_stream(&self) -> (MultiStream<'a, ItemType, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, MAX_STREAMS>, u32) {
         let stream_id = self.streams_manager.create_stream_id();
-        (MultiStream::new(stream_id, &self.streams_manager.clone()), stream_id)
+        (MultiStream::new(stream_id, &self.streams_manager), stream_id)
     }
 
     #[inline(always)]
@@ -92,96 +92,46 @@ for*/ InternalOgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         }
     }
 
-    /// Clones & shares the internal `streams_manager`, for testing purposes
+    /// clones & shares the internal `streams_manager`, for testing purposes
     fn streams_manager(&self) -> Arc<StreamsManagerBase<'a, ItemType, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, MAX_STREAMS, MAX_STREAMS, Option<Arc<ItemType>>>> {
         self.streams_manager.clone()
     }
 
     #[inline(always)]
-    pub fn send_arc(&self, arc_item: Arc<ItemType>) {
-        for stream_id in self.streams_manager.used_streams().iter() {
+    pub fn send_arc(&self, arc_item: &Arc<ItemType>) {
+        for stream_id in self.streams_manager.used_streams() {
             if *stream_id == u32::MAX {
                 break
             }
-            let container = self.streams_manager.backing_container(*stream_id);
-            container.publish(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
-                              || {
-                                  warn!("Multi Channel's OgreMPMCQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
-                                        channel_name = self.streams_manager.name(), used_streams_count = (MAX_STREAMS - self.streams_manager.vacant_streams_len()) as u32);
-                                  std::thread::sleep(Duration::from_millis(500));
-                                  true
-                              },
-                              |len| if len == 1 { self.streams_manager.wake_stream(*stream_id) });
+            self.streams_manager.for_backing_container(*stream_id, |container| {
+                container.publish(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
+                                  || {
+                                      warn!("Multi Channel's OgreMPMCQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+                                            channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
+                                      std::thread::sleep(Duration::from_millis(500));
+                                      true
+                                  },
+                                  |len| if len == 1 { self.streams_manager.wake_stream(*stream_id) })
+            });
         }
     }
 
     #[inline(always)]
     pub fn send(&self, item: ItemType) {
         let arc_item = Arc::new(item);
-        self.send_arc(arc_item);
+        self.send_arc(&arc_item);
     }
 
     pub async fn flush(&self, timeout: Duration) -> u32 {
-        let mut start: Option<Instant> = None;
-        loop {
-            let pending_count = self.pending_items_count();
-            if pending_count > 0 {
-                self.streams_manager.wake_all_streams();
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            } else {
-                break 0
-            }
-            // enforce timeout
-            if timeout != Duration::ZERO {
-                if let Some(start) = start {
-                    if start.elapsed() > timeout {
-                        break pending_count
-                    }
-                } else {
-                    start = Some(Instant::now());
-                }
-            }
-        }
+        self.streams_manager.flush(timeout).await
     }
 
     pub async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
-
-        // true if `stream_id` is not running
-        let is_vacant = || unsafe { self.streams_manager.peek_remaining_vacant_streams().iter() }
-            .flat_map(|&slice| slice)
-            .find(|&vacant_stream_id| *vacant_stream_id == stream_id)
-            .is_some();
-
-        debug_assert_eq!(false, is_vacant(), "Mutiny's Multi OgreMPMCQueue Channel @ end_stream(): BUG! stream_id {stream_id} is not running! Running ones are {:?}",
-                                             self.streams_manager.used_streams().iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
-
-        let start = Instant::now();
-        self.flush(timeout).await;
-        self.streams_manager.cancel_stream(stream_id);
-        loop {
-            self.streams_manager.wake_stream(stream_id);
-            tokio::time::sleep(Duration::from_millis(1)).await;
-            if is_vacant() {
-                break true
-            } else if timeout != Duration::ZERO && start.elapsed() > timeout {
-                break false
-            }
-        }
+        self.streams_manager.end_stream(stream_id, timeout).await
     }
 
     pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
-        let start = Instant::now();
-        self.flush(timeout).await;
-        self.streams_manager.cancel_all_streams();
-        self.flush(timeout).await;
-        loop {
-            let running_streams = self.running_streams_count();
-            if running_streams == 0 || timeout != Duration::ZERO && start.elapsed() > timeout {
-                break running_streams
-            }
-            self.streams_manager.wake_all_streams();
-            tokio::time::sleep(Duration::from_millis(1)).await;
-        }
+        self.streams_manager.end_all_streams(timeout).await
     }
 
     pub fn sig_stop_all_streams(&self) {
@@ -189,15 +139,12 @@ for*/ InternalOgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     pub fn running_streams_count(&self) -> u32 {
-        (MAX_STREAMS - self.streams_manager.vacant_streams_len()) as u32
+        self.streams_manager.running_streams_count()
     }
 
     #[inline(always)]
     pub fn pending_items_count(&self) -> u32 {
-        self.streams_manager.used_streams().iter()
-            .filter(|&&stream_id| stream_id != u32::MAX)
-            .map(|&stream_id| self.streams_manager.backing_container(stream_id).available_elements())
-            .sum::<usize>() as u32
+        self.streams_manager.pending_items_count()
     }
 
 }
@@ -235,9 +182,9 @@ mod tests {
             let streams_manager = channel.streams_manager();    // will add 1 to the references count
             assert_eq!(Arc::strong_count(&streams_manager), 2, "Sanity check on reference counting");
             let (mut stream_1, _stream_id) = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&streams_manager), 4, "Creating a stream should increase the ref count by 2");
+            assert_eq!(Arc::strong_count(&streams_manager), 3, "Creating a stream should increase the ref count by 1");
             let (mut stream_2, _stream_id_2) = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&streams_manager), 6, "Creating a stream should increase the ref count by 2");
+            assert_eq!(Arc::strong_count(&streams_manager), 4, "Creating a stream should increase the ref count by 1");
             channel.send("a");
             println!("received: stream_1: {}; stream_2: {}", stream_1.next().await.unwrap(), stream_2.next().await.unwrap());
             // dropping the streams & channel will decrease the Arc reference count to 1
@@ -251,11 +198,11 @@ mod tests {
             let channel = OgreFullSyncMPMCQueue::<&str>::new("stream_and_channel_dropping");
             let streams_manager = channel.streams_manager();    // will add 1 to the references count
             let stream = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&streams_manager), 4, "`channel` + `stream`: reference count should be 3");
+            assert_eq!(Arc::strong_count(&streams_manager), 3, "`channel` + `stream` + `local ref`: reference count should be 3");
             drop(stream);
-            assert_eq!(Arc::strong_count(&streams_manager), 2, "Dropping a stream should decrease the ref count by 2");
+            assert_eq!(Arc::strong_count(&streams_manager), 2, "Dropping a stream should decrease the ref count by 1");
             let (mut stream, _stream_id) = channel.listener_stream();
-            assert_eq!(Arc::strong_count(&streams_manager), 4, "1 `channel` + 1 `stream` again, at this point: reference count should be 3");
+            assert_eq!(Arc::strong_count(&streams_manager), 3, "1 `channel` + 1 `stream` + `local ref` again, at this point: reference count should be 3");
             channel.send("a");
             println!("received: {}", stream.next().await.unwrap());
             // dropping the stream & channel will decrease the Arc reference count to 1

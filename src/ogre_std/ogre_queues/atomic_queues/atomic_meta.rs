@@ -105,7 +105,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     }
 
     #[inline(always)]
-    fn available_elements(&self) -> usize {
+    fn available_elements_count(&self) -> usize {
         self.tail.load(Relaxed).overflowing_sub(self.head.load(Relaxed)).0 as usize
     }
 
@@ -120,7 +120,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         let dequeuer_head = dequeuer_head.load(Relaxed);
         let enqueuer_tail = enqueuer_tail.load(Relaxed);
         format!("ogre_queues::atomic_meta's state: {{head: {head}, tail: {tail}, dequeuer_head: {dequeuer_head}, enqueuer_tail: {enqueuer_tail}, (len: {}), elements: {{{}}}'}}",
-                self.available_elements(),
+                self.available_elements_count(),
                 unsafe {self.peek_remaining()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));
                     acc

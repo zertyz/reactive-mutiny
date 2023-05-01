@@ -112,7 +112,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     }
 
     #[inline(always)]
-    fn available_elements(&self) -> usize {
+    fn available_elements_count(&self) -> usize {
         self.tail.overflowing_sub(self.head).0 as usize
     }
 
@@ -125,7 +125,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         let Self {concurrency_guard, tail, buffer: _, head} = self;
         let concurrency_guard = concurrency_guard.load(Relaxed);
         format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), locked: {concurrency_guard}, elements: {{{}}}'}}",
-                self.available_elements(),
+                self.available_elements_count(),
                 unsafe {self.peek_remaining()}.iter().flat_map(|&slice| slice).fold(String::new(), |mut acc, e| {
                     acc.push_str(&format!("'{:?}',", e));
                     acc
@@ -262,7 +262,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
         let mut len_before;
         loop {
             ogre_sync::lock(&self.concurrency_guard);
-            len_before = self.available_elements() as i32;
+            len_before = self.available_elements_count() as i32;
             if len_before > 0 {
                 break Some( (&mut mutable_self.buffer[self.head as usize % BUFFER_SIZE], len_before) )
             } else {

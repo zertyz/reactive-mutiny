@@ -52,6 +52,7 @@ mod tests {
         }
     };
     use std::io::Write;
+    use std::pin::Pin;
     use std::rc::Rc;
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
@@ -278,7 +279,7 @@ mod tests {
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
         // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
-        let multi: Box<Multi<String, 256, N_PIPELINES>> = Box::new(Multi::new(event_name));
+        let multi: Pin<Box<Multi<String, 256, N_PIPELINES>>> = Box::pin(Multi::new(event_name));
         for i in 0..N_PIPELINES {
             multi.spawn_non_futures_non_fallible_executor_ref(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
         }
@@ -301,7 +302,7 @@ mod tests {
         // asserts spawn_executor() register statistics appropriately:
         // with counters & with average futures resolution time measurements
         let event_name = "future & fallible event";
-        let multi: Box<Multi<String, 256, N_PIPELINES>> = Box::new(Multi::new(event_name));
+        let multi: Pin<Box<Multi<String, 256, N_PIPELINES>>> = Box::pin(Multi::new(event_name));
         for i in 0..N_PIPELINES {
             multi.spawn_executor_ref(1, Duration::from_millis(150), format!("Pipeline #{} for {}", i, event_name),
                                      |stream| {
@@ -683,10 +684,10 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "first executor", move |stream| {
                 stream.map(move |message: Arc<String>| {
                     println!("`first_multi` received '{:?}'", message);
+                    second_multi_ref.send_arc(&message);
                     first_multi_msgs_ref
                         .lock().unwrap()
-                        .push(message.clone());
-                    second_multi_ref.send_arc(message)
+                        .push(message);
                 })
             }, |_| async {}).await?;
         let producer = |item: &str| first_multi.send(item.to_string());

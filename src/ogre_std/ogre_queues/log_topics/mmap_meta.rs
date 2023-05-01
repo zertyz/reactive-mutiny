@@ -159,7 +159,7 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
         todo!()
     }
 
-    fn available_elements(&self) -> usize {
+    fn available_elements_count(&self) -> usize {
         todo!()
     }
 

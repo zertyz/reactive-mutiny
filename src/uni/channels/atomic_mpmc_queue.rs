@@ -233,7 +233,7 @@ for*/ AtomicMPMCQueue<ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     pub fn pending_items_count(&self) -> u32 {
-        self.queue.available_elements() as u32
+        self.queue.available_elements_count() as u32
     }
 
 }
