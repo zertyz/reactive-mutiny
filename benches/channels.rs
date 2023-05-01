@@ -354,5 +354,5 @@ fn bench_it(group:          &mut BenchmarkGroup<WallTime>,
 }
 
 
-criterion_group!(benches, /*bench_same_thread_latency, bench_same_thread_throughput, bench_inter_thread_latency, */bench_inter_thread_throughput);
+criterion_group!(benches, bench_same_thread_latency, bench_same_thread_throughput, bench_inter_thread_latency, bench_inter_thread_throughput);
 criterion_main!(benches);
