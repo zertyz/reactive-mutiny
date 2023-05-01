@@ -32,6 +32,7 @@ ctor          = "0.2"    # setup and teardown for modules
 simple_logger = "4.0"    # a dirty console logger
 log           = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
 
+
 # dependencies for the socket-server example
 ############################################
 
@@ -58,3 +59,13 @@ sloggers    = "2"
 # deprecated
 lazy_static = "1.4"     # as of 2023-03-29: use `one_cell` instead
 neat-date-time = "0.1"  # as of 2023-04-05: scheduled to be removed once ogre is removed from here
+
+# dependencies for benchmarks
+#############################
+
+criterion         = { version = "0.3", features=["html_reports"] }
+crossbeam-channel = "0.5"
+
+[[bench]]
+name = "channels"
+harness = false
