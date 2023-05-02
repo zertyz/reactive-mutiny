@@ -10,6 +10,7 @@ use std::{
     sync::atomic::{AtomicU32,Ordering::{Acquire,Relaxed,Release}},
     mem::MaybeUninit,
 };
+use std::mem::ManuallyDrop;
 
 
 /// Basis for multiple producer / multiple consumer queues using atomics for synchronization,
@@ -30,7 +31,7 @@ pub struct AtomicMeta<SlotType,
     /// -- may receed if exceeded the buffer capacity
     pub(crate) enqueuer_tail: AtomicU32,
     /// holder for the queue elements
-    pub(crate) buffer: [SlotType; BUFFER_SIZE],
+    pub(crate) buffer: [ManuallyDrop<SlotType>; BUFFER_SIZE],
     /// increase-before-load field, marking where the next element should be retrieved from
     /// -- may receed if it gets ahead of the published `tail`
     pub(crate) dequeuer_head: AtomicU32,
@@ -232,7 +233,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                 }
             }
         }
-        Some( (&mut mutable_buffer[slot_id as usize % BUFFER_SIZE], slot_id, len_before) )
+        unsafe { Some( (mutable_buffer.get_unchecked_mut(slot_id as usize % BUFFER_SIZE), slot_id, len_before) ) }
     }
 
     /// marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
@@ -290,13 +291,13 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         loop {
             let tail = self.tail.load(Relaxed);
             len_before = tail.overflowing_sub(slot_id).0 as i32;
-            // is queue empty?
+            // queue has elements?
             if len_before > 0 {
-                let slot_value = &mut mutable_buffer[slot_id as usize % BUFFER_SIZE];
+                let slot_value = unsafe { mutable_buffer.get_unchecked_mut(slot_id as usize % BUFFER_SIZE) };
                 break Some( (slot_value, slot_id, len_before) )
             } else {
                 // queue is empty: reestablish the correct `dequeuer_head` (receding it to its original value)
-                match self.dequeuer_head.compare_exchange(slot_id + 1, slot_id, Release, Acquire) {
+                match self.dequeuer_head.compare_exchange_weak(slot_id + 1, slot_id, Release, Acquire) {
                     Ok(_) => {
                         if !report_empty_fn() {
                             return None;
@@ -339,7 +340,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     /// returns a reference to the slot pointed to by `slot_id`
     #[inline(always)]
     fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
-        &self.buffer[slot_id as usize % BUFFER_SIZE]
+        unsafe { self.buffer.get_unchecked(slot_id as usize % BUFFER_SIZE) }
     }
 }
 
@@ -348,6 +349,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 // /// (5x * number of bytes to be set * wait_factor)
 #[inline(always)]
 fn relaxed_wait<SlotType>(_wait_factor: u32) {
+    std::hint::spin_loop();
     // for _ in 0..wait_factor {
     //     // subject to loop unrolling optimization
     //     for _ in 0..std::mem::size_of::<SlotType>() {

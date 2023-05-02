@@ -86,7 +86,7 @@ for*/ OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.for_backing_container(0, |container| {
             container.publish(item_builder,
                               || false,
-                              |len| self.streams_manager.wake_stream(len-1))
+                              |len| if len <= MAX_STREAMS as u32 { self.streams_manager.wake_stream(len-1) })
         })
     }
 

@@ -23,10 +23,10 @@ use tokio::{
 /// this is the fastest [MultiChannel] for general use, as revealed in performance tests
 type MultiChannelType<'a, ItemType,
                           const BUFFER_SIZE: usize,
-                          const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+                          const MAX_STREAMS: usize> = channels::atomic_queue::AtomicQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type MultiStreamType<'a, ItemType,
                              const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize> = MultiStream<'a, ItemType, FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, MAX_STREAMS>;
+                             const MAX_STREAMS: usize> = MultiStream<'a, ItemType, AtomicMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, MAX_STREAMS>;
 
 
 /// `Multi` is an event handler capable of having several "listeners" -- all of which receives all events.\
@@ -247,6 +247,7 @@ macro_rules! multis_close_async {
     }
 }
 pub use multis_close_async;
+use crate::ogre_std::ogre_queues::atomic_queues::atomic_meta::AtomicMeta;
 
 /// Keeps track of the `stream_executor` associated to each `stream_id`
 pub struct ExecutorInfo<const INSTRUMENTS: usize> {

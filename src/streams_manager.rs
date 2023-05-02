@@ -140,17 +140,15 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
     /// Wakes the `stream_id` -- for instance, when an element arrives at an empty container.
     #[inline(always)]
     pub fn wake_stream(&self, stream_id: u32) {
-        if stream_id < MAX_STREAMS as u32 {
-            match &self.wakers[stream_id as usize] {
-                Some(waker) => waker.wake_by_ref(),
-                None => {
-                    // try again, syncing
-                    ogre_sync::lock(&self.wakers_lock);
-                    if let Some(waker) = &self.wakers[stream_id as usize] {
-                        waker.wake_by_ref();
-                    }
-                    ogre_sync::unlock(&self.wakers_lock);
+        match &self.wakers[stream_id as usize] {
+            Some(waker) => waker.wake_by_ref(),
+            None => {
+                // try again, syncing
+                ogre_sync::lock(&self.wakers_lock);
+                if let Some(waker) = &self.wakers[stream_id as usize] {
+                    waker.wake_by_ref();
                 }
+                ogre_sync::unlock(&self.wakers_lock);
             }
         }
     }

@@ -168,7 +168,7 @@ mod tests {
     }
     doc_test!(crossbeam_channel_doc_test, crossbeam::Crossbeam<&str, 1024>);
     doc_test!(atomic_queue_doc_test,      atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 1>);
-    doc_test!(mutex_queue_doc_test,       ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
+    doc_test!(full_sync_queue_doc_test,   ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
 
 
     // *_dropping for known parallel stream implementors

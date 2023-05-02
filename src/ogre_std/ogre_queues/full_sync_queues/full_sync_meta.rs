@@ -222,7 +222,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
             ogre_sync::lock(&self.concurrency_guard);
             len_before = self.tail.overflowing_sub(self.head).0;
             if len_before < BUFFER_SIZE as u32 {
-                break Some( (&mut mutable_self.buffer[self.tail as usize % BUFFER_SIZE], len_before) )
+                break unsafe { Some( (mutable_self.buffer.get_unchecked_mut(self.tail as usize % BUFFER_SIZE), len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_full = report_full_fn();
@@ -264,7 +264,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
             ogre_sync::lock(&self.concurrency_guard);
             len_before = self.available_elements_count() as i32;
             if len_before > 0 {
-                break Some( (&mut mutable_self.buffer[self.head as usize % BUFFER_SIZE], len_before) )
+                break unsafe { Some( (mutable_self.buffer.get_unchecked_mut(self.head as usize % BUFFER_SIZE), len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_empty = report_empty_fn();
@@ -292,7 +292,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
     /// returns a reference to the slot pointed to by `slot_id`
     #[inline(always)]
     fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
-        &self.buffer[slot_id as usize % BUFFER_SIZE]
+        unsafe { self.buffer.get_unchecked(slot_id as usize % BUFFER_SIZE) }
     }
 
 }
