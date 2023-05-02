@@ -10,17 +10,18 @@ edition = "2021"
 [features]
 
 [dependencies]
-log         = "0.4"
-tokio       = { version = "1", features = ["full", "rt-multi-thread"] }
-futures     = "0.3"     # brings in "Streams" / async iterators
-minstant    = "0.1"     # as fast as possible time measurements on X86_64 using TSC / RDTSC instructions -- avoiding system calls & context switches
-indexmap    = "1.9"     # hashmaps as fast as vectors to traverse through values (preserves the insertion order in a vector)
-atomic_enum = "0.2"
-async-trait = "0.1"     # non-zero-cost async traits
-parking_lot = "0.12"    # way faster than std mutex (and tokio mutexes as well)
-crossbeam   = "0.8"     # scoped threads
-memmap      = "0.7"
-owning_ref = "0.4"      # allows Arcs to be used for internal references
+log               = "0.4"
+tokio             = { version = "1", features = ["full", "rt-multi-thread"] }
+futures           = "0.3"     # brings in "Streams" / async iterators
+minstant          = "0.1"     # as fast as possible time measurements on X86_64 using TSC / RDTSC instructions -- avoiding system calls & context switches
+indexmap          = "1.9"     # hashmaps as fast as vectors to traverse through values (preserves the insertion order in a vector)
+atomic_enum       = "0.2"
+async-trait       = "0.1"     # non-zero-cost async traits
+parking_lot       = "0.12"    # way faster than std mutex (and tokio mutexes as well)
+crossbeam         = "0.8"     # scoped threads
+crossbeam-channel = "0.5"     # the fastest channels available, besides ours (they aren't zero-copy)
+memmap            = "0.7"
+owning_ref        = "0.4"      # allows Arcs to be used for internal references
 
 
 # doc-dependencies
@@ -64,7 +65,6 @@ neat-date-time = "0.1"  # as of 2023-04-05: scheduled to be removed once ogre is
 #############################
 
 criterion         = { version = "0.3", features=["html_reports"] }
-crossbeam-channel = "0.5"
 
 [[bench]]
 name = "channels"

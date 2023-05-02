@@ -2,7 +2,6 @@
 
 use super::{
     super::super::{
-        StreamsManager,
         ogre_std::ogre_queues::meta_subscriber::MetaSubscriber,
     },
 };
@@ -44,7 +43,7 @@ MultiStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
         Self {
             stream_id,
             streams_manager: streams_manager.clone(),
-            _phantom: PhantomData::default(),
+            _phantom:        PhantomData::default(),
         }
     }
 

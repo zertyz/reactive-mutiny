@@ -443,7 +443,7 @@ mod tests {
         async fn profile_uni<const BUFFER_SIZE: usize,
                              const MAX_STREAMS: usize,
                              const INSTRUMENTS: usize>
-                            (uni:            Arc<Uni<u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>,
+                            (uni:            Arc<Uni<'static, u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>>,
                              profiling_name: &str,
                              count:          u32) {
             print!("{profiling_name} "); std::io::stdout().flush().unwrap();

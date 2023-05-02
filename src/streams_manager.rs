@@ -16,7 +16,6 @@ use crate::{
         ogre_sync,
     },
     multi::channels::multi_stream::MultiStream,
-    StreamsManager,
 };
 use std::{
     time::Duration,
@@ -113,15 +112,15 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
         self.streams_manager_name.as_str()
     }
 
-    /// Shares a reference to the backing container for `stream_id` with the given `action(MetaSubscriber)` closure,
-    /// allowing access to the backing [MetaContainer].
+    /// Shares a reference to the `container_id`'s backing container, applying the `action(MetaSubscriber)` closure on it,
+    /// enabling access to the backing [MetaContainer].
     #[inline(always)]
     pub fn for_backing_container<OutType>
                                 (&self,
-                                 stream_id: u32,
-                                 action:    impl FnOnce(&MetaContainerType)-> OutType)
+                                 container_id: u32,
+                                 action:       impl FnOnce(&MetaContainerType)-> OutType)
                                 -> OutType {
-        action(self.containers[stream_id as usize].as_ref().get_ref())
+        action(self.containers[container_id as usize].as_ref().get_ref())
     }
 
     /// Creates the room for a new `Stream`, but returns only its `stream_id`, leaving the `Stream` creation per-se to the caller.
@@ -141,15 +140,17 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
     /// Wakes the `stream_id` -- for instance, when an element arrives at an empty container.
     #[inline(always)]
     pub fn wake_stream(&self, stream_id: u32) {
-        match &self.wakers[stream_id as usize] {
-            Some(waker) => waker.wake_by_ref(),
-            None => {
-                // try again, syncing
-                ogre_sync::lock(&self.wakers_lock);
-                if let Some(waker) = &self.wakers[stream_id as usize] {
-                    waker.wake_by_ref();
+        if stream_id < MAX_STREAMS as u32 {
+            match &self.wakers[stream_id as usize] {
+                Some(waker) => waker.wake_by_ref(),
+                None => {
+                    // try again, syncing
+                    ogre_sync::lock(&self.wakers_lock);
+                    if let Some(waker) = &self.wakers[stream_id as usize] {
+                        waker.wake_by_ref();
+                    }
+                    ogre_sync::unlock(&self.wakers_lock);
                 }
-                ogre_sync::unlock(&self.wakers_lock);
             }
         }
     }

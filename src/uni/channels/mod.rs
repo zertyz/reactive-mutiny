@@ -1,5 +1,5 @@
 pub mod uni_stream;
-pub mod tokio_mpsc;
+pub mod crossbeam;
 pub mod atomic_mpmc_queue;
 pub mod ogre_full_sync_mpmc_queue;
 
@@ -29,7 +29,7 @@ use owning_ref::ArcRef;
 ///   2. Call this trait's `.flush()` method
 ///   3. Drop all instances & Streams.
 ///
-/// Known implementers of this trait are: [mutex_mpmc_queue], [atomic_mpmc_queue], [tokio_mpsc].\
+/// Known implementers of this trait are: [mutex_mpmc_queue], [atomic_mpmc_queue], [crossbeam].\
 ///
 /// See also: [MultiChannel], allowing a single `send()` to reach multiple consumers (broadcast).
 ///
@@ -135,9 +135,9 @@ macro_rules! impl_uni_channel_for_struct {
 mod tests {
     use std::fmt::Debug;
     use std::future::Future;
-    use super::{*, tokio_mpsc};
+    use super::{*, crossbeam};
     use crate::uni::channels::{
-        tokio_mpsc::TokioMPSC,
+        crossbeam::Crossbeam,
         atomic_mpmc_queue::AtomicMPMCQueue,
         ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue,
     };
@@ -158,17 +158,17 @@ mod tests {
             /// exercises the code present on the documentation for $uni_channel_type
             #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
-                let channel = <$uni_channel_type>::new();
-                let mut stream = channel.consumer_stream().expect("At least one stream should be available -- regardless of the implementation");
+                let channel = <$uni_channel_type>::new("doc_test");
+                let mut stream = channel.consumer_stream();
                 let send_result = channel.try_send("a");
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
             }
         }
     }
-    doc_test!(tokio_mpsc_queue_doc_test,  tokio_mpsc::TokioMPSC<&str, 1024>);
-    doc_test!(atomic_mpmc_queue_doc_test, atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 1>);
-    doc_test!(mutex_mpmc_queue_doc_test,  ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
+    doc_test!(crossbeam_channel_doc_test, crossbeam::Crossbeam<&str, 1024>);
+    doc_test!(atomic_queue_doc_test,      atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 1>);
+    doc_test!(mutex_queue_doc_test,       ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
 
 
     // *_dropping for known parallel stream implementors
@@ -182,27 +182,36 @@ mod tests {
             async fn $fn_name() {
                 {
                     print!("Dropping the channel before the stream consumes the element: ");
-                    let channel = <$uni_channel_type>::new();
-                    assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
-                    let mut stream_1 = channel.clone().consumer_stream().unwrap();
-                    let stream_2 = channel.clone().consumer_stream().unwrap();
-                    assert_eq!(Arc::strong_count(&channel), 5, "Creating a stream should increase the ref count by 2");
+                    let channel = <$uni_channel_type>::new("dropping");
+                    let streams_manager = channel.streams_manager();    // will add 1 to the references count
+                    assert_eq!(Arc::strong_count(&streams_manager), 2, "Sanity check on reference counting");
+                    let mut stream_1 = channel.consumer_stream();
+                    let stream_2 = channel.consumer_stream();
+                    assert_eq!(Arc::strong_count(&streams_manager), 4, "Creating each stream should increase the ref count by 1");
                     channel.try_send("a");
-                    drop(channel);  // dropping the channel will decrease the Arc reference count by 1
                     exec_future(stream_1.next(), "receiving", 1.0, true).await;
+                    // dropping the streams & channel will decrease the Arc reference count to 1
+                    drop(stream_1);
+                    drop(stream_2);
+                    drop(channel);
+                    assert_eq!(Arc::strong_count(&streams_manager), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                 }
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
-                    let channel = <$uni_channel_type>::new();
-                    let stream = channel.consumer_stream().unwrap();
-                    assert_eq!(Arc::strong_count(&channel), 3, "`channel` + `stream`: reference count should be 3");
+                    let channel = <$uni_channel_type>::new("dropping");
+                    let streams_manager = channel.streams_manager();    // will add 1 to the references count
+                    let stream = channel.consumer_stream();
+                    assert_eq!(Arc::strong_count(&streams_manager), 3, "`channel` + `stream` + `local ref`: reference count should be 3");
                     drop(stream);
-                    assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 2");
-                    let mut stream = channel.consumer_stream().unwrap();
-                    assert_eq!(Arc::strong_count(&channel), 3, "1 `channel` + 1 `stream` again, at this point: reference count should be 3");
+                    assert_eq!(Arc::strong_count(&streams_manager), 2, "Dropping a stream should decrease the ref count by 1");
+                    let mut stream = channel.consumer_stream();
+                    assert_eq!(Arc::strong_count(&streams_manager), 3, "1 `channel` + 1 `stream` + `local ref` again, at this point: reference count should be 3");
                     channel.try_send("a");
-                    drop(channel);  // dropping the channel will decrease the Arc reference count by 1
                     exec_future(stream.next(), "receiving", 1.0, true).await;
+                    // dropping the stream & channel will decrease the Arc reference count to 1
+                    drop(stream);
+                    drop(channel);
+                    assert_eq!(Arc::strong_count(&streams_manager), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                 }
                 // print!("Lazy check with stupid amount of creations and destructions... watch out the process for memory: ");
                 // for i in 0..1234567 {
@@ -219,28 +228,28 @@ mod tests {
             }
         }
     }
-    dropping!(atomic_mpmc_queue_dropping, atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 2>);
-    dropping!(mutex_mpmc_queue_dropping,  ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 2>);
+    dropping!(atomic_queue_dropping,    atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 2>);
+    dropping!(full_sync_queue_dropping, ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 2>);
 
 
     // *_parallel_streams for known parallel stream implementors
     ////////////////////////////////////////////////////////////
 
-    const PARALLEL_STREAMS: usize = 100;     // total test time will be this number / 100 (in seconds)
+    const PARALLEL_STREAMS: usize = 128;     // total test time will be this number / 100 (in seconds)
     macro_rules! parallel_streams {
         ($fn_name: tt, $uni_channel_type: ty) => {
             /// guarantees implementors allows splitting messages in several parallel streams
             #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
 
-                let channel = <$uni_channel_type>::new();
+                let channel = Arc::new(<$uni_channel_type>::new("parallel streams"));
 
                 // collect the streams
                 let mut streams = stream::iter(0..PARALLEL_STREAMS)
                     .then(|i| {
                         let channel = channel.clone();
                         async move {
-                            channel.consumer_stream().expect(&format!("Stream #{i} was not conceded"))
+                            channel.consumer_stream()
                         }
                     })
                     .collect::<Vec<_>>().await;
@@ -287,7 +296,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.consumer_stream().expect("Asking for the first stream");
+                let mut stream = channel.consumer_stream();
 
                 print!("{} (same task / same thread):           ", profiling_name);
                 std::io::stdout().flush().unwrap();
@@ -315,7 +324,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.consumer_stream().expect("Asking for the first stream");
+                let mut stream = channel.consumer_stream();
                 let start = Instant::now();
 
                 let sender_future = async {
@@ -357,7 +366,7 @@ if counter == count {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.consumer_stream().expect("Asking for the first stream");
+                let mut stream = channel.consumer_stream();
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     for e in 0..count {
@@ -366,7 +375,7 @@ if counter == count {
                         }
                     }
                     //channel.end_all_streams(Duration::from_secs(5)).await;
-                    channel.sig_end_all_streams();
+                    channel.cancel_all_streams();
                 });
 
                 let receiver_task = tokio::spawn(
@@ -402,17 +411,17 @@ if counter == count {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(TokioMPSC::<u32, BUFFER_SIZE>::new(), "TokioMPSC            ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(TokioMPSC::<u32, BUFFER_SIZE>::new(), "TokioMPSC            ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(TokioMPSC::<u32, BUFFER_SIZE>::new(), "TokioMPSC            ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(Crossbeam::<u32, BUFFER_SIZE>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
     }
 
     /// executes the given `fut`ure, tracking timeouts

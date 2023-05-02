@@ -83,11 +83,12 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
                           pipeline_builder:          impl FnOnce(UniStreamType<'static, InType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
                           on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static)
 
-                         -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
+                         -> Arc<Uni<'static, InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
-        let executor = StreamExecutor::with_futures_timeout(stream_name.into(), self.futures_timeout);
-        let handle = Arc::new(Uni::new(Arc::clone(&executor)));
-        let in_stream = handle.consumer_stream().expect("At least 1 stream should be provided by the Uni Channel");
+        let stream_name = stream_name.into();
+        let executor = StreamExecutor::with_futures_timeout(stream_name.to_string(), self.futures_timeout);
+        let handle = Arc::new(Uni::new(stream_name, Arc::clone(&executor)));
+        let in_stream = handle.consumer_stream();
         let returned_handle = Arc::clone(&handle);
         let out_stream = pipeline_builder(in_stream);
         let on_stream_close_callback = self.on_stream_close_callback.expect("how could you compile without a 'on_stream_close_callback'?");
@@ -116,11 +117,12 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
                                                    stream_name:              IntoString,
                                                    pipeline_builder:         impl FnOnce(UniStreamType<'static, InType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType)
 
-                                                  -> Arc<Uni<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
+                                                  -> Arc<Uni<'static, InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
 
-        let executor = StreamExecutor::new(stream_name.into());
-        let handle = Arc::new(Uni::new(Arc::clone(&executor)));
-        let in_stream = handle.consumer_stream().expect("At least 1 stream should be provided by the Uni Channel");
+        let stream_name = stream_name.into();
+        let executor = StreamExecutor::new(stream_name.to_string());
+        let handle = Arc::new(Uni::new(stream_name, Arc::clone(&executor)));
+        let in_stream = handle.consumer_stream();
         let returned_handle = Arc::clone(&handle);
         let out_stream = pipeline_builder(in_stream);
         executor

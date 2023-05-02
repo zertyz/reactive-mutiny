@@ -134,7 +134,7 @@ for*/ InternalOgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.end_all_streams(timeout).await
     }
 
-    pub fn sig_stop_all_streams(&self) {
+    pub fn cancel_all_streams(&self) {
         self.streams_manager.cancel_all_streams();
     }
 
@@ -473,7 +473,7 @@ mod tests {
                         //tokio::task::yield_now().await;
                     }
                     //channel.end_all_streams(Duration::from_secs(5)).await;
-                    channel.sig_stop_all_streams();
+                    channel.cancel_all_streams();
                 });
 
                 let receiver_task = tokio::spawn(async move {
