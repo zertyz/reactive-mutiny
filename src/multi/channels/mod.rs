@@ -62,36 +62,34 @@ mod tests {
                 {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$multi_channel_type>::new("stream_and_channel_dropping");
-                    let streams_manager = channel.streams_manager();    // will add 1 to the references count
-                    assert_eq!(Arc::strong_count(&streams_manager), 2, "Sanity check on reference counting");
+                    assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
                     let (mut stream_1, _stream_id) = channel.listener_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 3, "Creating a stream should increase the ref count by 1");
+                    assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
                     let (mut stream_2, _stream_id_2) = channel.listener_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 4, "Creating a stream should increase the ref count by 1");
+                    assert_eq!(Arc::strong_count(&channel), 3, "Creating a stream should increase the ref count by 1");
                     channel.send("a");
                     println!("received: stream_1: {}; stream_2: {}", stream_1.next().await.unwrap(), stream_2.next().await.unwrap());
                     // dropping the streams & channel will decrease the Arc reference count to 1
                     drop(stream_1);
                     drop(stream_2);
+                    assert_eq!(Arc::strong_count(&channel), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                     drop(channel);
-                    assert_eq!(Arc::strong_count(&streams_manager), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                 }
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$multi_channel_type>::new("stream_and_channel_dropping");
-                    let streams_manager = channel.streams_manager();    // will add 1 to the references count
                     let stream = channel.listener_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 3, "`channel` + `stream` + `local ref`: reference count should be 3");
+                    assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 3");
                     drop(stream);
-                    assert_eq!(Arc::strong_count(&streams_manager), 2, "Dropping a stream should decrease the ref count by 1");
+                    assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
                     let (mut stream, _stream_id) = channel.listener_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 3, "1 `channel` + 1 `stream` + `local ref` again, at this point: reference count should be 3");
+                    assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.send("a");
                     println!("received: {}", stream.next().await.unwrap());
                     // dropping the stream & channel will decrease the Arc reference count to 1
                     drop(stream);
+                    assert_eq!(Arc::strong_count(&channel), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                     drop(channel);
-                    assert_eq!(Arc::strong_count(&streams_manager), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                 }
                 // print!("Brute-force check with stupid amount of creations and destructions... watch out the process for memory!");
                 // for i in 0..1234567 {

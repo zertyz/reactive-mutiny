@@ -39,13 +39,9 @@ use log::{warn};
 /// Basis for all `Uni`s and `Multi`s Stream Managers,
 /// containing all common fields and code.
 pub struct StreamsManagerBase<'a, ItemType:           'a,
-                                  MetaContainerType:  MetaContainer<'a, DerivativeItemType>,
-                                  const MAX_CHANNELS: usize,
                                   const MAX_STREAMS:  usize,
                                   DerivativeItemType  : 'a = ItemType> {
 
-    /// Backing storage for events (here we care for the receiver part)
-    containers:             [Pin<Box<MetaContainerType>>; MAX_CHANNELS],
     /// the id # of streams that can be created are stored here.\
     /// synced with `used_streams`, so creating & dropping streams occurs as fast as possible
     vacant_streams:         Pin<Box<NonBlockingQueue<u32, MAX_STREAMS>>>,
@@ -73,21 +69,12 @@ pub struct StreamsManagerBase<'a, ItemType:           'a,
 }
 
 impl<'a, ItemType:           'a,
-         MetaContainerType:  MetaContainer<'a, DerivativeItemType>,
-         const MAX_CHANNELS: usize,
          const MAX_STREAMS:  usize,
          DerivativeItemType>
-StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, DerivativeItemType> {
+StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
 
     pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Self {
         Self {
-            containers:                {
-                                         let mut channels: [Pin<Box<MetaContainerType>>; MAX_CHANNELS] = unsafe { MaybeUninit::zeroed().assume_init() };
-                                         for i in 0..channels.len() {
-                                             channels[i] = Box::pin(MetaContainerType::new());
-                                         }
-                                         channels
-                                     },
             created_streams_count:  AtomicU32::new(0),
             vacant_streams:         {
                                         let vacant_streams = Box::pin(NonBlockingQueue::<u32, MAX_STREAMS>::new("vacant streams for an OgreMPMCQueue Multi channel"));
@@ -112,17 +99,6 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
         self.streams_manager_name.as_str()
     }
 
-    /// Shares a reference to the `container_id`'s backing container, applying the `action(MetaSubscriber)` closure on it,
-    /// enabling access to the backing [MetaContainer].
-    #[inline(always)]
-    pub fn for_backing_container<OutType>
-                                (&self,
-                                 container_id: u32,
-                                 action:       impl FnOnce(&MetaContainerType)-> OutType)
-                                -> OutType {
-        action(self.containers[container_id as usize].as_ref().get_ref())
-    }
-
     /// Creates the room for a new `Stream`, but returns only its `stream_id`, leaving the `Stream` creation per-se to the caller.
     pub fn create_stream_id(&self) -> u32 {
         self.created_streams_count.fetch_add(1, Relaxed);
@@ -140,12 +116,12 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
     /// Wakes the `stream_id` -- for instance, when an element arrives at an empty container.
     #[inline(always)]
     pub fn wake_stream(&self, stream_id: u32) {
-        match &self.wakers[stream_id as usize] {
+        match unsafe {self.wakers.get_unchecked(stream_id as usize)} {
             Some(waker) => waker.wake_by_ref(),
             None => {
                 // try again, syncing
                 ogre_sync::lock(&self.wakers_lock);
-                if let Some(waker) = &self.wakers[stream_id as usize] {
+                if let Some(waker) = unsafe {self.wakers.get_unchecked(stream_id as usize)} {
                     waker.wake_by_ref();
                 }
                 ogre_sync::unlock(&self.wakers_lock);
@@ -163,7 +139,7 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
     /// Returns `false` if the `Stream` has been signaled to end its operations, causing it to report "out-of-elements" as soon as possible.
     #[inline(always)]
     pub fn keep_stream_running(&self, stream_id: u32) -> bool {
-        self.keep_streams_running[stream_id as usize]
+        unsafe { *self.keep_streams_running.get_unchecked(stream_id as usize) }
     }
 
     /// Signals `stream_id` to end, as soon as possible -- making it reach its end-of-life.\
@@ -194,7 +170,7 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
             () => {
                 let waker = waker.clone();
                 ogre_sync::lock(&mutable_self.wakers_lock);
-                let waker = mutable_self.wakers[stream_id as usize].insert(waker);
+                let waker = unsafe { mutable_self.wakers.get_unchecked_mut(stream_id as usize).insert(waker) };
                 ogre_sync::unlock(&mutable_self.wakers_lock);
                 // the producer might have just woken the old version of the waker,
                 // so the following waking up line is needed to assure the consumers won't ever hang
@@ -203,7 +179,7 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
             }
         }
 
-        match &mut mutable_self.wakers[stream_id as usize] {
+        match unsafe { mutable_self.wakers.get_unchecked_mut(stream_id as usize) } {
             Some(registered_waker) => {
                 if !registered_waker.will_wake(waker) {
                     set!();
@@ -262,28 +238,28 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
                 Some(next_vacant_stream_id) => {
                     for used_stream_id in i .. *next_vacant_stream_id {
                         last_used_stream_id += 1;
-                        mutable_self.used_streams[last_used_stream_id as usize] = used_stream_id;
+                        unsafe { *mutable_self.used_streams.get_unchecked_mut(last_used_stream_id as usize)  = used_stream_id };
                         i += 1;
                     }
                     i += 1;
                 }
                 None => {
                     last_used_stream_id += 1;
-                    mutable_self.used_streams[last_used_stream_id as usize] = i;
+                    unsafe { *mutable_self.used_streams.get_unchecked_mut(last_used_stream_id as usize) = i };
                     i += 1;
                 }
             }
         }
         for i in (last_used_stream_id + 1) as usize .. MAX_STREAMS {
-            mutable_self.used_streams[i] = u32::MAX;
+            unsafe { *mutable_self.used_streams.get_unchecked_mut(i) = u32::MAX };
         }
         ogre_sync::unlock(&self.streams_lock);
     }
 
-    pub async fn flush(self: &Arc<Self>, timeout: Duration) -> u32 {
+    pub async fn flush(&self, timeout: Duration, pending_items_count: impl Fn() -> u32) -> u32 {
         let mut start: Option<Instant> = None;
         loop {
-            let pending_count = self.pending_items_count();
+            let pending_count = pending_items_count();
             if pending_count > 0 {
                 self.wake_all_streams();
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -303,7 +279,7 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
         }
     }
 
-    pub async fn end_stream(self: &Arc<Self>, stream_id: u32, timeout: Duration) -> bool {
+    pub async fn end_stream(&self, stream_id: u32, timeout: Duration, pending_items_count: impl Fn() -> u32) -> bool {
 
         // true if `stream_id` is not running
         let is_vacant = || unsafe { self.vacant_streams.peek_remaining().iter() }
@@ -315,7 +291,7 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
                                              self.used_streams.iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
 
         let start = Instant::now();
-        self.flush(timeout).await;
+        self.flush(timeout, pending_items_count).await;
         self.cancel_stream(stream_id);
         loop {
             self.wake_stream(stream_id);
@@ -328,11 +304,11 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
         }
     }
 
-    pub async fn end_all_streams(self: &Arc<Self>, timeout: Duration) -> u32 {
+    pub async fn end_all_streams(&self, timeout: Duration, pending_items_count: impl Fn() -> u32) -> u32 {
         let start = Instant::now();
-        self.flush(timeout).await;
+        self.flush(timeout, &pending_items_count).await;
         self.cancel_all_streams();
-        self.flush(timeout).await;
+        self.flush(timeout, &pending_items_count).await;
         loop {
             let running_streams = self.running_streams_count();
             if running_streams == 0 || timeout != Duration::ZERO && start.elapsed() > timeout {
@@ -346,14 +322,6 @@ StreamsManagerBase<'a, ItemType, MetaContainerType, MAX_CHANNELS, MAX_STREAMS, D
     #[inline(always)]
     pub fn running_streams_count(&self) -> u32 {
         (MAX_STREAMS - self.vacant_streams.len()) as u32
-    }
-
-    #[inline(always)]
-    pub fn pending_items_count(self: &Arc<Self>) -> u32 {
-        self.used_streams.iter()
-            .filter(|&&stream_id| stream_id != u32::MAX)
-            .map(|&stream_id| self.for_backing_container(stream_id, |container| container.available_elements_count()))
-            .sum::<usize>() as u32
     }
 
 }

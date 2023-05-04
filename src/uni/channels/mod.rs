@@ -166,7 +166,7 @@ mod tests {
             }
         }
     }
-    doc_test!(crossbeam_channel_doc_test, crossbeam::Crossbeam<&str, 1024>);
+    doc_test!(crossbeam_channel_doc_test, crossbeam::Crossbeam<&str, 1024, 1>);
     doc_test!(atomic_queue_doc_test,      atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 1>);
     doc_test!(full_sync_queue_doc_test,   ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
 
@@ -183,35 +183,33 @@ mod tests {
                 {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$uni_channel_type>::new("dropping");
-                    let streams_manager = channel.streams_manager();    // will add 1 to the references count
-                    assert_eq!(Arc::strong_count(&streams_manager), 2, "Sanity check on reference counting");
+                    assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
                     let mut stream_1 = channel.consumer_stream();
                     let stream_2 = channel.consumer_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 4, "Creating each stream should increase the ref count by 1");
+                    assert_eq!(Arc::strong_count(&channel), 3, "Creating each stream should increase the ref count by 1");
                     channel.try_send("a");
                     exec_future(stream_1.next(), "receiving", 1.0, true).await;
                     // dropping the streams & channel will decrease the Arc reference count to 1
                     drop(stream_1);
                     drop(stream_2);
+                    assert_eq!(Arc::strong_count(&channel), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                     drop(channel);
-                    assert_eq!(Arc::strong_count(&streams_manager), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                 }
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$uni_channel_type>::new("dropping");
-                    let streams_manager = channel.streams_manager();    // will add 1 to the references count
                     let stream = channel.consumer_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 3, "`channel` + `stream` + `local ref`: reference count should be 3");
+                    assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream` + `local ref`: reference count should be 2");
                     drop(stream);
-                    assert_eq!(Arc::strong_count(&streams_manager), 2, "Dropping a stream should decrease the ref count by 1");
+                    assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
                     let mut stream = channel.consumer_stream();
-                    assert_eq!(Arc::strong_count(&streams_manager), 3, "1 `channel` + 1 `stream` + `local ref` again, at this point: reference count should be 3");
+                    assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.try_send("a");
                     exec_future(stream.next(), "receiving", 1.0, true).await;
                     // dropping the stream & channel will decrease the Arc reference count to 1
                     drop(stream);
+                    assert_eq!(Arc::strong_count(&channel), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                     drop(channel);
-                    assert_eq!(Arc::strong_count(&streams_manager), 1, "The internal streams manager reference counting should be 1 at this point, as we are the only holders by now");
                 }
                 // print!("Lazy check with stupid amount of creations and destructions... watch out the process for memory: ");
                 // for i in 0..1234567 {
@@ -228,6 +226,7 @@ mod tests {
             }
         }
     }
+    dropping!(crossbeam_queue_dropping, crossbeam::Crossbeam<&str, 1024, 2>);
     dropping!(atomic_queue_dropping,    atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 2>);
     dropping!(full_sync_queue_dropping, ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 2>);
 
@@ -277,8 +276,9 @@ mod tests {
             }
         }
     }
-    parallel_streams!(atomic_mpmc_queue_parallel_streams, atomic_mpmc_queue::AtomicMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(mutex_mpmc_queue_parallel_streams,  ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(crossbeam_mpmc_queue_parallel_streams, crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(atomic_mpmc_queue_parallel_streams,    atomic_mpmc_queue::AtomicMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(mutex_mpmc_queue_parallel_streams,     ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
 
 
     /// assures performance won't be degraded when we make changes
@@ -411,9 +411,9 @@ if counter == count {
         }
 
         println!();
-        profile_same_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(Crossbeam::<u32, BUFFER_SIZE>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
 
         profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);

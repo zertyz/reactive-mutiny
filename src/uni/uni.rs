@@ -21,7 +21,7 @@ pub type UniChannelType<'a, ItemType,
                             const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type UniStreamType<'a, ItemType,
                            const BUFFER_SIZE: usize,
-                           const MAX_STREAMS: usize> = UniStream<'a, ItemType, FullSyncMeta<ItemType, BUFFER_SIZE>, MAX_STREAMS>;
+                           const MAX_STREAMS: usize> = UniStream<'a, ItemType, UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;
 
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
@@ -29,7 +29,7 @@ pub struct Uni<'a, ItemType:          Send + Sync + Debug,
                    const BUFFER_SIZE: usize,
                    const MAX_STREAMS: usize,
                    const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
-    pub uni_channel:              UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>,
+    pub uni_channel:              Arc<UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>,
     pub stream_executor:          Arc<StreamExecutor<INSTRUMENTS>>,
     pub finished_executors_count: AtomicU32,
 }

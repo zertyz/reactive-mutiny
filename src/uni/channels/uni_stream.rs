@@ -21,62 +21,50 @@ use std::marker::PhantomData;
 use futures::stream::Stream;
 use owning_ref::ArcRef;
 use tokio::io::AsyncBufReadExt;
+use crate::MutinyStreamSource;
 use crate::streams_manager::StreamsManagerBase;
 
 
 /// Special type to allow the compiler to fully optimize the whole event consumption chain -- the following paths are covered:
 /// from the container's `consume()` (providing `InItemType` items), passing through this Stream implementation, then through the user provided `pipeline_builder()` and, finally, to the `StreamExecutor`,
 /// allowing all of them to behave as a single function, that gets optimized together.
-pub struct UniStream<'a, ItemType:           Debug + 'a,
-                         MetaContainerType:  MetaContainer<'a, ItemType> + 'a,
-                         const MAX_STREAMS:  usize> {
-
-    stream_id:         u32,
-    streams_manager:   Arc<StreamsManagerBase<'a, ItemType, MetaContainerType, 1, MAX_STREAMS>>,
-    _phantom:          PhantomData<&'a ItemType>,
+pub struct UniStream<'a, ItemType:         Debug + 'a,
+                         StreamSourceType: MutinyStreamSource<'a, ItemType>> {
+    stream_id:     u32,
+    events_source: Arc<StreamSourceType>,
+    _phantom:      PhantomData<&'a ItemType>,
 
 }
 
-impl<'a, ItemType:           Debug,
-         MetaContainerType:  MetaContainer<'a, ItemType> + 'a,
-         const MAX_STREAMS:  usize>
-UniStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
+impl<'a, ItemType:         Debug,
+         StreamSourceType: MutinyStreamSource<'a, ItemType>>
+UniStream<'a, ItemType, StreamSourceType> {
 
-    pub fn new(stream_id: u32, streams_manager: &Arc<StreamsManagerBase<'a, ItemType, MetaContainerType, 1, MAX_STREAMS>>) -> Self {
+    pub fn new(stream_id: u32, events_source: &Arc<StreamSourceType>) -> Self {
         Self {
             stream_id,
-            streams_manager: streams_manager.clone(),
-            _phantom:        PhantomData::default(),
+            events_source: events_source.clone(),
+            _phantom:      PhantomData::default(),
         }
     }
 
 }
 
-impl<'a, ItemType:           Debug + 'a,
-         MetaContainerType:  MetaContainer<'a, ItemType> + 'a,
-         const MAX_STREAMS:  usize>
+impl<'a, ItemType:         Debug + 'a,
+         StreamSourceType: MutinyStreamSource<'a, ItemType>>
 Stream for
-UniStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
+UniStream<'a, ItemType, StreamSourceType> {
 
     type Item = ItemType;
 
     #[inline(always)]
     fn poll_next(mut self: Pin<&mut Self>, mut cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let event = self.streams_manager.for_backing_container(0, |container| {
-            container.consume(|item| {
-                                  let mut moved_value = MaybeUninit::<ItemType>::uninit();
-                                  unsafe { std::ptr::copy_nonoverlapping(item as *const ItemType, moved_value.as_mut_ptr(), 1) }
-                                  unsafe { moved_value.assume_init() }
-                              },
-                              || false,
-                              |_| {})
-        });
-
+        let event = self.events_source.provide(self.stream_id);
         match event {
             Some(_) => Poll::Ready(event),
             None => {
-                if self.streams_manager.keep_stream_running(self.stream_id) {
-                    self.streams_manager.register_stream_waker(self.stream_id, &cx.waker());
+                if self.events_source.keep_stream_running(self.stream_id) {
+                    self.events_source.register_stream_waker(self.stream_id, &cx.waker());
                     Poll::Pending
                 } else {
                     Poll::Ready(None)
@@ -86,11 +74,10 @@ UniStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          Debug,
-         MetaContainerType: MetaContainer<'a, ItemType> + 'a,
-         const MAX_STREAMS:  usize>
-Drop for UniStream<'a, ItemType, MetaContainerType, MAX_STREAMS> {
+impl<'a, ItemType:         Debug,
+         StreamSourceType: MutinyStreamSource<'a, ItemType>>
+Drop for UniStream<'a, ItemType, StreamSourceType> {
     fn drop(&mut self) {
-        self.streams_manager.report_stream_dropped(self.stream_id);
+        self.events_source.drop_resources(self.stream_id);
     }
 }

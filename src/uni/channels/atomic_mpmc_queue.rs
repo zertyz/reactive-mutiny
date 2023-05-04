@@ -1,4 +1,5 @@
 use crate::{
+    types::MutinyStreamSource,
     ogre_std::{
         ogre_queues::{
             atomic_queues::atomic_meta::AtomicMeta,
@@ -22,13 +23,14 @@ use std::{
 };
 use std::hint::spin_loop;
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
+use std::mem::{ManuallyDrop, MaybeUninit};
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 use futures::{Stream};
 use minstant::Instant;
 use owning_ref::ArcRef;
 use crate::streams_manager::StreamsManagerBase;
+use crate::uni::channels::uni_stream;
 
 
 /// A Uni channel, backed by an [AtomicMeta], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
@@ -36,7 +38,11 @@ pub struct AtomicMPMCQueue<'a, ItemType:          Send + Sync + Debug,
                                const BUFFER_SIZE: usize,
                                const MAX_STREAMS: usize> {
 
-    streams_manager: Arc<StreamsManagerBase<'a, ItemType, AtomicMeta<ItemType, BUFFER_SIZE>, 1, MAX_STREAMS>>,
+    /// common code for dealing with streams
+    streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    /// backing storage for events -- AKA, channels
+    channel:       Pin<Box<AtomicMeta<ItemType, BUFFER_SIZE>>>,
+
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
@@ -49,9 +55,9 @@ AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     /// Be aware of the special semantics for dropping streams: no stream should stop consuming elements (don't drop it!) until
     /// your are ready to drop the whole channel.\
     /// DEVELOPMENT NOTE: OUT-OF-TRAIT [UniChannel] implementation. Once Rust allows trait functions to return `impls`, this should be moved there
-    pub fn consumer_stream(&self) -> UniStream<'a, ItemType, AtomicMeta<ItemType, BUFFER_SIZE>, MAX_STREAMS> {
+    pub fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
-        UniStream::new(stream_id, &self.streams_manager)
+        UniStream::new(stream_id, self)
     }
 
 }
@@ -65,27 +71,25 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
 for*/ AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Instantiates
-    pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Self {
-        Self {
-            streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name))
-        }
-    }
-
-    /// clones & shares the internal `streams_manager`, for testing purposes
-    pub(crate) fn streams_manager(&self) -> Arc<StreamsManagerBase<'a, ItemType, AtomicMeta<ItemType, BUFFER_SIZE>, 1, MAX_STREAMS>> {
-        self.streams_manager.clone()
+    pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
+        Arc::new(Self {
+            streams_manager: StreamsManagerBase::new(streams_manager_name),
+            channel:       Box::pin(AtomicMeta::<ItemType, BUFFER_SIZE>::new()),
+        })
     }
 
     #[inline(always)]
     pub unsafe fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
-        self.streams_manager.for_backing_container(0, |container| {
-            container.publish(item_builder,
-                              || {
-                                  self.streams_manager.wake_all_streams();
-                                  false
-                              },
-                              |len| if len <= MAX_STREAMS as u32 { self.streams_manager.wake_stream(len-1) })
-        })
+        self.channel.publish(item_builder,
+                             || {
+                                   self.streams_manager.wake_all_streams();
+                                   false
+                               },
+                             |len| if len <= 1 {
+                                                                        self.streams_manager.wake_stream(0)
+                                                                    } else if len <= MAX_STREAMS as u32 {
+                                                                        self.streams_manager.wake_stream(len-1)
+                                                                    })
     }
 
     #[inline(always)]
@@ -100,11 +104,11 @@ for*/ AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     pub async fn flush(&self, timeout: Duration) -> u32 {
-        self.streams_manager.flush(timeout).await
+        self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
 
     pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
-        self.streams_manager.end_all_streams(timeout).await
+        self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
     }
 
     pub fn cancel_all_streams(&self) {
@@ -117,7 +121,40 @@ for*/ AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     pub fn pending_items_count(&self) -> u32 {
-        self.streams_manager.pending_items_count()
+        self.channel.available_elements_count() as u32
     }
 
+}
+
+impl<'a, ItemType:          'a + Send + Sync + Debug,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+MutinyStreamSource<'a, ItemType>
+for AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    #[inline(always)]
+    fn provide(&self, _stream_id: u32) -> Option<ItemType> {
+        self.channel.consume(|item| {
+                                 let mut moved_value = MaybeUninit::<ItemType>::uninit();
+                                 unsafe { std::ptr::copy_nonoverlapping(item as *const ItemType, moved_value.as_mut_ptr(), 1) }
+                                 unsafe { moved_value.assume_init() }
+                             },
+                             || false,
+                             |_| {})
+    }
+
+    #[inline(always)]
+    fn keep_stream_running(&self, stream_id: u32) -> bool {
+        self.streams_manager.keep_stream_running(stream_id)
+    }
+
+    #[inline(always)]
+    fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
+        self.streams_manager.register_stream_waker(stream_id, waker)
+    }
+
+    #[inline(always)]
+    fn drop_resources(&self, stream_id: u32) {
+        self.streams_manager.report_stream_dropped(stream_id);
+    }
 }

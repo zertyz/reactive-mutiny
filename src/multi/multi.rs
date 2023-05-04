@@ -26,7 +26,7 @@ type MultiChannelType<'a, ItemType,
                           const MAX_STREAMS: usize> = channels::atomic_queue::AtomicQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type MultiStreamType<'a, ItemType,
                              const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize> = MultiStream<'a, ItemType, AtomicMeta<Option<Arc<ItemType>>, BUFFER_SIZE>, MAX_STREAMS>;
+                             const MAX_STREAMS: usize> = MultiStream<'a, ItemType, MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;
 
 
 /// `Multi` is an event handler capable of having several "listeners" -- all of which receives all events.\
@@ -42,7 +42,7 @@ pub struct Multi<'a, ItemType:          Send + Sync + Debug,
                      const MAX_STREAMS: usize,
                      const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
     pub multi_name:     String,
-    pub channel:        MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>,
+    pub channel:        Arc<MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>,
     pub executor_infos: RwLock<IndexMap<String, ExecutorInfo<INSTRUMENTS>>>,
 }
 

@@ -241,12 +241,10 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     #[inline(always)]
     fn publish_leaked_internal(&'a self, slot_id: u32) {
         loop {
-            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Acquire) {
+            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Relaxed) {
                 Ok(_) => break,
-                Err(reloaded_tail) => {
-                    if slot_id > reloaded_tail {
-                        relaxed_wait::<SlotType>(slot_id - reloaded_tail)
-                    }
+                Err(_reloaded_tail) => {
+                    relaxed_wait::<SlotType>()
                 },
             }
         }
@@ -258,16 +256,8 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     fn try_unleak_slot_internal(&'a self, slot_id: u32) -> bool {
         match self.enqueuer_tail.compare_exchange_weak(slot_id + 1, slot_id, Relaxed, Relaxed) {
             Ok(_) => true,
-            Err(reloaded_enqueuer_tail) => {
-                if reloaded_enqueuer_tail > slot_id {
-                    // a new cmp_exch will be attempted due to concurrent modification of the variable
-                    // we'll relax the cpu proportional to our position in the "concurrent modification order"
-                    relaxed_wait::<SlotType>(reloaded_enqueuer_tail - slot_id);
-                } else {
-                    //#[cfg(debug_assertions)]
-                    panic!("AtomicMeta: unleak_slot_internal: AN ERROR THAT SHOULD NOT HAPPEN!");
-                    //panic!("Detected an attempt to `unleak_slot(#{slot_id}` after another allocation (issueing slot #{reloaded_enqueuer_tail})`");
-                }
+            Err(_reloaded_enqueuer_tail) => {
+                relaxed_wait::<SlotType>();
                 false
             }
         }
@@ -289,7 +279,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
         let mut len_before;
         loop {
-            let tail = self.tail.load(Relaxed);
+            let tail = self.tail.load(Acquire);
             len_before = tail.overflowing_sub(slot_id).0 as i32;
             // queue has elements?
             if len_before > 0 {
@@ -297,7 +287,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                 break Some( (slot_value, slot_id, len_before) )
             } else {
                 // queue is empty: reestablish the correct `dequeuer_head` (receding it to its original value)
-                match self.dequeuer_head.compare_exchange_weak(slot_id + 1, slot_id, Release, Acquire) {
+                match self.dequeuer_head.compare_exchange_weak(slot_id + 1, slot_id, Relaxed, Relaxed) {
                     Ok(_) => {
                         if !report_empty_fn() {
                             return None;
@@ -305,10 +295,8 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
                             slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
                         }
                     },
-                    Err(reloaded_dequeuer_head) => {
-                        if reloaded_dequeuer_head > slot_id {
-                            relaxed_wait::<SlotType>(reloaded_dequeuer_head - slot_id);
-                        }
+                    Err(_reloaded_dequeuer_head) => {
+                        relaxed_wait::<SlotType>();
                     }
                 }
             }
@@ -323,9 +311,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
             match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
                 Ok(_) => break,
                 Err(reloaded_head) => {
-                    if slot_id > reloaded_head {
-                        relaxed_wait::<SlotType>(slot_id - reloaded_head);
-                    }
+                    relaxed_wait::<SlotType>();
                 }
             }
         }
@@ -344,18 +330,9 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     }
 }
 
-// NOTE: spin_loop instruction disabled for now, as Tokio is faster without it (frees the CPU to do other tasks)
-// /// relax the cpu for a time proportional to how much we are expected to wait for the concurrent CAS operation to succeed
-// /// (5x * number of bytes to be set * wait_factor)
 #[inline(always)]
-fn relaxed_wait<SlotType>(_wait_factor: u32) {
+fn relaxed_wait<SlotType>() {
     std::hint::spin_loop();
-    // for _ in 0..wait_factor {
-    //     // subject to loop unrolling optimization
-    //     for _ in 0..std::mem::size_of::<SlotType>() {
-    //         std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-    //     }
-    // }
 }
 
 #[cfg(any(test,doc))]
