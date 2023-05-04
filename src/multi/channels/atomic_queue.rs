@@ -90,15 +90,16 @@ for*/ AtomicQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             if *stream_id == u32::MAX {
                 break
             }
-            self.channels[*stream_id as usize].publish(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
-                                                       || {
-                                                           self.streams_manager.wake_stream(*stream_id);
-                                                           warn!("Multi Channel's AtomicQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
-                                                                 channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
-                                                           std::thread::sleep(Duration::from_millis(500));
-                                                           true
-                                                       },
-                                                       |len| if len <= 2 { self.streams_manager.wake_stream(*stream_id) });
+            let channel = unsafe { self.channels.get_unchecked(*stream_id as usize) };
+            channel.publish(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
+                                     || {
+                                         self.streams_manager.wake_stream(*stream_id);
+                                         warn!("Multi Channel's AtomicQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+                                               channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
+                                         std::thread::sleep(Duration::from_millis(500));
+                                         true
+                                     },
+                                     |len| if len <= 2 { self.streams_manager.wake_stream(*stream_id) });
         }
     }
 
@@ -132,7 +133,7 @@ for*/ AtomicQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     pub fn pending_items_count(&self) -> u32 {
         self.streams_manager.used_streams().iter()
             .filter(|&&stream_id| stream_id != u32::MAX)
-            .map(|&stream_id| self.channels[stream_id as usize].available_elements_count())
+            .map(|&stream_id| unsafe { self.channels.get_unchecked(stream_id as usize) }.available_elements_count())
             .sum::<usize>() as u32
     }
 
@@ -151,9 +152,10 @@ for AtomicQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn provide(&self, stream_id: u32) -> Option<Arc<ItemType>> {
-        self.channels[stream_id as usize].consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
-                                                  || false,
-                                                  |_| {})
+        let channel = unsafe { self.channels.get_unchecked(stream_id as usize) };
+        channel.consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
+                                 || false,
+                                 |_| {})
     }
 
     #[inline(always)]

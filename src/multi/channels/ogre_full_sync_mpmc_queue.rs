@@ -130,7 +130,7 @@ for*/ OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     pub fn pending_items_count(&self) -> u32 {
         self.streams_manager.used_streams().iter()
             .filter(|&&stream_id| stream_id != u32::MAX)
-            .map(|&stream_id| self.channels[stream_id as usize].available_elements_count())
+            .map(|&stream_id| unsafe { self.channels.get_unchecked(stream_id as usize) }.available_elements_count())
             .sum::<usize>() as u32
     }
 
@@ -144,9 +144,10 @@ for OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn provide(&self, stream_id: u32) -> Option<Arc<ItemType>> {
-        self.channels[stream_id as usize ].consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
-                                                   || false,
-                                                   |_| {})
+        let channel = unsafe { self.channels.get_unchecked(stream_id as usize) };
+        channel.consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
+                                 || false,
+                                 |_| {})
     }
 
     #[inline(always)]

@@ -411,6 +411,11 @@ if counter == count {
         }
 
         println!();
+
+        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+
         profile_same_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_different_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
@@ -419,9 +424,6 @@ if counter == count {
         profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
     }
 
     /// executes the given `fut`ure, tracking timeouts

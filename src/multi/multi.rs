@@ -23,7 +23,7 @@ use tokio::{
 /// this is the fastest [MultiChannel] for general use, as revealed in performance tests
 type MultiChannelType<'a, ItemType,
                           const BUFFER_SIZE: usize,
-                          const MAX_STREAMS: usize> = channels::atomic_queue::AtomicQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+                          const MAX_STREAMS: usize> = channels::crossbeam::Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type MultiStreamType<'a, ItemType,
                              const BUFFER_SIZE: usize,
                              const MAX_STREAMS: usize> = MultiStream<'a, ItemType, MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;

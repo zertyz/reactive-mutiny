@@ -1,6 +1,7 @@
 pub mod multi_stream;
 pub mod ogre_full_sync_mpmc_queue;
 pub mod atomic_queue;
+pub mod crossbeam;
 
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [multi/channels](self) module
@@ -20,6 +21,7 @@ mod tests {
     use {
         atomic_queue::AtomicQueue,
         ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue,
+        super::crossbeam::Crossbeam,
     };
     use std::{
         sync::Arc,
@@ -49,6 +51,7 @@ mod tests {
 
     doc_test!(atomic_queue_doc_test,      AtomicQueue<&str, 1024, 1>);
     doc_test!(full_sync_queue_doc_test,   OgreFullSyncMPMCQueue<&str, 1024, 1>);
+    doc_test!(crossbeam_queue_doc_test,   Crossbeam<&str, 1024, 1>);
 
 
     // *_stream_and_channel_dropping for all known Multi Channel's
@@ -109,6 +112,7 @@ mod tests {
 
     stream_and_channel_dropping!(atomic_queue_stream_and_channel_dropping,      AtomicQueue<&str>);
     stream_and_channel_dropping!(full_sync_queue_stream_and_channel_dropping,   OgreFullSyncMPMCQueue<&str>);
+    stream_and_channel_dropping!(crossbeam_stream_and_channel_dropping,   Crossbeam<&str>);
 
 
     // *_on_the_fly_streams for all known Multi Channel's
@@ -161,6 +165,7 @@ mod tests {
 
     on_the_fly_streams!(atomic_queue_on_the_fly_streams,      AtomicQueue<String>);
     on_the_fly_streams!(full_sync_queue_on_the_fly_streams,   OgreFullSyncMPMCQueue<String>);
+    on_the_fly_streams!(crossbeam_on_the_fly_streams,   Crossbeam<String>);
 
 
     // *_multiple_streams for all known Multi Channel's
@@ -213,6 +218,7 @@ mod tests {
 
     multiple_streams!(atomic_queue_multiple_streams,      AtomicQueue<u32, 128, PARALLEL_STREAMS>);
     multiple_streams!(full_sync_queue_multiple_streams,   OgreFullSyncMPMCQueue<u32, 128, PARALLEL_STREAMS>);
+    multiple_streams!(crossbeam_multiple_streams,   Crossbeam<u32, 128, PARALLEL_STREAMS>);
 
 
     // *_end_streams for all known Multi Channel's
@@ -280,6 +286,7 @@ mod tests {
 
     end_streams!(atomic_queue_end_streams,      AtomicQueue<&str>);
     end_streams!(full_sync_queue_end_streams,   OgreFullSyncMPMCQueue<&str>);
+    end_streams!(crossbeam_end_streams,   Crossbeam<&str>);
 
 
     // *_payload_dropping for all known Multi Channel's
@@ -303,6 +310,7 @@ mod tests {
 
     payload_dropping!(atomic_queue_payload_dropping,      AtomicQueue<String>);
     payload_dropping!(full_sync_queue_payload_dropping,   OgreFullSyncMPMCQueue<String>);
+    payload_dropping!(crossbeam_payload_dropping,   Crossbeam<String>);
 
 
     /// small stress test with outputs
@@ -432,9 +440,13 @@ mod tests {
 
         println!();
 
-        profile_same_task_same_thread_channel!(AtomicQueue::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "AtomicQueue ", 16384*FACTOR);
-        profile_different_task_same_thread_channel!(AtomicQueue::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "AtomicQueue ", 16384*FACTOR);
-        profile_different_task_different_thread_channel!(AtomicQueue::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "AtomicQueue ", 16384*FACTOR);
+        profile_same_task_same_thread_channel!(AtomicQueue::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "AtomicQueue           ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(AtomicQueue::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "AtomicQueue           ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(AtomicQueue::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "AtomicQueue           ", 16384*FACTOR);
+
+        profile_same_task_same_thread_channel!(Crossbeam::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Crossbeam             ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(Crossbeam::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Crossbeam             ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(Crossbeam::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Crossbeam             ", 16384*FACTOR);
 
         profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "OgreFullSyncMPMCQueue ", 16384*FACTOR);
         profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "OgreFullSyncMPMCQueue ", 16384*FACTOR);
