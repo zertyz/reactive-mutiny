@@ -1,4 +1,4 @@
-//! Resting place for the [OgreFullSyncMPMCQueue] Uni Channel
+//! Resting place for the [FullSync] Uni Channel
 
 use crate::{uni::channels::uni_stream::UniStream, ogre_std::{
     ogre_queues::{
@@ -31,12 +31,12 @@ use crate::streams_manager::StreamsManagerBase;
 /// of the backing queue, which doesn't allow enqueueing to happen independently of dequeueing.\
 /// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
 /// making this channel a typical best fit for small & trivial types.\
-/// Please, measure your `Uni`s using all available channels [OgreFullSyncMPMCQueue], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
+/// Please, measure your `Uni`s using all available channels [FullSync], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
 /// See also [uni::channels::ogre_full_sync_mpmc_queue].\
 /// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
-pub struct OgreFullSyncMPMCQueue<'a, ItemType:          Send + Sync + Debug,
-                                     const BUFFER_SIZE: usize,
-                                     const MAX_STREAMS: usize> {
+pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
+                        const BUFFER_SIZE: usize,
+                        const MAX_STREAMS: usize> {
 
     /// common code for dealing with streams
     streams_manager: Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>>,
@@ -48,7 +48,7 @@ pub struct OgreFullSyncMPMCQueue<'a, ItemType:          Send + Sync + Debug,
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Returns as many consumer streams as requested, provided the specified limit [MAX_STREAMS] is respected.
     /// -- events will be split for each generated stream, so no two streams  will see the same payload.\
@@ -68,7 +68,7 @@ impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 /*UniChannel<ItemType>
-for*/ OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+for*/ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Instantiates
     pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
@@ -128,7 +128,7 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 MutinyStreamSource<'a, ItemType>
-for OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn provide(&self, _stream_id: u32) -> Option<ItemType> {

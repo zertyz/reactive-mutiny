@@ -34,9 +34,9 @@ use crate::uni::channels::uni_stream;
 
 
 /// A Uni channel, backed by an [AtomicMeta], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
-pub struct AtomicMPMCQueue<'a, ItemType:          Send + Sync + Debug,
-                               const BUFFER_SIZE: usize,
-                               const MAX_STREAMS: usize> {
+pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
+                      const BUFFER_SIZE: usize,
+                      const MAX_STREAMS: usize> {
 
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
@@ -48,7 +48,7 @@ pub struct AtomicMPMCQueue<'a, ItemType:          Send + Sync + Debug,
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Returns as many consumer streams as requested, provided the specified limit [MAX_STREAMS] is respected
     /// -- events will be split for each generated stream, so no two streams  will see the same payload.\
@@ -68,7 +68,7 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 /*UniChannel<ItemType>
-for*/ AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+for*/ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     /// Instantiates
     pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
@@ -130,7 +130,7 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 MutinyStreamSource<'a, ItemType>
-for AtomicMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn provide(&self, _stream_id: u32) -> Option<ItemType> {

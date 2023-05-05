@@ -1,7 +1,8 @@
+//! Provides channels to be used in Unis
+
+pub mod movable;
+pub mod zero_copy;
 pub mod uni_stream;
-pub mod crossbeam;
-pub mod atomic_mpmc_queue;
-pub mod ogre_full_sync_mpmc_queue;
 
 use crate::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
 use std::{
@@ -133,13 +134,13 @@ macro_rules! impl_uni_channel_for_struct {
 ///     type UniChannelType<ItemType, BUFFER_SIZE> = mutex_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE>
 #[cfg(any(test,doc))]
 mod tests {
-    use std::fmt::Debug;
-    use std::future::Future;
-    use super::{*, crossbeam};
-    use crate::uni::channels::{
-        crossbeam::Crossbeam,
-        atomic_mpmc_queue::AtomicMPMCQueue,
-        ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue,
+    use crate::uni::channels::{ movable, zero_copy };
+    use std::{
+        fmt::Debug,
+        future::Future,
+        sync::Arc,
+        time::Duration,
+        io::Write,
     };
     use futures::{stream, StreamExt};
     use minstant::Instant;
@@ -166,9 +167,9 @@ mod tests {
             }
         }
     }
-    doc_test!(crossbeam_channel_doc_test, crossbeam::Crossbeam<&str, 1024, 1>);
-    doc_test!(atomic_queue_doc_test,      atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 1>);
-    doc_test!(full_sync_queue_doc_test,   ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 1>);
+    doc_test!(movable_crossbeam_channel_doc_test, movable::crossbeam::Crossbeam<&str, 1024, 1>);
+    doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
+    doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
 
 
     // *_dropping for known parallel stream implementors
@@ -226,9 +227,9 @@ mod tests {
             }
         }
     }
-    dropping!(crossbeam_queue_dropping, crossbeam::Crossbeam<&str, 1024, 2>);
-    dropping!(atomic_queue_dropping,    atomic_mpmc_queue::AtomicMPMCQueue<&str, 1024, 2>);
-    dropping!(full_sync_queue_dropping, ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<&str, 1024, 2>);
+    dropping!(movable_crossbeam_queue_dropping, movable::crossbeam::Crossbeam<&str, 1024, 2>);
+    dropping!(movable_atomic_queue_dropping,    movable::atomic::Atomic<&str, 1024, 2>);
+    dropping!(movable_full_sync_queue_dropping, movable::full_sync::FullSync<&str, 1024, 2>);
 
 
     // *_parallel_streams for known parallel stream implementors
@@ -276,9 +277,9 @@ mod tests {
             }
         }
     }
-    parallel_streams!(crossbeam_mpmc_queue_parallel_streams, crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(atomic_mpmc_queue_parallel_streams,    atomic_mpmc_queue::AtomicMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(mutex_mpmc_queue_parallel_streams,     ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_crossbeam_mpmc_queue_parallel_streams, movable::crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_atomic_mpmc_queue_parallel_streams,    movable::atomic::Atomic<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_mutex_mpmc_queue_parallel_streams,     movable::full_sync::FullSync<u32, 1024, PARALLEL_STREAMS>);
 
 
     /// assures performance won't be degraded when we make changes
@@ -412,17 +413,17 @@ if counter == count {
 
         println!();
 
-        profile_same_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(AtomicMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "AtomicMPMCQueue      ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic    ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic    ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic    ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Crossbeam            ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync  ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(OgreFullSyncMPMCQueue::<u32, BUFFER_SIZE, 1>::new(""), "OgreFullSyncMPMCQueue", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
 
     }
 

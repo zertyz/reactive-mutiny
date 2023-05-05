@@ -18,7 +18,7 @@ use minstant::Instant;
 /// this is the fastest [UniChannel] for general use, as revealed in performance tests
 pub type UniChannelType<'a, ItemType,
                             const BUFFER_SIZE: usize,
-                            const MAX_STREAMS: usize> = channels::ogre_full_sync_mpmc_queue::OgreFullSyncMPMCQueue<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+                            const MAX_STREAMS: usize> = channels::movable::full_sync::FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type UniStreamType<'a, ItemType,
                            const BUFFER_SIZE: usize,
                            const MAX_STREAMS: usize> = UniStream<'a, ItemType, UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;

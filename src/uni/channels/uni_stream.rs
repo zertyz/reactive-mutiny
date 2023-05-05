@@ -1,11 +1,9 @@
 //! Resting place for [UniStream]
 
-use super::{
-    super::super::{
-        ogre_std::ogre_queues::{
-            meta_subscriber::MetaSubscriber,
-            meta_container::MetaContainer,
-        },
+use crate::{
+    ogre_std::ogre_queues::{
+        meta_subscriber::MetaSubscriber,
+        meta_container::MetaContainer,
     },
 };
 use std::{
