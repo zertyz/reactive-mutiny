@@ -1,4 +1,4 @@
-//! Resting place for [AtomicMeta]
+//! Resting place for [AtomicMove]
 
 use super::super::{
     meta_publisher::MetaPublisher,
@@ -23,7 +23,7 @@ use std::mem::ManuallyDrop;
 /// If that is not acceptable, see [BufferedBase] -- for an array backed ring buffer queue, which might be a little slower, but is
 /// efficient if the publication & consumption of elements takes variable time.
 #[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct AtomicMeta<SlotType,
+pub struct AtomicMove<SlotType,
                       const BUFFER_SIZE: usize> {
     /// marks the first element of the queue, ready for dequeue -- increasing when dequeues are complete
     pub(crate) head: AtomicU32,
@@ -42,7 +42,7 @@ pub struct AtomicMeta<SlotType,
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
-AtomicMeta<SlotType, BUFFER_SIZE> {
+AtomicMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
@@ -62,7 +62,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
-AtomicMeta<SlotType, BUFFER_SIZE> {
+AtomicMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
@@ -132,7 +132,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
-AtomicMeta<SlotType, BUFFER_SIZE> {
+AtomicMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn consume<GetterReturnType: 'a,
@@ -194,7 +194,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-AtomicMeta<SlotType, BUFFER_SIZE> {
+AtomicMove<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
@@ -351,7 +351,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     #[ignore]   // time-dependent: should run on single-threaded tests
     pub fn assure_enqueue_syncing_independency() {
-        let queue = AtomicMeta::<u32, 128>::new();
+        let queue = AtomicMove::<u32, 128>::new();
         let (independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(
             |i, callback: &dyn Fn()| {
                 queue.publish(

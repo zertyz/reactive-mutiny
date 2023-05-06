@@ -3,7 +3,7 @@
 use crate::{
     uni::channels::uni_stream::UniStream, ogre_std::{
         ogre_queues::{
-            full_sync_queues::full_sync_meta::FullSyncMeta,
+            full_sync::full_sync_move::FullSyncMove,
             meta_publisher::MetaPublisher,
             meta_subscriber::MetaSubscriber,
             meta_container::MetaContainer,
@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use crate::uni::channels::{UniChannelCommon, UniMovableChannel};
 
 
-/// This channel uses the fastest of the queues [FullSyncMeta], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
+/// This channel uses the fastest of the queues [FullSyncMove], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
 /// of the backing queue, which doesn't allow enqueueing to happen independently of dequeueing.\
 /// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
 /// making this channel a typical best fit for small & trivial types.\
@@ -39,7 +39,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>>,
     /// backing storage for events -- AKA, channels
-    container:       Pin<Box<FullSyncMeta<ItemType, BUFFER_SIZE>>>,
+    container:       Pin<Box<FullSyncMove<ItemType, BUFFER_SIZE>>>,
 
 }
 
@@ -53,7 +53,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name)),
-            container:       Box::pin(FullSyncMeta::<ItemType, BUFFER_SIZE>::new()),
+            container:       Box::pin(FullSyncMove::<ItemType, BUFFER_SIZE>::new()),
         })
     }
 

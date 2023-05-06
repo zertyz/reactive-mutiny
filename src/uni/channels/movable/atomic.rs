@@ -2,7 +2,7 @@ use crate::{
     types::MutinyStreamSource,
     ogre_std::{
         ogre_queues::{
-            atomic_queues::atomic_meta::AtomicMeta,
+            atomic::atomic_move::AtomicMove,
             meta_publisher::MetaPublisher,
             meta_subscriber::MetaSubscriber,
             meta_container::MetaContainer,
@@ -21,7 +21,7 @@ use std::ops::Deref;
 use async_trait::async_trait;
 
 
-/// A Uni channel, backed by an [AtomicMeta], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
+/// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
 pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
                       const BUFFER_SIZE: usize,
                       const MAX_STREAMS: usize> {
@@ -29,7 +29,7 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channel:       Pin<Box<AtomicMeta<ItemType, BUFFER_SIZE>>>,
+    channel:       Pin<Box<AtomicMove<ItemType, BUFFER_SIZE>>>,
 
 }
 
@@ -43,7 +43,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
-            channel:         Box::pin(AtomicMeta::<ItemType, BUFFER_SIZE>::new()),
+            channel:         Box::pin(AtomicMove::<ItemType, BUFFER_SIZE>::new()),
         })
     }
 

@@ -357,9 +357,9 @@ mod benchmark_queues {
     ////////////////////////////////////////////////
     // NOTE: blocking queues should be tested without lock timeouts
 
-    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
-    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic_queues::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);
-    impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // must run in a single thread for accurate measurements
@@ -367,9 +367,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
-            all_in_and_out_benchmark(&super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(&super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(&super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -379,9 +379,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
-            single_in_and_out_benchmark(&super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(&super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(&super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -391,9 +391,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -403,9 +403,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::atomic_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::atomic_queues::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::full_sync_queues::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 

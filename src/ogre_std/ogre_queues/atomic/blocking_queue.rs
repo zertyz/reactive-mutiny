@@ -5,7 +5,7 @@ use super::super::super::{
     ogre_queues::{
         OgreQueue,
         OgreBlockingQueue,
-        atomic_queues::atomic_meta::AtomicMeta,
+        atomic::atomic_move::AtomicMove,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
         meta_container::MetaContainer,
@@ -39,7 +39,7 @@ pub struct BlockingQueue<SlotType:                  Copy+Debug,
     /// locked when the queue is full, unlocked when it is no longer full
     full_guard:         RawMutex,
     /// queue
-    base_queue:         AtomicMeta<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicMove<SlotType, BUFFER_SIZE>,
     /// locked when the queue is empty, unlocked when it is no longer empty
     empty_guard:        RawMutex,
     // metrics for dequeue
@@ -173,7 +173,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             full_guard:         RawMutex::INIT,
-            base_queue:         AtomicMeta::new(),
+            base_queue:         AtomicMove::new(),
             empty_guard:        RawMutex::INIT,
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),

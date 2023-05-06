@@ -16,8 +16,8 @@ use std::sync::atomic::Ordering::Relaxed;
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkGroup};
 use criterion::measurement::WallTime;
 use ogre_std::ogre_queues::{
-    full_sync_queues::full_sync_meta::FullSyncMeta,
-    atomic_queues::atomic_meta::AtomicMeta,
+    full_sync::full_sync_move::FullSyncMove,
+    atomic::atomic_move::AtomicMove,
 };
 use reactive_mutiny::{uni, multi, ogre_std};
 use futures::{Stream, stream};
@@ -47,9 +47,9 @@ fn bench_same_thread_latency(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Same-thread LATENCY");
 
-    let full_sync_channel = Arc::new(FullSyncMeta::<ItemType, BUFFER_SIZE>::new());
+    let full_sync_channel = Arc::new(FullSyncMove::<ItemType, BUFFER_SIZE>::new());
     let (full_sync_sender, full_sync_receiver) = (full_sync_channel.clone(), full_sync_channel);
-    let atomic_channel = Arc::new(AtomicMeta::<ItemType, BUFFER_SIZE>::new());
+    let atomic_channel = Arc::new(AtomicMove::<ItemType, BUFFER_SIZE>::new());
     let (atomic_sender, atomic_receiver) = (atomic_channel.clone(), atomic_channel);
 
     let (std_sender, std_receiver) = std::sync::mpsc::sync_channel::<ItemType>(BUFFER_SIZE);
@@ -105,9 +105,9 @@ fn bench_inter_thread_latency(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Inter-thread LATENCY");
 
-    let full_sync_channel = Arc::new(FullSyncMeta::<ItemType, BUFFER_SIZE>::new());
+    let full_sync_channel = Arc::new(FullSyncMove::<ItemType, BUFFER_SIZE>::new());
     let (full_sync_sender, full_sync_receiver) = (full_sync_channel.clone(), full_sync_channel);
-    let atomic_channel = Arc::new(AtomicMeta::<ItemType, BUFFER_SIZE>::new());
+    let atomic_channel = Arc::new(AtomicMove::<ItemType, BUFFER_SIZE>::new());
     let (atomic_sender, atomic_receiver) = (atomic_channel.clone(), atomic_channel);
 
     let (std_sender, std_receiver) = std::sync::mpsc::sync_channel::<ItemType>(BUFFER_SIZE);
@@ -206,9 +206,9 @@ fn bench_same_thread_throughput(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Same-thread THROUGHPUT");
 
-    let full_sync_channel = Arc::new(FullSyncMeta::<ItemType, BUFFER_SIZE>::new());
+    let full_sync_channel = Arc::new(FullSyncMove::<ItemType, BUFFER_SIZE>::new());
     let (full_sync_sender, full_sync_receiver) = (full_sync_channel.clone(), full_sync_channel);
-    let atomic_channel = Arc::new(AtomicMeta::<ItemType, BUFFER_SIZE>::new());
+    let atomic_channel = Arc::new(AtomicMove::<ItemType, BUFFER_SIZE>::new());
     let (atomic_sender, atomic_receiver) = (atomic_channel.clone(), atomic_channel);
 
     let (std_sender, std_receiver) = std::sync::mpsc::sync_channel::<ItemType>(BUFFER_SIZE);
@@ -288,9 +288,9 @@ fn bench_inter_thread_throughput(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Inter-thread THROUGHPUT");
 
-    let full_sync_channel = Arc::new(FullSyncMeta::<ItemType, BUFFER_SIZE>::new());
+    let full_sync_channel = Arc::new(FullSyncMove::<ItemType, BUFFER_SIZE>::new());
     let (full_sync_sender, full_sync_receiver) = (full_sync_channel.clone(), full_sync_channel);
-    let atomic_channel = Arc::new(AtomicMeta::<ItemType, BUFFER_SIZE>::new());
+    let atomic_channel = Arc::new(AtomicMove::<ItemType, BUFFER_SIZE>::new());
     let (atomic_sender, atomic_receiver) = (atomic_channel.clone(), atomic_channel);
 
     let (std_sender, std_receiver) = std::sync::mpsc::sync_channel::<ItemType>(BUFFER_SIZE);

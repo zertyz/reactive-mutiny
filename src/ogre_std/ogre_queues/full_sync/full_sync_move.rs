@@ -1,4 +1,4 @@
-//! Resting place for [FullSyncMeta]
+//! Resting place for [FullSyncMove]
 
 use crate::ogre_std::{
     ogre_queues::{
@@ -25,7 +25,7 @@ use std::{
 /// but only single-producer / single-consumer when using `leak_slot()` & `publish_leaked()` / `consume_leaking()` & `release_leaked()`
 /// -- if that is unacceptable, see [AtomicMeta] (although it might be a bit slower for the single threaded case in some machines).
 #[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct FullSyncMeta<SlotType,
+pub struct FullSyncMove<SlotType,
                         const BUFFER_SIZE: usize> {
 
     head: u32,
@@ -40,7 +40,7 @@ pub struct FullSyncMeta<SlotType,
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
-FullSyncMeta<SlotType, BUFFER_SIZE> {
+FullSyncMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
@@ -60,7 +60,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
-FullSyncMeta<SlotType, BUFFER_SIZE> {
+FullSyncMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
@@ -135,7 +135,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
-FullSyncMeta<SlotType, BUFFER_SIZE> {
+FullSyncMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn consume<GetterReturnType: 'a,
@@ -201,7 +201,7 @@ FullSyncMeta<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-FullSyncMeta<SlotType, BUFFER_SIZE> {
+FullSyncMove<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
@@ -314,7 +314,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     #[ignore]   // time-dependent: should run on single-threaded tests
     pub fn assure_syncing_dependency() {
-        let queue = Arc::new(FullSyncMeta::<u32, 128>::new());
+        let queue = Arc::new(FullSyncMove::<u32, 128>::new());
         let queue_ref1 = Arc::clone(&queue);
         let queue_ref2 = Arc::clone(&queue);
         let (_independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(

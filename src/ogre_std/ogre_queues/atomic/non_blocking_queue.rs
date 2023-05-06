@@ -4,7 +4,7 @@
 use super::super::super::{
     ogre_queues::{
         OgreQueue,
-        atomic_queues::atomic_meta::AtomicMeta,
+        atomic::atomic_move::AtomicMove,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
         meta_container::MetaContainer,
@@ -28,7 +28,7 @@ pub struct NonBlockingQueue<SlotType:          Copy+Debug,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         AtomicMeta<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicMove<SlotType, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,
@@ -74,7 +74,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
-            base_queue:         AtomicMeta::new(),
+            base_queue:         AtomicMove::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),

@@ -3,7 +3,7 @@
 use crate::{
     ogre_std::{
         ogre_queues::{
-            atomic_queues::atomic_meta::AtomicMeta,
+            atomic::atomic_move::AtomicMove,
             meta_publisher::MetaPublisher,
             meta_subscriber::MetaSubscriber,
             meta_container::MetaContainer,
@@ -30,7 +30,7 @@ use log::{warn};
 use async_trait::async_trait;
 
 
-/// This channel uses the the queue [AtomicMeta] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
+/// This channel uses the the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
 /// allow enqueueing to happen independently of dequeueing.\
 /// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
 /// making this channel a typical best fit for small & trivial types.\
@@ -44,7 +44,7 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channels:        [Pin<Box<AtomicMeta<Option<Arc<ItemType>>, BUFFER_SIZE>>>; MAX_STREAMS],
+    channels:        [Pin<Box<AtomicMove<Option<Arc<ItemType>>, BUFFER_SIZE>>>; MAX_STREAMS],
 
 }
 
@@ -58,7 +58,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
-            channels:        [0; MAX_STREAMS].map(|_| Box::pin(AtomicMeta::<Option<Arc<ItemType>>, BUFFER_SIZE>::new())),
+            channels:        [0; MAX_STREAMS].map(|_| Box::pin(AtomicMove::<Option<Arc<ItemType>>, BUFFER_SIZE>::new())),
         })
     }
 

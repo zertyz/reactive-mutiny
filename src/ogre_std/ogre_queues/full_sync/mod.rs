@@ -1,4 +1,4 @@
-pub mod full_sync_meta;
+pub mod full_sync_move;
 
 mod non_blocking_queue;
 pub use non_blocking_queue::*;

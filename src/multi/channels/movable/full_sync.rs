@@ -3,8 +3,8 @@
 use crate::{
     ogre_std::{
         ogre_queues::{
-            full_sync_queues::{
-                full_sync_meta::FullSyncMeta,
+            full_sync::{
+                full_sync_move::FullSyncMove,
             },
             meta_publisher::MetaPublisher,
             meta_subscriber::MetaSubscriber,
@@ -32,7 +32,7 @@ use async_trait::async_trait;
 use log::{warn};
 
 
-/// This channel uses the queues [FullSyncMeta] (the highest throughput among all in 'benches/'), which are the fastest for general purpose use and for most hardware but requires that elements are copied when dequeueing,
+/// This channel uses the queues [FullSyncMove] (the highest throughput among all in 'benches/'), which are the fastest for general purpose use and for most hardware but requires that elements are copied when dequeueing,
 /// due to the full sync characteristics of the backing queue, which doesn't allow enqueueing to happen independently of dequeueing.\
 /// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
 /// making this channel a typical best fit for small & trivial types.\
@@ -46,7 +46,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channels:        [Pin<Box<FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>>>; MAX_STREAMS],
+    channels:        [Pin<Box<FullSyncMove<Option<Arc<ItemType>>, BUFFER_SIZE>>>; MAX_STREAMS],
 }
 
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
@@ -59,7 +59,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(streams_manager_name),
-            channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMeta::<Option<Arc<ItemType>>, BUFFER_SIZE>::new())),
+            channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMove::<Option<Arc<ItemType>>, BUFFER_SIZE>::new())),
         })
     }
 

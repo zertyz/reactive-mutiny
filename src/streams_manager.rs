@@ -5,7 +5,7 @@ use crate::{
     ogre_std::{
         ogre_queues::{
             OgreQueue,
-            full_sync_queues::{
+            full_sync::{
                 NonBlockingQueue,
             },
         },
