@@ -94,7 +94,7 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
     ///   4. When measuring performance on a BTRFS filesystem, remember it has some services on the background. To minimize the block freeing service impact, do this between runs: `truncate -s 0 /DIR/*.mmap; sudo sync`
     fn new<IntoString: Into<String>>(mmap_file_path: IntoString, max_slots: u64) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         let mmap_file_path = mmap_file_path.into();
-        let mut mmap_file = OpenOptions::new()
+        let mmap_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -233,7 +233,7 @@ mod tests {
             name_len: u8,
             age: u8,
         }
-        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/happy_path.test.mmap", 4096)
+        let meta_log_topic = MMapMeta::<MyData>::new("/tmp/happy_path.test.mmap", 4096)
             .expect("Instantiating the meta log topic");
         let expected_name = "zertyz";
         let expected_age = 42;
@@ -242,7 +242,7 @@ mod tests {
         //////////
 
         let publishing_result = meta_log_topic.publish(|slot| {
-            for (source, mut target) in expected_name.as_bytes().iter().zip(slot.name.iter_mut()) {
+            for (source, target) in expected_name.as_bytes().iter().zip(slot.name.iter_mut()) {
                 *target = *source;
             }
             slot.name_len = expected_name.len() as u8;
@@ -281,7 +281,7 @@ mod tests {
 
         // a new enqueue -- available to all consumers
         let publishing_result = meta_log_topic.publish(|slot| {
-            for (source, mut target) in expected_name.as_bytes().iter().zip(slot.name.iter_mut()) {
+            for (source, target) in expected_name.as_bytes().iter().zip(slot.name.iter_mut()) {
                 *target = source.to_ascii_uppercase();
             }
             slot.name_len = expected_name.len() as u8;
@@ -323,7 +323,7 @@ mod tests {
             known_number_of_descendents: u32,
         }
 
-        let mut meta_log_topic = MMapMeta::<MyData>::new("/tmp/indefinite_growth.test.mmap", 1024 * 1024 * 1024)
+        let meta_log_topic = MMapMeta::<MyData>::new("/tmp/indefinite_growth.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
         let consumer = meta_log_topic.subscribe(true);
 
@@ -367,7 +367,7 @@ mod tests {
     fn safe_lifetimes<'a>() {
         const EXPECTED_ELEMENT: u128 = 1928384756;
 
-        let mut meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)
+        let meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
         let consumer = meta_log_topic.subscribe(true);
         meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT,

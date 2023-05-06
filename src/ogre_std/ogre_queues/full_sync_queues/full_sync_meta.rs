@@ -11,7 +11,6 @@ use crate::ogre_std::{
 use std::{
     fmt::Debug,
     mem::{ManuallyDrop, MaybeUninit},
-    ops::Deref,
     sync::atomic::{
         AtomicBool,
         Ordering::Relaxed,

@@ -313,7 +313,6 @@ mod benchmark_queues {
     };
     use std::{
         fmt::Debug,
-        pin::Pin,
     };
 
     macro_rules! impl_benchmarkable_container_for {

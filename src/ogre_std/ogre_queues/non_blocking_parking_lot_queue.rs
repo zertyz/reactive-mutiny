@@ -8,7 +8,6 @@ use std::{
     fmt::Debug,
     mem::MaybeUninit,
 };
-use std::pin::Pin;
 use parking_lot::lock_api::RawMutex as RawMutex_api;
 use parking_lot::RawMutex;
 

@@ -1,30 +1,28 @@
 //! Resting place for the [FullSync] Uni Channel
 
-use crate::{uni::channels::uni_stream::UniStream, ogre_std::{
-    ogre_queues::{
-        full_sync_queues::full_sync_meta::FullSyncMeta,
-        meta_publisher::MetaPublisher,
-        meta_subscriber::MetaSubscriber,
-        meta_container::MetaContainer,
+use crate::{
+    uni::channels::uni_stream::UniStream, ogre_std::{
+        ogre_queues::{
+            full_sync_queues::full_sync_meta::FullSyncMeta,
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
+            meta_container::MetaContainer,
+        },
     },
-    ogre_sync,
-}, MutinyStreamSource};
+    MutinyStreamSource,
+};
 use std::{
     time::Duration,
-    sync::atomic::{AtomicU32, AtomicBool, Ordering::Relaxed},
     pin::Pin,
     fmt::Debug,
-    task::{Poll, Waker},
+    task::{Waker},
     sync::Arc,
-    mem::{self, ManuallyDrop, MaybeUninit},
-    hint::spin_loop,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::Deref
 };
-use std::marker::PhantomData;
-use futures::{Stream};
-use minstant::Instant;
-use owning_ref::ArcRef;
 use crate::streams_manager::StreamsManagerBase;
+use async_trait::async_trait;
+use crate::uni::channels::{UniChannelCommon, UniMovableChannel};
 
 
 /// This channel uses the fastest of the queues [FullSyncMeta], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
@@ -45,53 +43,62 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
 
 }
 
+#[async_trait]
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+UniChannelCommon<'a, ItemType>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    /// Returns as many consumer streams as requested, provided the specified limit [MAX_STREAMS] is respected.
-    /// -- events will be split for each generated stream, so no two streams  will see the same payload.\
-    /// Be aware of the special semantics for dropping streams: no stream should stop consuming elements (don't drop it!) until
-    /// your are ready to drop the whole channel.\
-    /// DEVELOPMENT NOTE: OUT-OF-TRAIT [UniChannel] implementation. Once Rust allows trait functions to return `impls`, this should be moved there
-    pub fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
-        let stream_id = self.streams_manager.create_stream_id();
-        UniStream::new(stream_id, self)
-    }
-
-}
-
-//#[async_trait]
-/// implementation note: Rust 1.63 does not yet support async traits. See [super::UniChannel]
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         const BUFFER_SIZE: usize,
-         const MAX_STREAMS: usize>
-/*UniChannel<ItemType>
-for*/ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
-
-    /// Instantiates
-    pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
+    fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name)),
             container:       Box::pin(FullSyncMeta::<ItemType, BUFFER_SIZE>::new()),
         })
     }
 
-    /// clones & shares the internal `streams_manager`, for testing purposes
-    pub(crate) fn streams_manager(&self) -> Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>> {
-        self.streams_manager.clone()
+    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
+        let stream_id = self.streams_manager.create_stream_id();
+        UniStream::new(stream_id, self)
+    }
+
+    async fn flush(&self, timeout: Duration) -> u32 {
+        self.streams_manager.flush(timeout, || self.pending_items_count()).await
+    }
+
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
+        self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
+    }
+
+    fn cancel_all_streams(&self) {
+        self.streams_manager.cancel_all_streams();
+    }
+
+    fn running_streams_count(&self) -> u32 {
+        self.streams_manager.running_streams_count()
     }
 
     #[inline(always)]
-    pub unsafe fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
+    fn pending_items_count(&self) -> u32 {
+        self.container.available_elements_count() as u32
+    }
+}
+
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+    const BUFFER_SIZE: usize,
+    const MAX_STREAMS: usize>
+UniMovableChannel<'a, ItemType>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    #[inline(always)]
+    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
         self.container.publish(item_builder,
                               || false,
                               |len| if len <= MAX_STREAMS as u32 { self.streams_manager.wake_stream(len-1) })
     }
 
     #[inline(always)]
-    pub fn try_send(&self, item: ItemType) -> bool {
+    fn try_send(&self, item: ItemType) -> bool {
         let item = ManuallyDrop::new(item);       // ensure it won't be dropped when this function ends, since it will be "moved"
         unsafe {
             self.zero_copy_try_send(|slot| {
@@ -100,28 +107,6 @@ for*/ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             })
         }
     }
-
-    pub async fn flush(&self, timeout: Duration) -> u32 {
-        self.streams_manager.flush(timeout, || self.pending_items_count()).await
-    }
-
-    pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
-        self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
-    }
-
-    pub fn cancel_all_streams(&self) {
-        self.streams_manager.cancel_all_streams();
-    }
-
-    pub fn running_streams_count(&self) -> u32 {
-        self.streams_manager.running_streams_count()
-    }
-
-    #[inline(always)]
-    pub fn pending_items_count(&self) -> u32 {
-        self.container.available_elements_count() as u32
-    }
-
 }
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,

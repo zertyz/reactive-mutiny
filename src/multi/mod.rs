@@ -37,7 +37,6 @@ pub(crate) mod channels;
 mod tests {
     use super::*;
     use super::super::{
-        types::*,
         instruments::Instruments,
     };
     use std::future::Future;
@@ -53,7 +52,6 @@ mod tests {
     };
     use std::io::Write;
     use std::pin::Pin;
-    use std::rc::Rc;
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
     use tokio::sync::Mutex;

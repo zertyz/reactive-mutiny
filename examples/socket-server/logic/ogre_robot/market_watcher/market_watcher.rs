@@ -11,7 +11,11 @@ use std::{
     time::Duration,
 };
 use reactive_mutiny::{
-    multi::{Multi,MultiStreamType},
+    multi::{
+        Multi,
+        MultiMovableChannel,
+        MultiStreamType,
+    },
 };
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;

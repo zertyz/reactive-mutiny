@@ -1,22 +1,16 @@
 use std::{
-    pin::Pin,
     fmt::Debug,
     sync::Arc,
-    task::Poll,
     time::Duration,
 };
 use std::mem::MaybeUninit;
-use std::sync::atomic::AtomicPtr;
-use std::sync::atomic::Ordering::Relaxed;
 use std::task::Waker;
-use crossbeam_channel::{Sender, Receiver, TryRecvError, RecvError};
-use futures::{Stream, stream};
-use minstant::Instant;
-use tokio::io::Ready;
+use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use crate::MutinyStreamSource;
-use crate::ogre_std::ogre_queues::atomic_queues::atomic_meta::AtomicMeta;
 use crate::streams_manager::StreamsManagerBase;
 use crate::uni::channels::uni_stream::{UniStream};
+use crate::uni::channels::{UniChannelCommon, UniMovableChannel};
+use async_trait::async_trait;
 
 
 pub struct Crossbeam<'a, ItemType,
@@ -27,15 +21,14 @@ pub struct Crossbeam<'a, ItemType,
     streams_manager: Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>>,
 }
 
-/// implementation note: Rust 1.63 does not yet support async traits. See [super::UniChannel]
-impl<'a, ItemType: 'a + Debug,
+#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
+impl<'a, ItemType: 'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-/*UniChannel<ItemType> for*/
-Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+UniChannelCommon<'a, ItemType>
+for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    /// Instantiates
-    pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
+    fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         let (tx, rx) = crossbeam_channel::bounded::<ItemType>(BUFFER_SIZE);
         Arc::new(Self {
             tx,
@@ -44,17 +37,49 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    pub fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
+    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
         UniStream::new(stream_id, self)
     }
 
-    pub async fn send(&self, _item: ItemType) -> bool {
-        panic!("uni::channels::Crossbeam doesn't support blocking send at this time");
+    async fn flush(&self, timeout: Duration) -> u32 {
+        self.streams_manager.flush(timeout, || self.tx.len() as u32).await
+    }
+
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
+        self.streams_manager.end_all_streams(timeout, || self.tx.len() as u32).await
+    }
+
+    fn cancel_all_streams(&self) {
+        self.streams_manager.cancel_all_streams()
+    }
+
+    fn running_streams_count(&self) -> u32 {
+        self.streams_manager.running_streams_count()
     }
 
     #[inline(always)]
-    pub fn try_send(&self, item: ItemType) -> bool {
+    fn pending_items_count(&self) -> u32 {
+        self.tx.len() as u32
+    }
+
+}
+
+impl<'a, ItemType: 'a + Send + Sync + Debug,
+    const BUFFER_SIZE: usize,
+    const MAX_STREAMS: usize>
+UniMovableChannel<'a, ItemType>
+for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    #[inline(always)]
+    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
+        let mut item = unsafe { MaybeUninit::<ItemType>::uninit().assume_init() };
+        item_builder(&mut item);
+        self.try_send(item)
+    }
+
+    #[inline(always)]
+    fn try_send(&self, item: ItemType) -> bool {
         match self.tx.len() {
             len_before if len_before <= 2 => {
                 let ret = self.tx.try_send(item).is_ok();
@@ -64,32 +89,6 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             _ => self.tx.try_send(item).is_ok(),
         }
     }
-
-    /// uni::channels::Crossbeam doesn't support zero-copy send...
-    #[inline(always)]
-    pub fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
-        let mut item = unsafe { MaybeUninit::<ItemType>::uninit().assume_init() };
-        item_builder(&mut item);
-        self.try_send(item)
-    }
-
-    pub async fn flush(&self, timeout: Duration) -> u32 {
-        self.streams_manager.flush(timeout, || self.tx.len() as u32).await
-    }
-
-    pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
-        self.streams_manager.end_all_streams(timeout, || self.tx.len() as u32).await
-    }
-
-    pub fn cancel_all_streams(&self) {
-        self.streams_manager.cancel_all_streams()
-    }
-
-    #[inline(always)]
-    pub fn pending_items_count(&self) -> u32 {
-        self.tx.len() as u32
-    }
-
 }
 
 impl<'a, ItemType: 'a + Debug,

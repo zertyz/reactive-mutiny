@@ -12,7 +12,6 @@ use super::super::super::{
     },
 };
 use std::{
-    pin::Pin,
     fmt::Debug,
     sync::atomic::{AtomicU64,Ordering::Relaxed},
     time::Duration,

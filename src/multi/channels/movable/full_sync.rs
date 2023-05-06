@@ -1,33 +1,34 @@
 //! Resting place for the [FullSync] Multi Channel
 
-use crate::{ogre_std::{
-    ogre_queues::{
-        OgreQueue,
-        full_sync_queues::{
-            full_sync_meta::FullSyncMeta,
-            NonBlockingQueue,
+use crate::{
+    ogre_std::{
+        ogre_queues::{
+            full_sync_queues::{
+                full_sync_meta::FullSyncMeta,
+            },
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
+            meta_container::MetaContainer,
         },
-        meta_publisher::MetaPublisher,
-        meta_subscriber::MetaSubscriber,
-        meta_container::MetaContainer,
     },
-    ogre_sync,
-}, multi::channels::multi_stream::MultiStream, streams_manager::StreamsManagerBase, MutinyStreamSource};
+    multi::channels::{
+        MultiChannelCommon,
+        MultiMovableChannel,
+        multi_stream::MultiStream,
+    },
+    streams_manager::StreamsManagerBase,
+    MutinyStreamSource,
+};
 use std::{
     time::Duration,
     sync::{
         Arc,
-        atomic::{AtomicU32, AtomicBool, Ordering::{Relaxed}},
     },
     pin::Pin,
     fmt::Debug,
-    task::{Poll, Waker},
-    mem::{self, MaybeUninit},
-    hint::spin_loop,
+    task::{Waker},
 };
-use futures::{Stream};
-use minstant::Instant;
-use owning_ref::ArcRef;
+use async_trait::async_trait;
 use log::{warn};
 
 
@@ -48,42 +49,73 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
     channels:        [Pin<Box<FullSyncMeta<Option<Arc<ItemType>>, BUFFER_SIZE>>>; MAX_STREAMS],
 }
 
+#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+MultiChannelCommon<'a, ItemType>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    /// Returns a `Stream` -- as many streams as requested may be create, provided the specified limit [MAX_STREAMS] is respected.\
-    /// Each stream will see all payloads sent through this channel.
-    pub fn listener_stream(self: &Arc<Self>) -> (MultiStream<'a, ItemType, Self>, u32) {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MultiStream::new(stream_id, self), stream_id)
-    }
-
-    #[inline(always)]
-    pub fn buffer_size(&self) -> u32 {
-        BUFFER_SIZE as u32
-    }
-}
-
-//#[async_trait]
-/// implementation note: Rust 1.63 does not yet support async traits. See [super::MultiChannel]
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         const BUFFER_SIZE: usize,
-         const MAX_STREAMS: usize>
-/*MultiChannel<ItemType>
-for*/ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
-
-    /// Instantiates
-    pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
+    fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(streams_manager_name),
             channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMeta::<Option<Arc<ItemType>>, BUFFER_SIZE>::new())),
         })
     }
 
+    fn listener_stream(self: &Arc<Self>) -> (MultiStream<'a, ItemType, Self>, u32) {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MultiStream::new(stream_id, self), stream_id)
+    }
+
+    async fn flush(&self, timeout: Duration) -> u32 {
+        self.streams_manager.flush(timeout, || self.pending_items_count()).await
+    }
+
+    async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
+        self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
+    }
+
+    async fn end_all_streams(&self, timeout: Duration) -> u32 {
+        self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
+    }
+
+    fn cancel_all_streams(&self) {
+        self.streams_manager.cancel_all_streams();
+    }
+
+    fn running_streams_count(&self) -> u32 {
+        self.streams_manager.running_streams_count()
+    }
+
     #[inline(always)]
-    pub fn send_arc(&self, arc_item: &Arc<ItemType>) {
+    fn pending_items_count(&self) -> u32 {
+        self.streams_manager.used_streams().iter()
+            .filter(|&&stream_id| stream_id != u32::MAX)
+            .map(|&stream_id| unsafe { self.channels.get_unchecked(stream_id as usize) }.available_elements_count())
+            .sum::<usize>() as u32
+    }
+
+    #[inline(always)]
+    fn buffer_size(&self) -> u32 {
+        BUFFER_SIZE as u32
+    }
+}
+
+impl<'a, ItemType:          'a + Send + Sync + Debug,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+MultiMovableChannel<'a, ItemType>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    #[inline(always)]
+    fn send(&self, item: ItemType) {
+        let arc_item = Arc::new(item);
+        self.send_arc(&arc_item);
+    }
+
+    #[inline(always)]
+    fn send_arc(&self, arc_item: &Arc<ItemType>) {
         for stream_id in self.streams_manager.used_streams() {
             if *stream_id == u32::MAX {
                 break
@@ -98,40 +130,6 @@ for*/ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                                   },
                                   |len| if len <= 1 { self.streams_manager.wake_stream(*stream_id) });
         }
-    }
-
-    #[inline(always)]
-    pub fn send(&self, item: ItemType) {
-        let arc_item = Arc::new(item);
-        self.send_arc(&arc_item);
-    }
-
-    pub async fn flush(&self, timeout: Duration) -> u32 {
-        self.streams_manager.flush(timeout, || self.pending_items_count()).await
-    }
-
-    pub async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
-        self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
-    }
-
-    pub async fn end_all_streams(&self, timeout: Duration) -> u32 {
-        self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
-    }
-
-    pub fn cancel_all_streams(&self) {
-        self.streams_manager.cancel_all_streams();
-    }
-
-    pub fn running_streams_count(&self) -> u32 {
-        self.streams_manager.running_streams_count()
-    }
-
-    #[inline(always)]
-    pub fn pending_items_count(&self) -> u32 {
-        self.streams_manager.used_streams().iter()
-            .filter(|&&stream_id| stream_id != u32::MAX)
-            .map(|&stream_id| unsafe { self.channels.get_unchecked(stream_id as usize) }.available_elements_count())
-            .sum::<usize>() as u32
     }
 
 }

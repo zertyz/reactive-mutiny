@@ -14,7 +14,10 @@ use std::{
     sync::Arc,
 };
 use reactive_mutiny::{
-    multi::Multi,
+    multi::{
+        Multi,
+        MultiChannelCommon,
+    },
     multis_close_async
 };
 use log::warn;

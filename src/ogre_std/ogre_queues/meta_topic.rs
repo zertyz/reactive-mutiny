@@ -2,7 +2,6 @@
 
 use super::{
     meta_publisher::MetaPublisher,
-    meta_subscriber::MetaSubscriber,
 };
 use std::sync::Arc;
 

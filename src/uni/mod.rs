@@ -19,8 +19,6 @@
 //!    uni.close().await;
 //! ```
 
-use crate::types::*;
-
 mod uni_builder;
 pub use uni_builder::*;
 
@@ -34,11 +32,10 @@ mod channels;
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use super::super::{
-        types::*,
+    use crate::{
         instruments::Instruments,
+        uni::channels::{UniChannelCommon},
     };
-
     use std::{
         sync::{
             Arc,
@@ -52,7 +49,6 @@ mod tests {
         stream::{self, Stream, StreamExt}
     };
     use minstant::Instant;
-    use crate::uni::channels::uni_stream::UniStream;
 
 
     /// exercises the code present on the documentation
@@ -466,7 +462,7 @@ mod tests {
                     } else if full_count % (1<<27) == 0 {
                         print!("(still stuck at e #{e}? reverting to tokio yield...)"); std::io::stdout().flush().unwrap();
                         // if this fixes the hanging, means that tokio started the executor at the same thread the producer is executing
-                        for i in 0..e {
+                        for _i in 0..e {
                             tokio::task::yield_now().await;
                         }
                     } else if full_count % (1<<24) == 0 {

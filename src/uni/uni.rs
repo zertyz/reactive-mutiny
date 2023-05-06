@@ -1,17 +1,17 @@
 //! See [super]
 
-use super::super::{
-    stream_executor::StreamExecutor,
-    instruments::Instruments,
+use super::{
+    super::{
+        stream_executor::StreamExecutor,
+        instruments::Instruments,
+    },
+    channels::{self, UniChannelCommon, UniMovableChannel, uni_stream::UniStream},
 };
 use std::{
     fmt::Debug,
-    pin::Pin,
     time::Duration,
     sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}},
 };
-use std::marker::PhantomData;
-use futures::{Stream};
 use minstant::Instant;
 
 
@@ -52,7 +52,7 @@ Uni<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     #[inline(always)]
     pub fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
-        unsafe { self.uni_channel.zero_copy_try_send(item_builder) }
+        self.uni_channel.zero_copy_try_send(item_builder)
     }
 
     #[inline(always)]
@@ -74,7 +74,7 @@ Uni<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
     pub async fn close(&self, timeout: Duration) -> bool{
         let start = Instant::now();
-        if self.uni_channel.end_all_streams(timeout).await > 0 {
+        if self.uni_channel.gracefully_end_all_streams(timeout).await > 0 {
             false
         } else {
             loop {
@@ -101,7 +101,7 @@ Uni<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 macro_rules! unis_close_async {
     ($($producer_handle: tt),+) => {
         let timeout = Duration::ZERO;
-        tokio::join!($($producer_handle.uni_channel.end_all_streams(timeout), )+);
+        tokio::join!($($producer_handle.uni_channel.gracefully_end_all_streams(timeout), )+);
         loop {
             let mut all_finished = true;
             $(
@@ -117,6 +117,3 @@ macro_rules! unis_close_async {
     }
 }
 pub use unis_close_async;
-use crate::ogre_std::ogre_queues::full_sync_queues::full_sync_meta::FullSyncMeta;
-use crate::uni::channels;
-use crate::uni::channels::uni_stream::UniStream;

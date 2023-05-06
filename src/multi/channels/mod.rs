@@ -4,6 +4,82 @@ pub mod movable;
 pub mod zero_copy;
 pub mod multi_stream;
 
+use {
+    super::{
+        super::{
+            types::MutinyStreamSource,
+        },
+    },
+    multi_stream::MultiStream,
+};
+use std::{
+    sync::Arc,
+    time::Duration,
+    fmt::Debug,
+};
+use async_trait::async_trait;
+
+
+/// Defines common abstractions on how [Multi]s receives produced events and delivers them to `Stream`s.\
+/// Implementors should also implement one of [MultiMovableChannel] or [MultiZeroCopyChannel].
+/// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
+#[async_trait]
+pub trait MultiChannelCommon<'a, ItemType: Debug> {
+
+    /// Creates a new instance of this channel, to be referred to (in logs) as `name`
+    fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
+
+    /// Returns `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
+    /// If called more than once, each `Stream` will receive all elements sent to the [Multi].\
+    /// Panics if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn listener_stream(self: &Arc<Self>) -> (MultiStream<'a, ItemType, Self>, u32)
+                                            where Self: MutinyStreamSource<'a, ItemType, Arc<ItemType>>;
+
+    /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
+    /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
+    async fn flush(&self, timeout: Duration) -> u32;
+
+    /// Flushes & signals that the given `stream_id` should cease its activities when there are no more elements left
+    /// to process, waiting for the operation to complete for up to `timeout`.\
+    /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
+    async fn /*gracefully_*/end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
+
+    /// Flushes & signals that all streams should cease their activities when there are no more elements left
+    /// to process, waiting for the operation to complete for up to `timeout`.\
+    /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
+    async fn /*gracefully_*/end_all_streams(&self, timeout: Duration) -> u32;
+
+    /// Sends a signal to all streams, urging them to cease their operations.\
+    /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
+    /// nor cares if there are remaining elements to be processed.
+    fn cancel_all_streams(&self);
+
+    /// Informs the caller how many active streams are currently managed by this channel
+    fn running_streams_count(&self) -> u32;
+
+    /// Tells how many events are waiting to be taken out of this channel.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn pending_items_count(&self) -> u32;
+
+    /// Tells how many events may be produced ahead of consumers.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn buffer_size(&self) -> u32;
+}
+
+/// Defines how to send events (to a [Multi]) that may be subject of moving (copying from one place in RAM to another), if
+/// compiler optimizations (that would make it zero-copy) are not possible.
+pub trait MultiMovableChannel<'a, ItemType: Debug>: MultiChannelCommon<'a, ItemType> {
+
+    /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::listener_stream()]
+    /// IMPLEMENTORS: #[inline(always)]
+    fn send(&self, item: ItemType);
+
+    /// MAYBE THIS METHOD WON'T BE REQUIRED ANYMORE, AS WE WON'T BE FORCING ARC ON MOVABLE CHANNELS ANYMORE... AND ZERO-COPY WON'T REQUIRE THIS AT ALL
+    /// IMPLEMENTORS: #[inline(always)]
+    fn send_arc(&self, arc_item: &Arc<ItemType>);
+
+}
+
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [multi/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
@@ -46,7 +122,7 @@ mod tests {
         }
     }
 
-    doc_test!(movable_atomic_queue_doc_test,      movable::atomic_queue::Atomic<&str, 1024, 1>);
+    doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
     doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
     doc_test!(movable_crossbeam_queue_doc_test,   movable::crossbeam::Crossbeam<&str, 1024, 1>);
 
@@ -107,7 +183,7 @@ mod tests {
         }
     }
 
-    stream_and_channel_dropping!(movable_atomic_queue_stream_and_channel_dropping,      movable::atomic_queue::Atomic<&str>);
+    stream_and_channel_dropping!(movable_atomic_queue_stream_and_channel_dropping,      movable::atomic::Atomic<&str>);
     stream_and_channel_dropping!(movable_full_sync_queue_stream_and_channel_dropping,   movable::full_sync::FullSync<&str>);
     stream_and_channel_dropping!(movable_crossbeam_stream_and_channel_dropping,         movable::crossbeam::Crossbeam<&str>);
 
@@ -160,7 +236,7 @@ mod tests {
         }
     }
 
-    on_the_fly_streams!(movable_atomic_queue_on_the_fly_streams,      movable::atomic_queue::Atomic<String>);
+    on_the_fly_streams!(movable_atomic_queue_on_the_fly_streams,      movable::atomic::Atomic<String>);
     on_the_fly_streams!(movable_full_sync_queue_on_the_fly_streams,   movable::full_sync::FullSync<String>);
     on_the_fly_streams!(movable_crossbeam_on_the_fly_streams,         movable::crossbeam::Crossbeam<String>);
 
@@ -213,7 +289,7 @@ mod tests {
         }
     }
 
-    multiple_streams!(movable_atomic_queue_multiple_streams,      movable::atomic_queue::Atomic<u32, 128, PARALLEL_STREAMS>);
+    multiple_streams!(movable_atomic_queue_multiple_streams,      movable::atomic::Atomic<u32, 128, PARALLEL_STREAMS>);
     multiple_streams!(movable_full_sync_queue_multiple_streams,   movable::full_sync::FullSync<u32, 128, PARALLEL_STREAMS>);
     multiple_streams!(movable_crossbeam_multiple_streams,         movable::crossbeam::Crossbeam<u32, 128, PARALLEL_STREAMS>);
 
@@ -281,7 +357,7 @@ mod tests {
         }
     }
 
-    end_streams!(movable_atomic_queue_end_streams,      movable::atomic_queue::Atomic<&str>);
+    end_streams!(movable_atomic_queue_end_streams,      movable::atomic::Atomic<&str>);
     end_streams!(movable_full_sync_queue_end_streams,   movable::full_sync::FullSync<&str>);
     end_streams!(movable_crossbeam_end_streams,         movable::crossbeam::Crossbeam<&str>);
 
@@ -305,7 +381,7 @@ mod tests {
         }
     }
 
-    payload_dropping!(movable_atomic_queue_payload_dropping,      movable::atomic_queue::Atomic<String>);
+    payload_dropping!(movable_atomic_queue_payload_dropping,      movable::atomic::Atomic<String>);
     payload_dropping!(movable_full_sync_queue_payload_dropping,   movable::full_sync::FullSync<String>);
     payload_dropping!(movable_crossbeam_payload_dropping,         movable::crossbeam::Crossbeam<String>);
 
@@ -437,9 +513,9 @@ mod tests {
 
         println!();
 
-        profile_same_task_same_thread_channel!(movable::atomic_queue::Atomic::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
-        profile_different_task_same_thread_channel!(movable::atomic_queue::Atomic::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
-        profile_different_task_different_thread_channel!(movable::atomic_queue::Atomic::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
+        profile_same_task_same_thread_channel!(movable::atomic::Atomic::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(movable::atomic::Atomic::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(movable::atomic::Atomic::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
 
         profile_same_task_same_thread_channel!(movable::full_sync::FullSync::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Movable FullSync  ", 16384*FACTOR);
         profile_different_task_same_thread_channel!(movable::full_sync::FullSync::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Movable FullSync  ", 16384*FACTOR);

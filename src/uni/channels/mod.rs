@@ -4,122 +4,79 @@ pub mod movable;
 pub mod zero_copy;
 pub mod uni_stream;
 
-use crate::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
+use {
+    super::{
+        super::{
+            types::MutinyStreamSource,
+        },
+    },
+    uni_stream::UniStream,
+};
 use std::{
-    io::Write,
-    pin::Pin,
     sync::Arc,
     time::Duration,
     fmt::Debug,
-    sync::atomic::Ordering::Relaxed,
-    task::{Context, Poll, Waker},
-    mem::{self, ManuallyDrop, MaybeUninit},
 };
-use futures::stream::Stream;
 use async_trait::async_trait;
-use owning_ref::ArcRef;
 
 
-/// Defines abstractions over Channels and other structures suitable for being used in [Uni]s.\
-/// `UniChannel`s transfer unitary messages between the producer (who calls `send()`) and the consumer(s) `Stream`(s) and
-/// implementors allow a combination of across threads & buffered transfers capabilities, as well as splitting the received messages to
-/// multiple `Streams` (allowing parallel processing).\
-/// As an optimization, there are no `close()` operations, since keeping a state to be consulted every time imposes a performance hit.
-/// Instead, callers are encouraged to perform the "close semantics" themselves:
-///   1. Stop producing new items
-///   2. Call this trait's `.flush()` method
-///   3. Drop all instances & Streams.
-///
-/// Known implementers of this trait are: [mutex_mpmc_queue], [atomic_mpmc_queue], [crossbeam].\
-///
-/// See also: [MultiChannel], allowing a single `send()` to reach multiple consumers (broadcast).
-///
-/// implementation note: Rust 1.63 does not yet support async traits and the alternative -- using the `async-trait` crate -- introduces
-///                      inefficiencies, as `Box::pin()` allocation is required for every returned future. For this reason, we refrained from
-///                      adding an `async fn send()` -- this hot-path should be implemented by the caller to avoid the mentioned overhead.
-///                      Refer to [UniChannel::try_send()] for how to do it.
-/// implementation note 2: Rust 1.63 rules out any optimizations if this trait is used -- since we're not yet allowed to return `impl` in trait
-///                        functions, `consumer_stream()` callers wouldn't manage to get the compiler / linker to optimize / mangle / inline their
-///                        code together if we return a `Box<dyn>` reference. For this reason, this trait is, currently, useless. Nonetheless,
-///                        implementors should honor the function names and signatures defined here, as macros will be used to circumvent the absence
-///                        of a trait relating all implementors together (ought!) -- see: [impl_uni_channel_for_struct!()]
+/// Defines common abstractions on how [Uni]s receives produced events and delivers them to `Stream`s.\
+/// Implementors should also implement one of [UniMovableChannel] or [UniZeroCopyChannel].
+/// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 #[async_trait]
-pub trait UniChannel<ItemType> {
+pub trait UniChannelCommon<'a, ItemType: Debug> {
 
-    /// Creates a new instance of this channel
-    fn new() -> Arc<Pin<Box<Self>>>;
+    /// Creates a new instance of this channel, to be referred to (in logs) as `name`
+    fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
 
-    // /// Returns a stream able to consume elements sent through this channel.\
-    // /// For MPSC (multi-producer, single-consumer) channels, this method will only produce 1 stream.\
-    // /// If called on a MPMC (multi-producer, multi-Consumer) channel, every call will produce a new stream
-    // /// which will, concurrently, grab the next entry available in this channel -- using the consumer pattern.
-    // fn consumer_stream(self: &Arc<Pin<Box<Self>>>) -> Option<impl Stream<Item=ItemType>>;
-    // additional implementation note: Rust 1.63 also don't allow trait functions to return `impl` versions,
-    // so this should be implemented (by implementors of this trait) out of this trait.
-    // A macro will enforce users of this trait have that function available
-
-    // disabled for now. See implementation note on this trait.
-    // /// Sends `item` through this channel, asynchronously, waiting for a slot if the buffer is full
-    // async fn send(&self, item: ItemType);
-
-    /// For channels that allow optimized allocators, this version of send should be used instead, as it will enforce
-    /// a zero-copy policy (which is likely to payoff for data types some dozens of bytes wide).\
-    /// This is marked as unsafe for extra care should be taken when providing the `item_builder()` callback: it will reuse
-    /// a previous `ItemType`, so care should be taken for old data not to leak out as if it was new.
-    unsafe fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool;
-
-    /// Sends `item` through this channel, synchronously, returning immediately if the buffer is full
-    /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.
-    fn try_send(&self, item: ItemType) -> bool;
+    /// Returns a `Stream` able to receive elements sent through this channel.\
+    /// If called more than once, each `Stream` will receive different elements.\
+    /// Panics if called more times than allowed by [Uni]'s `MAX_STREAMS`
+    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self>
+                                            where Self: MutinyStreamSource<'a, ItemType>;
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
     async fn flush(&self, timeout: Duration) -> u32;
 
     /// Flushes & signals that all streams should cease their activities when there are no more elements left
-    /// to process, waiting for the operation to complete up to `timeout`.\
+    /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
-    async fn end_all_streams(&self, timeout: Duration) -> u32;
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32;
 
-    /// Tells how many items are waiting to be taken out of this channel.\
+    /// Sends a signal to all streams, urging them to cease their operations.\
+    /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
+    /// nor cares if there are remaining elements to be processed.
+    fn cancel_all_streams(&self);
+
+    /// Informs the caller how many active streams are currently managed by this channel
+    fn running_streams_count(&self) -> u32;
+
+    /// Tells how many events are waiting to be taken out of this channel.\
+    /// IMPLEMENTORS: #[inline(always)]
     fn pending_items_count(&self) -> u32;
 
-
-    // to be moved to the Uni
-    /////////////////////////
-
-    // /// Method through which an executor reports it is processing items from this channel
-    // fn report_executor_started(&self);
-    //
-    // /// Method through which executors tells this channel they have ceased executing
-    // fn report_executor_finished(&self);
-    //
-    // /// Tells how many executors found this channel to have come to its end and have fully processed
-    // /// the last item.\
-    // /// `if self.closed() && self.pending_items_count() == 0 && self.active_executors_count() == 0`
-    // /// then you may safely drop this channel.
-    // fn active_executors_count(&self) -> u32;
-
 }
 
-/// IMPORTANT: Hacky solution ahead -- see [UniChannel]'s development note 2 for the reason why this macro should exist!\
-/// This macro receives an `implementer` of [UniChannel] -- such as [], [] or []
-/// -- and implements all the trait functions for the given `struct`, so they can be called locally.\
-/// This is a hack required by Rust 1.63 so performance won't be dropped -- see the referred implementation note!
-macro_rules! impl_uni_channel_for_struct {
-        ($strct: tt, $implementer_type: ty, $implementer_field: ident) => {
+/// Defines how to send events (to a [Uni]) that may be subject of moving (copying from one place in RAM to another), if
+/// compiler optimizations (that would make it zero-copy) are not possible.
+pub trait UniMovableChannel<'a, ItemType: Debug>: UniChannelCommon<'a, ItemType> {
 
-            impl $strct<$implementer_type> {
+    /// THIS BELONGS TO ZERO-COPY CHANNEL. Move it there when ready!
+    /// ============================================================
+    /// For channels that allow optimized allocators, this version of send should be used instead, as it will enforce
+    /// a zero-copy policy (which is likely to payoff for data types some dozens of bytes wide).\
+    /// This is marked as unsafe for extra care should be taken when providing the `item_builder()` callback: it will reuse
+    /// a previous `ItemType`, so care should be taken for old data not to leak out as if it was new.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool;
 
-                pub fn yeah(&self) {
-                    println!("yeah!: {}", self.$implementer_field.try_send(0));
-                }
+    /// Sends `item` through this channel, synchronously, returning immediately if the buffer is full
+    /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn try_send(&self, item: ItemType) -> bool;
 
-            }
-
-        }
 }
-
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
@@ -134,6 +91,7 @@ macro_rules! impl_uni_channel_for_struct {
 ///     type UniChannelType<ItemType, BUFFER_SIZE> = mutex_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE>
 #[cfg(any(test,doc))]
 mod tests {
+    use super::*;
     use crate::uni::channels::{ movable, zero_copy };
     use std::{
         fmt::Debug,
@@ -246,7 +204,7 @@ mod tests {
 
                 // collect the streams
                 let mut streams = stream::iter(0..PARALLEL_STREAMS)
-                    .then(|i| {
+                    .then(|_i| {
                         let channel = channel.clone();
                         async move {
                             channel.consumer_stream()
@@ -326,7 +284,6 @@ mod tests {
                 let profiling_name = $profiling_name;
                 let count = $count;
                 let mut stream = channel.consumer_stream();
-                let start = Instant::now();
 
                 let sender_future = async {
                     for e in 0..count {
@@ -334,7 +291,7 @@ mod tests {
                             tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                         }
                     }
-                    channel.end_all_streams(Duration::from_secs(1)).await;
+                    channel.gracefully_end_all_streams(Duration::from_secs(1)).await;
                 };
 
                 let receiver_future = async {

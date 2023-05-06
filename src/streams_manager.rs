@@ -6,34 +6,22 @@ use crate::{
         ogre_queues::{
             OgreQueue,
             full_sync_queues::{
-                full_sync_meta::FullSyncMeta,
                 NonBlockingQueue,
             },
-            meta_publisher::MetaPublisher,
-            meta_subscriber::MetaSubscriber,
-            meta_container::MetaContainer,
         },
         ogre_sync,
     },
-    multi::channels::multi_stream::MultiStream,
 };
 use std::{
     time::Duration,
     sync::{
-        Arc,
         atomic::{AtomicU32, AtomicBool, Ordering::{Relaxed}},
     },
     pin::Pin,
-    fmt::Debug,
-    task::{Poll, Waker},
-    mem::{self, MaybeUninit},
-    hint::spin_loop,
+    task::{Waker},
     marker::PhantomData,
 };
-use futures::{Stream};
 use minstant::Instant;
-use owning_ref::ArcRef;
-use log::{warn};
 
 
 /// Basis for all `Uni`s and `Multi`s Stream Managers,
@@ -209,11 +197,6 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         mutable_self.finished_streams_count.fetch_add(1, Relaxed);
         mutable_self.vacant_streams.enqueue(stream_id);
         mutable_self.sync_vacant_and_used_streams();
-    }
-
-    #[inline(always)]
-    pub fn vacant_streams_len(&self) -> usize {
-        self.vacant_streams.len()
     }
 
     /// Return the ids of the used streams.\

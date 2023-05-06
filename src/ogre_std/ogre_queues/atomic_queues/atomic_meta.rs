@@ -159,7 +159,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
     #[inline(always)]
     fn consume_leaking(&'a self) -> Option<&'a SlotType> {
         self.consume_leaking_internal(|| false)
-            .map(|(slot_ref, slot_id, _len_before)| &*slot_ref)
+            .map(|(slot_ref, _slot_id, _len_before)| &*slot_ref)
     }
 
     #[inline(always)]
@@ -310,7 +310,7 @@ AtomicMeta<SlotType, BUFFER_SIZE> {
         loop {
             match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
                 Ok(_) => break,
-                Err(reloaded_head) => {
+                Err(_reloaded_head) => {
                     relaxed_wait::<SlotType>();
                 }
             }
@@ -344,7 +344,6 @@ mod tests {
         super::super::super::test_commons::measure_syncing_independency
     };
     use std::sync::{
-        Arc,
         atomic::AtomicU32,
     };
 

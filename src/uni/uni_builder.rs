@@ -6,7 +6,7 @@ use super::{
         instruments::Instruments,
         stream_executor::StreamExecutor,
     },
-    uni::{Uni},
+    uni::{Uni, UniStreamType},
 };
 use std::{
     fmt::Debug,
@@ -17,9 +17,6 @@ use std::{
 };
 use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
-use crate::types::*;
-use crate::uni::channels::uni_stream::UniStream;
-use crate::uni::UniStreamType;
 
 
 pub struct UniBuilder<InType:              Send + Sync + 'static,

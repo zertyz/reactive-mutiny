@@ -1,20 +1,25 @@
 //! See [super]
 
+pub use crate::multi::channels::{
+    MultiChannelCommon,
+    MultiMovableChannel,
+};
 use super::super::{
-    ogre_std::ogre_queues::full_sync_queues::full_sync_meta::FullSyncMeta,
     instruments::Instruments,
-    multi::channels::{self,multi_stream::MultiStream},
+    multi::channels::{
+        self,
+        multi_stream::MultiStream,
+    },
     stream_executor::StreamExecutor,
 };
 use std::{
     sync::Arc,
     fmt::Debug,
-    pin::Pin,
     time::Duration,
     future::Future,
 };
 use indexmap::IndexMap;
-use futures::{Stream,StreamExt};
+use futures::{Stream};
 use tokio::{
     sync::{RwLock},
 };
@@ -235,7 +240,7 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
 }
 
-/// Macro to close, atomically, all [Multi]s passed in as parameters
+/// Macro to close, atomically-ish, all [Multi]s passed in as parameters
 #[macro_export]
 macro_rules! multis_close_async {
     ($timeout: expr,
@@ -247,7 +252,6 @@ macro_rules! multis_close_async {
     }
 }
 pub use multis_close_async;
-use crate::ogre_std::ogre_queues::atomic_queues::atomic_meta::AtomicMeta;
 
 /// Keeps track of the `stream_executor` associated to each `stream_id`
 pub struct ExecutorInfo<const INSTRUMENTS: usize> {
