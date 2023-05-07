@@ -6,9 +6,9 @@ use crate::{
             full_sync::{
                 full_sync_move::FullSyncMove,
             },
-            meta_publisher::MetaPublisher,
-            meta_subscriber::MetaSubscriber,
-            meta_container::MetaContainer,
+            meta_publisher::MovePublisher,
+            meta_subscriber::MoveSubscriber,
+            meta_container::MoveContainer,
         },
     },
     multi::channels::{
@@ -46,7 +46,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channels:        [Pin<Box<FullSyncMove<Option<Arc<ItemType>>, BUFFER_SIZE>>>; MAX_STREAMS],
+    channels:        [Pin<Box<FullSyncMove<Arc<ItemType>, BUFFER_SIZE>>>; MAX_STREAMS],
 }
 
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
@@ -59,7 +59,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(streams_manager_name),
-            channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMove::<Option<Arc<ItemType>>, BUFFER_SIZE>::new())),
+            channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMove::<Arc<ItemType>, BUFFER_SIZE>::new())),
         })
     }
 
@@ -120,15 +120,23 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             if *stream_id == u32::MAX {
                 break
             }
-            self.channels[*stream_id as usize].publish(|slot| { let _ = slot.insert(Arc::clone(&arc_item)); },
-                                  || {
-                                      self.streams_manager.wake_stream(*stream_id);
-                                      warn!("Multi Channel's OgreMPMCQueue (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
-                                            channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
-                                      std::thread::sleep(Duration::from_millis(500));
-                                      true
-                                  },
-                                  |len| if len <= 1 { self.streams_manager.wake_stream(*stream_id) });
+            loop {
+                let channel = unsafe { self.channels.get_unchecked(*stream_id as usize) };
+                match channel.publish_movable(arc_item.clone()) {
+                    Some(len_after_publishing) => {
+                        if len_after_publishing.get() <= 1 {
+                            self.streams_manager.wake_stream(*stream_id);
+                        }
+                        break;
+                    },
+                    None => {
+                        self.streams_manager.wake_stream(*stream_id);
+                        warn!("Multi Channel's FullSync (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+                              channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
+                        std::thread::sleep(Duration::from_millis(500));
+                    },
+                }
+            }
         }
     }
 
@@ -143,9 +151,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn provide(&self, stream_id: u32) -> Option<Arc<ItemType>> {
         let channel = unsafe { self.channels.get_unchecked(stream_id as usize) };
-        channel.consume(|item| item.take().expect("godshavfty!! element cannot be None here!"),
-                                 || false,
-                                 |_| {})
+        channel.consume_movable()
     }
 
     #[inline(always)]

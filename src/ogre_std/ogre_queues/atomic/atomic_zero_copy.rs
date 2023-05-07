@@ -1,25 +1,29 @@
-//! Resting place for [AtomicMove]
+//! Resting place for [AtomicZeroCopy]
 
 use super::super::{
-    meta_publisher::MovePublisher,
-    meta_subscriber::MoveSubscriber,
-    meta_container::MoveContainer,
+    meta_publisher::MetaPublisher,
+    meta_subscriber::MetaSubscriber,
+    meta_container::MetaContainer,
 };
-use std::{fmt::Debug, sync::atomic::{AtomicU32, Ordering::{Acquire, Relaxed, Release}}, mem::MaybeUninit, ptr};
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicU32,Ordering::{Acquire,Relaxed,Release}},
+    mem::MaybeUninit,
+};
 use std::mem::ManuallyDrop;
-use std::num::NonZeroU32;
 
 
 /// Basis for multiple producer / multiple consumer queues using atomics for synchronization,
 /// allowing enqueueing syncing to be (almost) fully detached from the dequeueing syncing.
 ///
-/// This queue implements the "movable pattern" through [MovePublisher] & [MoveSubscriber] and
-/// is a good fit for raw thin payload < 1k.
+/// This queue implements the "zero-copy patterns" through [ZeroCopyPublisher] & [ZeroCopySubscriber] and
+/// is a good fit for payloads > 1k.
 ///
-/// For fatter payloads, [AtomicZeroCopy] should be a better fit.
+/// For thinner payloads, [AtomicMove] should be a better fit, as it doesn't require a secondary container to
+/// hold the objects.
 #[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct AtomicMove<SlotType:          Debug,
-                      const BUFFER_SIZE: usize> {
+pub struct AtomicZeroCopy<SlotType,
+                          const BUFFER_SIZE: usize> {
     /// marks the first element of the queue, ready for dequeue -- increasing when dequeues are complete
     pub(crate) head: AtomicU32,
     /// increase-before-load field, marking where the next element should be written to
@@ -36,8 +40,8 @@ pub struct AtomicMove<SlotType:          Debug,
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MoveContainer<SlotType> for
-AtomicMove<SlotType, BUFFER_SIZE> {
+MetaContainer<'a, SlotType> for
+AtomicZeroCopy<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
@@ -56,26 +60,14 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MovePublisher<SlotType> for
-AtomicMove<SlotType, BUFFER_SIZE> {
+MetaPublisher<'a, SlotType> for
+AtomicZeroCopy<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
-        match self.leak_slot_internal(|| false) {
-            Some( (slot, slot_id, len_before) ) => {
-                unsafe { ptr::write(slot, item); }
-                self.publish_leaked_internal(slot_id);
-                NonZeroU32::new(len_before+1)
-            },
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
-              (&self,
+              (&'a self,
                setter_fn:                      SetterFn,
                report_full_fn:                 ReportFullFn,
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
@@ -90,6 +82,26 @@ AtomicMove<SlotType, BUFFER_SIZE> {
             },
             None => false,
         }
+    }
+
+    #[inline(always)]
+    fn leak_slot(&self) -> Option<&SlotType> {
+        self.leak_slot_internal(|| false)
+            .map(|(slot_ref, _slot_id, _len_before)| &*slot_ref)
+    }
+
+    #[inline(always)]
+    fn publish_leaked(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        self.publish_leaked_internal(slot_id)
+    }
+
+    #[inline(always)]
+    fn unleak_slot(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        while !self.try_unleak_slot_internal(slot_id) {
+            std::hint::spin_loop();
+        };
     }
 
     #[inline(always)]
@@ -118,19 +130,41 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MoveSubscriber<SlotType> for
-AtomicMove<SlotType, BUFFER_SIZE> {
+MetaSubscriber<'a, SlotType> for
+AtomicZeroCopy<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn consume_movable(&self) -> Option<SlotType> {
-        match self.consume_leaking_internal(|| false) {
-            Some( (slot_ref, slot_id, _len_before) ) => {
-                let item = unsafe { Some(ptr::read(slot_ref)) };
+    fn consume<GetterReturnType: 'a,
+               GetterFn:                   Fn(&'a mut SlotType) -> GetterReturnType,
+               ReportEmptyFn:              Fn() -> bool,
+               ReportLenAfterDequeueingFn: FnOnce(i32)>
+              (&self,
+               getter_fn:                      GetterFn,
+               report_empty_fn:                ReportEmptyFn,
+               report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
+              -> Option<GetterReturnType> {
+
+        match self.consume_leaking_internal(report_empty_fn) {
+            Some( (slot_ref, slot_id, len_before) ) => {
+                let ret_val = getter_fn(slot_ref);
                 self.release_leaked_internal(slot_id);
-                item
+                report_len_after_dequeueing_fn(len_before-1);
+                Some(ret_val)
             }
             None => None,
         }
+    }
+
+    #[inline(always)]
+    fn consume_leaking(&'a self) -> Option<&'a SlotType> {
+        self.consume_leaking_internal(|| false)
+            .map(|(slot_ref, _slot_id, _len_before)| &*slot_ref)
+    }
+
+    #[inline(always)]
+    fn release_leaked(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        self.release_leaked_internal(slot_id);
     }
 
     unsafe fn peek_remaining(&self) -> [&[SlotType]; 2] {
@@ -159,7 +193,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-AtomicMove<SlotType, BUFFER_SIZE> {
+AtomicZeroCopy<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
@@ -295,23 +329,6 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     }
 }
 
-// buffered elements are `ManuallyDrop<SlotType>`, so here is where we drop any unconsumed ones
-impl<SlotType:          Debug,
-     const BUFFER_SIZE: usize>
-Drop for
-AtomicMove<SlotType, BUFFER_SIZE> {
-
-    fn drop(&mut self) {
-        loop {
-            match self.consume_movable() {
-                None => break,
-                Some(item) => drop(item),
-            }
-        }
-    }
-}
-
-
 #[inline(always)]
 fn relaxed_wait<SlotType>() {
     std::hint::spin_loop();
@@ -321,91 +338,44 @@ fn relaxed_wait<SlotType>() {
 mod tests {
     //! Unit tests for [atomic_meta](super) module
 
-    use super::*;
-    use crate::ogre_std::test_commons::{self, ContainerKind,Blocking};
+    use super::{
+        *,
+        super::super::super::test_commons::measure_syncing_independency
+    };
     use std::sync::{
         atomic::AtomicU32,
     };
 
-
+    /// the atomic meta queue should allow independent enqueueing (if dequeue takes too long to complete, enqueueing should not be affected)
     #[cfg_attr(not(doc),test)]
-    fn basic_queue_use_cases() {
-        let queue = AtomicMove::<i32, 16>::new();
-        test_commons::basic_container_use_cases("Movable API",
-                                                ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish_movable(e).is_some(),
-                                                || queue.consume_movable(),
-                                                || queue.available_elements_count());
-        test_commons::basic_container_use_cases("Zero-Copy Producer/Movable Subscriber API",
-                                                ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                || queue.consume_movable(),
-                                                || queue.available_elements_count());
-    }
+    #[ignore]   // time-dependent: should run on single-threaded tests
+    pub fn assure_enqueue_syncing_independency() {
+        let queue = AtomicZeroCopy::<u32, 128>::new();
+        let (independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(
+            |i, callback: &dyn Fn()| {
+                queue.publish(
+                    |slot| {
+                        *slot = i;
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            },
+            |result: &AtomicU32, callback: &dyn Fn()| {
+                queue.consume(
+                    |slot| {
+                        result.store(*slot, Relaxed);
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            }
+        );
 
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    fn single_producer_multiple_consumers() {
-        let queue = AtomicMove::<u32, 65536>::new();
-        test_commons::container_single_producer_multiple_consumers("Movable API",
-                                                                   |e| queue.publish_movable(e).is_some(),
-                                                                   || queue.consume_movable());
-        test_commons::container_single_producer_multiple_consumers("Zero-Copy Producer/Movable Subscriber API",
-                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                   || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    fn multiple_producers_single_consumer() {
-        let queue = AtomicMove::<u32, 65536>::new();
-        test_commons::container_multiple_producers_single_consumer("Movable API",
-                                                                   |e| queue.publish_movable(e).is_some(),
-                                                                   || queue.consume_movable());
-        test_commons::container_multiple_producers_single_consumer("Zero-Copy Producer/Movable Subscriber API",
-                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                   || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = AtomicMove::<u32, 65536>::new();
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out("Movable API",
-                                                                                Blocking::NonBlocking,
-                                                                                queue.max_size(),
-                                                                                |e| queue.publish_movable(e).is_some(),
-                                                                                || queue.consume_movable());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out("Zero-Copy Producer/Movable Subscriber API",
-                                                                                Blocking::NonBlocking,
-                                                                                queue.max_size(),
-                                                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                                || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = AtomicMove::<u32, 65536>::new();
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out("Movable API",
-                                                                                   |e| queue.publish_movable(e).is_some(),
-                                                                                   || queue.consume_movable());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out("Zero-Copy Producer/Movable Subscriber API",
-                                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                                   || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    pub fn peek_test() {
-        let queue = AtomicMove::<u32, 16>::new();
-        test_commons::peak_remaining("Movable API",
-                                     |e| queue.publish_movable(e).is_some(),
-                                     || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
-        test_commons::peak_remaining("Zero-Copy Producer/Movable Subscriber API",
-                                     |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                     || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
+        assert!(independent_productions_count > 0, "No independent production was detected");
+        assert_eq!(dependent_productions_count, 0, "a > 0 number here means enqueueing had to wait for dequeueing (which is not supposed to happen in ths Atomic meta queue) -- BTW, for this test, the queue is never full");
     }
 
 }

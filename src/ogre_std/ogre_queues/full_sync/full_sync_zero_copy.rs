@@ -1,28 +1,34 @@
-//! Resting place for [FullSyncMove]
+//! Resting place for [FullSyncZeroCopy]
 
-use super::super::{
-    super::ogre_sync,
-    meta_publisher::MovePublisher,
-    meta_subscriber::MoveSubscriber,
-    meta_container::MoveContainer,
+use crate::ogre_std::{
+    ogre_queues::{
+        meta_publisher::MetaPublisher,
+        meta_subscriber::MetaSubscriber,
+        meta_container::MetaContainer,
+    },
+    ogre_sync,
 };
-use std::{fmt::Debug, mem::{ManuallyDrop, MaybeUninit}, ptr, sync::atomic::{
-    AtomicBool,
-    Ordering::Relaxed,
-}};
-use std::num::NonZeroU32;
+use std::{
+    fmt::Debug,
+    mem::{ManuallyDrop, MaybeUninit},
+    sync::atomic::{
+        AtomicBool,
+        Ordering::Relaxed,
+    },
+};
 
 
 /// Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
 /// full synchronization through an atomic flag, with a clever & experimentally tuned efficient locking mechanism.
 ///
-/// This queue implements the "movable pattern" through [MovePublisher] & [MoveSubscriber] and is a good fit
-/// for raw thin payloads < 1k.
+/// This queue implements the "zero-copy patterns" through [ZeroCopyPublisher] & [ZeroCopySubscriber] and
+/// is a good fit for payloads > 1k.
 ///
-/// For fatter payloads, [FullSyncZeroCopy] should be a better fit.
+/// For thinner payloads, [FullSyncMove] should be a better fit, as it doesn't require a secondary container to
+/// hold the objects.
 #[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct FullSyncMove<SlotType:          Debug,
-                        const BUFFER_SIZE: usize> {
+pub struct FullSyncZeroCopy<SlotType,
+                            const BUFFER_SIZE: usize> {
 
     head: u32,
     tail: u32,
@@ -35,8 +41,8 @@ pub struct FullSyncMove<SlotType:          Debug,
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MoveContainer<SlotType> for
-FullSyncMove<SlotType, BUFFER_SIZE> {
+MetaContainer<'a, SlotType> for
+FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
@@ -55,24 +61,11 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MovePublisher<SlotType> for
-FullSyncMove<SlotType, BUFFER_SIZE> {
+MetaPublisher<'a, SlotType> for
+FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
-        match self.leak_slot_internal(|| false) {
-            Some( (slot, len_before) ) => {
-                unsafe { ptr::write(slot, item); }
-                self.publish_leaked_internal();
-                ogre_sync::unlock(&self.concurrency_guard);
-                NonZeroU32::new(len_before+1)
-            },
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
+    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
               (&self, setter_fn:                      SetterFn,
@@ -90,6 +83,33 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
             }
             None => false
         }
+    }
+
+    #[inline(always)]
+    fn leak_slot(&self) -> Option<&SlotType> {
+        self.leak_slot_internal(|| false)
+            .map(|(slot_ref, _len_before)| {
+                ogre_sync::unlock(&self.concurrency_guard);
+                &*slot_ref
+            })
+    }
+
+    #[inline(always)]
+    fn publish_leaked(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        ogre_sync::lock(&self.concurrency_guard);
+        debug_assert_eq!(self.tail, slot_id, "FullSyncMeta: Use of the `leak_slot()` / `publish_leaked()` pattern is only available for single-threaded producers -- and it seems not to be the case: `slot_id` and expected `tail` don't match");
+        self.publish_leaked_internal();
+        ogre_sync::unlock(&self.concurrency_guard);
+    }
+
+    #[inline(always)]
+    fn unleak_slot(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        ogre_sync::lock(&self.concurrency_guard);
+        debug_assert_eq!(self.tail, slot_id, "FullSyncMeta: `unleak_slot()` was called after another slot has been published / leaked: `slot_id` and expected `tail` don't match");
+        self.unleak_internal();
+        ogre_sync::unlock(&self.concurrency_guard);
     }
 
     #[inline(always)]
@@ -116,22 +136,45 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-MoveSubscriber<SlotType> for
-FullSyncMove<SlotType, BUFFER_SIZE> {
+MetaSubscriber<'a, SlotType> for
+FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn consume_movable(&self) -> Option<SlotType> {
-        match self.consume_leaking_internal(|| false) {
-            Some( (slot_ref, _len_before) ) => {
-                let item = unsafe { Some(ptr::read(slot_ref)) };
+    fn consume<GetterReturnType: 'a,
+               GetterFn:                   FnOnce(&'a mut SlotType) -> GetterReturnType,
+               ReportEmptyFn:              Fn() -> bool,
+               ReportLenAfterDequeueingFn: FnOnce(i32)>
+              (&self,
+               getter_fn:                      GetterFn,
+               report_empty_fn:                ReportEmptyFn,
+               report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
+              -> Option<GetterReturnType> {
+
+        match self.consume_leaking_internal(report_empty_fn) {
+            Some( (slot_ref, len_before) ) => {
+                let ret_val = getter_fn(slot_ref);
                 self.release_leaked_internal();
                 ogre_sync::unlock(&self.concurrency_guard);
-                item
-            }
+                report_len_after_dequeueing_fn(len_before-1);
+                Some(ret_val)
+            },
             None => None,
         }
     }
 
+    fn consume_leaking(&'a self) -> Option<&'a SlotType> {
+        self.consume_leaking_internal(|| false)
+            .map(|(slot_ref, _len_before)| &*slot_ref)
+    }
+
+    fn release_leaked(&'a self, slot: &'a SlotType) {
+        let slot_id = self.slot_id_from_slot_ref(slot);
+        ogre_sync::lock(&self.concurrency_guard);
+        debug_assert_eq!(self.head, slot_id, "FullSyncMeta: Use of the `consume_leaking()` / `release_leaked()` pattern is only available for single-threaded consumers -- and it seems not to be the case: `slot_id` and expected `head` don't match");
+        self.release_leaked_internal();
+        ogre_sync::unlock(&self.concurrency_guard);
+
+    }
 
     #[inline(always)]
     unsafe fn peek_remaining(&self) -> [&[SlotType];2] {
@@ -160,7 +203,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
 impl<'a, SlotType:          'a + Debug,
          const BUFFER_SIZE: usize>
-FullSyncMove<SlotType, BUFFER_SIZE> {
+FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
@@ -255,111 +298,51 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
 }
 
-// buffered elements are `ManuallyDrop<SlotType>`, so here is where we drop any unconsumed ones
-impl<SlotType:          Debug,
-     const BUFFER_SIZE: usize>
-Drop for
-FullSyncMove<SlotType, BUFFER_SIZE> {
-
-    fn drop(&mut self) {
-        loop {
-            match self.consume_movable() {
-                None => break,
-                Some(item) => drop(item),
-            }
-        }
-    }
-}
 
 #[cfg(any(test,doc))]
 mod tests {
     //! Unit tests for [full_sync_meta](super) module
 
-    use super::*;
-    use crate::ogre_std::test_commons::{self, ContainerKind,Blocking};
+    use super::{
+        *,
+        super::super::super::test_commons::measure_syncing_independency
+    };
     use std::sync::{
         Arc,
         atomic::AtomicU32,
     };
 
+    /// the full sync base queue should not allow independent produce/consume operations (one blocks the other while it is happening)
     #[cfg_attr(not(doc),test)]
-    fn basic_queue_use_cases() {
-        let queue = FullSyncMove::<i32, 16>::new();
-        test_commons::basic_container_use_cases("Movable API",
-                                                ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish_movable(e).is_some(),
-                                                || queue.consume_movable(),
-                                                || queue.available_elements_count());
-        test_commons::basic_container_use_cases("Zero-Copy Producer/Movable Subscriber API",
-                                                ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                || queue.consume_movable(),
-                                                || queue.available_elements_count());
-    }
+    #[ignore]   // time-dependent: should run on single-threaded tests
+    pub fn assure_syncing_dependency() {
+        let queue = Arc::new(FullSyncZeroCopy::<u32, 128>::new());
+        let queue_ref1 = Arc::clone(&queue);
+        let queue_ref2 = Arc::clone(&queue);
+        let (_independent_productions_count, dependent_productions_count, _independent_consumptions_count, _dependent_consumptions_count) = measure_syncing_independency(
+            |i, callback: &dyn Fn()| {
+                queue_ref1.publish(
+                    |slot| {
+                        *slot = i;
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            },
+            |result: &AtomicU32, callback: &dyn Fn()| {
+                queue_ref2.consume(
+                    |slot| {
+                        result.store(*slot, Relaxed);
+                        callback();
+                    },
+                    || false,
+                    |_| {}
+                )
+            }
+        );
 
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    fn single_producer_multiple_consumers() {
-        let queue = FullSyncMove::<u32, 65536>::new();
-        test_commons::container_single_producer_multiple_consumers("Movable API",
-                                                                   |e| queue.publish_movable(e).is_some(),
-                                                                   || queue.consume_movable());
-        test_commons::container_single_producer_multiple_consumers("Zero-Copy Producer/Movable Subscriber API",
-                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                   || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    fn multiple_producers_single_consumer() {
-        let queue = FullSyncMove::<u32, 65536>::new();
-        test_commons::container_multiple_producers_single_consumer("Movable API",
-                                                                   |e| queue.publish_movable(e).is_some(),
-                                                                   || queue.consume_movable());
-        test_commons::container_multiple_producers_single_consumer("Zero-Copy Producer/Movable Subscriber API",
-                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                   || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    pub fn multiple_producers_and_consumers_all_in_and_out() {
-        let queue = FullSyncMove::<u32, 65536>::new();
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out("Movable API",
-                                                                                Blocking::NonBlocking,
-                                                                                queue.max_size(),
-                                                                                |e| queue.publish_movable(e).is_some(),
-                                                                                || queue.consume_movable());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out("Zero-Copy Producer/Movable Subscriber API",
-                                                                                Blocking::NonBlocking,
-                                                                                queue.max_size(),
-                                                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                                || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    #[ignore]   // flaky if ran in multi-thread?
-    pub fn multiple_producers_and_consumers_single_in_and_out() {
-        let queue = FullSyncMove::<u32, 65536>::new();
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out("Movable API",
-                                                                                   |e| queue.publish_movable(e).is_some(),
-                                                                                   || queue.consume_movable());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out("Zero-Copy Producer/Movable Subscriber API",
-                                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                                                                   || queue.consume_movable());
-    }
-
-    #[cfg_attr(not(doc),test)]
-    pub fn peek_test() {
-        let queue = FullSyncMove::<u32, 16>::new();
-        test_commons::peak_remaining("Movable API",
-                                     |e| queue.publish_movable(e).is_some(),
-                                     || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
-        test_commons::peak_remaining("Zero-Copy Producer/Movable Subscriber API",
-                                     |e| queue.publish(|slot| *slot = e, || false, |_| {}),
-                                     || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
+        assert!(dependent_productions_count > 0, "This queue should wait for dequeue to finish before a new dequeueing is allowed to happen. We are not seeing this behavior here...");
     }
 
 }

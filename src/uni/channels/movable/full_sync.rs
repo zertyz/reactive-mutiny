@@ -4,9 +4,9 @@ use crate::{
     uni::channels::uni_stream::UniStream, ogre_std::{
         ogre_queues::{
             full_sync::full_sync_move::FullSyncMove,
-            meta_publisher::MetaPublisher,
-            meta_subscriber::MetaSubscriber,
-            meta_container::MetaContainer,
+            meta_publisher::MovePublisher,
+            meta_subscriber::MoveSubscriber,
+            meta_container::MoveContainer,
         },
     },
     MutinyStreamSource,
@@ -117,13 +117,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn provide(&self, _stream_id: u32) -> Option<ItemType> {
-        self.container.consume(|item| {
-                                   let mut moved_value = MaybeUninit::<ItemType>::uninit();
-                                   unsafe { std::ptr::copy_nonoverlapping(item as *const ItemType, moved_value.as_mut_ptr(), 1) }
-                                   unsafe { moved_value.assume_init() }
-                               },
-                               || false,
-                               |_| {})
+        self.container.consume_movable()
     }
 
     #[inline(always)]

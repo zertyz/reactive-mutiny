@@ -372,11 +372,19 @@ mod tests {
             async fn $fn_name() {
                 const PAYLOAD_TEXT: &str = "A shareable playload";
                 let channel = <$multi_channel_type>::new("payload_dropping");
-                let (mut stream, _stream_id) = channel.listener_stream();
+                let (mut stream_1, _stream_id) = channel.listener_stream();
+                let (mut stream_2, _stream_id) = channel.listener_stream();
                 channel.send(String::from(PAYLOAD_TEXT));
-                let payload = stream.next().await.unwrap();
-                assert_eq!(payload.as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
-                assert_eq!(Arc::strong_count(&payload), 1, "A payload doing the round trip (being sent by the channel and received by the stream) should have been cloned just once -- so, when dropped, all resources would be freed");
+
+                let payload_1 = stream_1.next().await.unwrap();
+                assert_eq!(payload_1.as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
+                assert_eq!(Arc::strong_count(&payload_1), 2, "The payload is shared with 2 streams, therefore, the Arc count should be 2");
+                let payload_2 = stream_2.next().await.unwrap();
+                assert_eq!(payload_2.as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
+                assert_eq!(Arc::strong_count(&payload_2), 2, "The payload is shared with 2 streams, therefore, the Arc count should be 2");
+
+                drop(payload_1);
+                assert_eq!(Arc::strong_count(&payload_2), 1, "The payload was cloned 2 times -- but, by now, there should be only 1 reference to it: `payload_2`");
             }
         }
     }

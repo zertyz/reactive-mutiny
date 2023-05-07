@@ -1,8 +1,8 @@
 //! Resting place for the (rather internal) [MetaContainer] trait
 
 use super::{
-    meta_publisher::MetaPublisher,
-    meta_subscriber::MetaSubscriber,
+    meta_publisher::*,
+    meta_subscriber::*,
 };
 
 /// Dictates the API for "meta" containers and how they should work.\
@@ -11,6 +11,16 @@ use super::{
 pub trait MetaContainer<'a, SlotType: 'a>: MetaPublisher<'a, SlotType> + MetaSubscriber<'a, SlotType> {
 
     /// Instantiates the meta container
+    fn new() -> Self;
+
+}
+
+/// Dictates the API for "move" containers and how they should work.\
+/// Move containers are the ones that accepts that their payloads are moved around -- in opposition to zero-copy.\
+/// See [ZeroCopyContainer]
+pub trait MoveContainer<SlotType>: MovePublisher<SlotType> + MoveSubscriber<SlotType> {
+
+    /// Instantiates the container of movable data
     fn new() -> Self;
 
 }

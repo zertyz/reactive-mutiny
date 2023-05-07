@@ -5,7 +5,7 @@ use super::super::super::{
     ogre_queues::{
         OgreQueue,
         OgreBlockingQueue,
-        atomic::atomic_move::AtomicMove,
+        atomic::atomic_zero_copy::AtomicZeroCopy,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
         meta_container::MetaContainer,
@@ -39,7 +39,7 @@ pub struct BlockingQueue<SlotType:                  Copy+Debug,
     /// locked when the queue is full, unlocked when it is no longer full
     full_guard:         RawMutex,
     /// queue
-    base_queue:         AtomicMove<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicZeroCopy<SlotType, BUFFER_SIZE>,
     /// locked when the queue is empty, unlocked when it is no longer empty
     empty_guard:        RawMutex,
     // metrics for dequeue
@@ -173,7 +173,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
             full_guard:         RawMutex::INIT,
-            base_queue:         AtomicMove::new(),
+            base_queue:         AtomicZeroCopy::new(),
             empty_guard:        RawMutex::INIT,
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
@@ -346,35 +346,36 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     fn basic_queue_use_cases() {
         let queue = BlockingQueue::<i32, 16, {Instruments::MetricsWithDiagnostics.into()}>::new("basic_use_cases' test queue".to_string());
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(queue.queue_name(), ContainerKind::Queue, Blocking::Blocking, queue.max_size(),
+                                                |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn single_producer_multiple_consumers() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("single_producer_multiple_consumers' test queue".to_string());
-        test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_single_producer_multiple_consumers(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn multiple_producers_single_consumer() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_single_consumer' test queue".to_string());
-        test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_single_consumer(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(), Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_single_in_and_out() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
@@ -384,7 +385,8 @@ mod tests {
         const QUEUE_SIZE:     usize = 16;
         let queue = BlockingQueue::<usize, QUEUE_SIZE, TIMEOUT_MILLIS, {Instruments::MetricsWithDiagnostics.into()}>::new("test_blocking' queue".to_string());
 
-        test_commons::blocking_behavior(QUEUE_SIZE,
+        test_commons::blocking_behavior(queue.queue_name(),
+                                        QUEUE_SIZE,
                                         |e| queue.enqueue(e),
                                         || queue.dequeue(),
                                         |e| queue.try_enqueue(e),

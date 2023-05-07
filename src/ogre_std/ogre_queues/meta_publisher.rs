@@ -1,6 +1,8 @@
 //! Resting place for the [MetaPublisher] trait.
 
 
+use std::num::NonZeroU32;
+
 /// API for producing elements to a [meta_queue] or [meta_topic].\
 /// Two zero-copy patterns are available:
 ///   1) `publish()` is the simplest & safest: a callback closure is provided to fill in the data;
@@ -54,6 +56,57 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     ///   2) Log-based implementors won't reuse the cancelled slot, so excessive calling this method may cause the application to consume more resources;
     ///   3) Array-based implementors will deal optimally with the cancelled slots: they will be immediately returned to the pool.
     fn unleak_slot(&'a self, slot: &'a SlotType);
+
+    /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
+    /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
+    /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
+    fn available_elements_count(&self) -> usize;
+
+    /// Returns the maximum number of elements this `meta_publisher` can hold -- \
+    /// 0, if the implementor offers an unbounded container,\
+    /// > 0, if the implementer uses a ring-buffer of that size.
+    fn max_size(&self) -> usize;
+
+    /// Returns a string that might be useful to debug or assert algorithms when writing automated tests
+    fn debug_info(&self) -> String;
+}
+
+/// API for producing elements to a [meta_queue] or [meta_topic] that accepts the possibility that they may be moved,
+/// if the compiler is unable to optimize the data transfer to a zero-copy -- typically, publishing will always be
+/// zero-copy (provided you're compiling in Release mode), but subscription will always be move.
+pub trait MovePublisher<SlotType> {
+
+    /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
+    /// move the data (copy & forget) rather than zero-copying it.\
+    /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
+    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
+    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32>;
+
+    /// Store an item, to be later retrieved with [MoveSubscriber<>], in a way that
+    /// no copying nor moving around would ever be made:
+    ///   - After securing a slot for the new element, `setter_fn(&mut slot)` is called to fill it;
+    ///   - If the queue is found to be full, `report_full_fn()` is called. Through this function, specializations may turn implementing structures into a blocking queue and/or compute metrics.
+    ///     The returned boolean indicates if the publisher should try securing a slot again -- `false` meaning "don't retry: nothing could be done to free one up";
+    ///   - `report_len_after_enqueueing_fn(len)` is called after the enqueueing is done and receives the number of not-yet-collected elements present -- a similar info as [available_elements()].
+    ///     Specializers might use this to awake a number of consumers.
+    /// Returns:
+    ///   - `true` if the enqueueing was done;
+    ///   - `false` otherwise -- possibly due to a bounded queue being full (generally meaning the caller should try again after spin-waiting or sleeping a bit).
+    ///     Keep in mind that blocking-queues are likely never to return false (unless some sort of enqueueing timeout happens).
+    /// Caveats:
+    ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call.
+    ///      As a down side, the `new T { fields }` cannot be used here. If that is needed, please use [publish_movable()]
+    ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
+    ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
+    fn publish<SetterFn:                   FnOnce(&mut SlotType),
+               ReportFullFn:               Fn() -> bool,
+               ReportLenAfterEnqueueingFn: FnOnce(u32)>
+              (&self,
+               setter_fn:                      SetterFn,
+               report_full_fn:                 ReportFullFn,
+               report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
+              -> bool;
+
 
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)

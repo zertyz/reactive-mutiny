@@ -4,7 +4,6 @@ pub mod meta_publisher;
 pub mod meta_subscriber;
 pub mod meta_container;
 pub mod meta_topic;
-pub mod non_blocking_parking_lot_queue;
 pub mod atomic;
 pub mod full_sync;
 pub mod log_topics;

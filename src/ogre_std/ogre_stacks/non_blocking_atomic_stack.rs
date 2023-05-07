@@ -147,31 +147,32 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     fn basic_stack_use_cases() {
         let stack = Stack::<i32, 16, false, false>::new("'basic_use_cases' test stack".to_string());
-        test_commons::basic_container_use_cases(ContainerKind::Stack, Blocking::NonBlocking, stack.buffer_size(), |e| stack.push(e), || stack.pop(), || stack.len());
+        test_commons::basic_container_use_cases(stack.stack_name(), ContainerKind::Stack, Blocking::NonBlocking, stack.buffer_size(),
+                                                |e| stack.push(e), || stack.pop(), || stack.len());
     }
 
     #[cfg_attr(not(doc),test)]
     fn single_producer_multiple_consumers() {
         let stack = Stack::<u32, 65536, false, false>::new("single_producer_multiple_consumers test stack".to_string());
-        test_commons::container_single_producer_multiple_consumers(|e| stack.push(e), || stack.pop());
+        test_commons::container_single_producer_multiple_consumers(stack.stack_name(), |e| stack.push(e), || stack.pop());
     }
 
     #[cfg_attr(not(doc),test)]
     fn multiple_producers_single_consumer() {
         let stack = Stack::<u32, 65536, false, false>::new("multiple_producers_single_consumer test stack".to_string());
-        test_commons::container_multiple_producers_single_consumer(|e| stack.push(e), || stack.pop());
+        test_commons::container_multiple_producers_single_consumer(stack.stack_name(), |e| stack.push(e), || stack.pop());
     }
 
     #[cfg_attr(not(doc),test)]
     fn multiple_producers_and_consumers_all_in_and_out() {
         let stack = Stack::<u32, 65536, false, false>::new("multiple_producers_and_consumers_all_in_and_out test stack".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, stack.buffer_size(), |e| stack.push(e), || stack.pop());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(stack.stack_name(), Blocking::NonBlocking, stack.buffer_size(), |e| stack.push(e), || stack.pop());
     }
 
     #[cfg_attr(not(doc),test)]
     fn multiple_producers_and_consumers_single_in_and_out() {
         let stack = Stack::<u32, 65536, false, false>::new("concurrency_single_in_and_out test stack".to_string());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| stack.push(e), || stack.pop());
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out(stack.stack_name(), |e| stack.push(e), || stack.pop());
     }
 
 }

@@ -4,7 +4,7 @@
 use super::super::super::{
     ogre_queues::{
         OgreQueue,
-        atomic::atomic_move::AtomicMove,
+        atomic::atomic_zero_copy::AtomicZeroCopy,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
         meta_container::MetaContainer,
@@ -28,7 +28,7 @@ pub struct NonBlockingQueue<SlotType:          Copy+Debug,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         AtomicMove<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicZeroCopy<SlotType, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,
@@ -74,7 +74,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
-            base_queue:         AtomicMove::new(),
+            base_queue:         AtomicZeroCopy::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),
@@ -179,34 +179,35 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     fn basic_queue_use_cases() {
         let queue = NonBlockingQueue::<i32, 16, {Instruments::NoInstruments.into()}>::new("basic_use_cases' test queue".to_string());
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(queue.queue_name(), ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
+                                                |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn single_producer_multiple_consumers() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("single_producer_multiple_consumers' test queue".to_string());
-        test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_single_producer_multiple_consumers(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn multiple_producers_single_consumer() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("multiple_producers_single_consumer' test queue".to_string());
-        test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_single_consumer(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = NonBlockingQueue::<u32, {1024*64}, {Instruments::NoInstruments.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(), Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_single_in_and_out() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
     }
 }

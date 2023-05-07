@@ -4,7 +4,7 @@ use super::super::super::{
     instruments::Instruments,
     ogre_queues::{
         OgreQueue,
-        full_sync::full_sync_move::FullSyncMove,
+        full_sync::full_sync_zero_copy::FullSyncZeroCopy,
         meta_publisher::MetaPublisher,
         meta_subscriber::MetaSubscriber,
         meta_container::MetaContainer,
@@ -28,7 +28,7 @@ pub struct NonBlockingQueue<SlotType:          Unpin + Debug,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         FullSyncMove<SlotType, BUFFER_SIZE>,
+    base_queue:         FullSyncZeroCopy<SlotType, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,
@@ -45,7 +45,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         Self {
             enqueue_count:      AtomicU64::new(0),
             queue_full_count:   AtomicU64::new(0),
-            base_queue:         FullSyncMove::new(),
+            base_queue:         FullSyncZeroCopy::new(),
             dequeue_count:      AtomicU64::new(0),
             queue_empty_count:  AtomicU64::new(0),
             queue_name:         queue_name.into(),
@@ -157,64 +157,54 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     fn basic_queue_use_cases() {
         let queue = NonBlockingQueue::<i32, 16, {Instruments::MetricsWithDiagnostics.into()}>::new("'basic_use_cases' test queue");
-        test_commons::basic_container_use_cases(ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+        test_commons::basic_container_use_cases(queue.queue_name(), ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
+                                                |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn single_producer_multiple_consumers() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'single_producer_multiple_consumers' test queue");
-        test_commons::container_single_producer_multiple_consumers(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_single_producer_multiple_consumers(queue.queue_name(),
+                                                                   |e| queue.enqueue(e),
+                                                                   || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn multiple_producers_single_consumer() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_single_consumer' test queue");
-        test_commons::container_multiple_producers_single_consumer(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_single_consumer(queue.queue_name(),
+                                                                   |e| queue.enqueue(e),
+                                                                   || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_and_consumers_all_in_and_out' test queue");
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(),
+                                                                                Blocking::NonBlocking,
+                                                                                queue.max_size(),
+                                                                                |e| queue.enqueue(e),
+                                                                                || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_single_in_and_out() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("'multiple_producers_and_consumers_single_in_and_out' test queue");
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out(|e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(),
+                                                                                   |e| queue.enqueue(e),
+                                                                                   || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     pub fn peek_test() {
         let queue = NonBlockingQueue::<u32, 16, {Instruments::MetricsWithDiagnostics.into()}>::new("'peek_test' queue");
-
-        // tests peeking [&[0..n], &[]]
-        for i in 1..=16 {
-            queue.enqueue(i);
-        }
-        let expected_sum = (1+16)*(16/2);
-        let mut observed_sum = 0;
-        for item in unsafe { queue.peek_remaining().iter().flat_map(|&slice| slice) } {
-            observed_sum += item;
-        }
-        assert_eq!(observed_sum, expected_sum, "peeking elements from [&[0..n], &[]] didn't work");
-
-        // tests peeking [&[8..n], &[0..8]]
-        for i in 1..=8 {
-            assert_eq!(queue.dequeue(), Some(i), "Dequeued element is wrong. This test is likely to be wrong.")
-        }
-        for i in 17..=(17+8) {
-            queue.enqueue(i);
-        }
-        let expected_sum = (9+9+16-1)*(16/2);
-        let mut observed_sum = 0;
-        for item in unsafe { queue.peek_remaining().iter().flat_map(|&slice| slice) } {
-            observed_sum += item;
-        }
-        assert_eq!(observed_sum, expected_sum, "peeking elements from [&[8..n], &[0..8]] didn't work");
+        test_commons::peak_remaining(queue.queue_name(),
+                                     |e| queue.enqueue(e),
+                                     || queue.dequeue(),
+                                     || unsafe { queue.peek_remaining() } );
     }
 }

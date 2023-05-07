@@ -40,7 +40,8 @@ pub enum Blocking {
     NonBlocking,
 }
 
-pub fn basic_container_use_cases(container_kind: ContainerKind,
+pub fn basic_container_use_cases(name:           &str,
+                                 container_kind: ContainerKind,
                                  blocking:       Blocking,
                                  container_size: usize,
                                  mut publish:    impl FnMut(i32) -> bool,
@@ -50,12 +51,12 @@ pub fn basic_container_use_cases(container_kind: ContainerKind,
     macro_rules! consume_from_empty_if_non_blocking {
         () => {
             if blocking == Blocking::NonBlocking {
-                assert_eq!(len(), 0, "data structure should be empty at this point");
+                assert_eq!(len(), 0, "{name}: data structure should be empty at this point");
                 match consume() {
                     None               => (),   // test passed
-                    Some(element) => panic!("Something was consumed when noting should have been: {:?}", element),
+                    Some(element) => panic!("{name}: Something was consumed when noting should have been: {:?}", element),
                 }
-                assert_eq!(len(), 0, "data structure should remain empty after consuming from empty");
+                assert_eq!(len(), 0, "{name}: data structure should remain empty after consuming from empty");
             }
         }
     }
@@ -64,7 +65,7 @@ pub fn basic_container_use_cases(container_kind: ContainerKind,
         () => {
             if blocking == Blocking::NonBlocking {
                 let published = publish(999);
-                assert!(!published, "Data structure should be full already. A new element should have not been accepted");
+                assert!(!published, "{name}: Data structure should be full already. A new element should have not been accepted");
             }
         }
     }
@@ -75,10 +76,10 @@ pub fn basic_container_use_cases(container_kind: ContainerKind,
             let length_before = len();
             publish(expected);
             let length_after_publishing = len();
-            assert_eq!(length_after_publishing, length_before+1, "Publishing an element didn't increase the data structure length");
+            assert_eq!(length_after_publishing, length_before+1, "{name}: Publishing an element didn't increase the data structure length");
             match consume() {
-                None          => panic!("No element was consumed, even when {} has just been published", expected),
-                Some(element) => assert_eq!(element, expected, "Wrong element consumed"),
+                None          => panic!("{name}: No element was consumed, even when {} has just been published", expected),
+                Some(element) => assert_eq!(element, expected, "{name}: Wrong element consumed"),
             }
             consume_from_empty_if_non_blocking!();
         }
@@ -89,15 +90,15 @@ pub fn basic_container_use_cases(container_kind: ContainerKind,
             // publish on non-full data structure
             for i in 0..container_size as i32 {
                 let published = publish(i);
-                assert!(published, "Data structure was reported as FULL prematurely -- could publish only {} elements where a total of {} should fit there", i, container_size);
+                assert!(published, "{name}: Data structure was reported as FULL prematurely -- could publish only {} elements where a total of {} should fit there", i, container_size);
             }
             publish_to_full_if_non_blocking!();
             // consume all
             let consume_and_assert = |expected_element| match consume() {
-                    None          => panic!("Data structure was reported as EMPTY prematurely -- could consume only {} elements where a total of {} should be there",
+                    None          => panic!("{name}: Data structure was reported as EMPTY prematurely -- could consume only {} elements where a total of {} should be there",
                                             container_size as i32 - expected_element - 1,
                                             container_size),
-                    Some(element) => assert_eq!(element, expected_element, "Wrong element consumed"),
+                    Some(element) => assert_eq!(element, expected_element, "{name}: Wrong element consumed"),
                 };
             if container_kind == ContainerKind::Stack {
                 (0..container_size as i32).rev().for_each(consume_and_assert);
@@ -118,33 +119,22 @@ pub fn basic_container_use_cases(container_kind: ContainerKind,
             publish_and_consume_a_single_element!();
             publish_to_exhaustion_and_consume_to_emptiness!();
         }
-        // // continue on wrapping around the buffer until head and tail wraps around all the u32 values, ending with head & tail = 0 as when the queue was first created
-        // // UNCOMMENT IF YOU ARE PREPARED FOR A 5+ MINUTES TEST, provided you run it in release mode and disable debugging output (see queue::new() clause)
-        // #[cfg(debug_assertions)]
-        // return eprintln!("NOT RUNNING EXTENDED QUEUE TEST: it runs only when compiled in Release mode (long runner test)");
-        // for i in container_size..u32::MAX as usize {
-        //     publish_and_consume_a_single_element!();
-        //     // if i % 1048576000 == 0 {
-        //     //     eprintln!("### another {} elements added. i={}; u32::MAX={}", 104857600, i, u32::MAX);
-        //     // }
-        // }
-        // publish_to_exhaustion_and_consume_to_emptiness!();
     }
-
 }
 
 
 /// WARNING: runs only when compiled in Release mode (long runner test)
-pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> bool        + Send + Sync,
+pub fn container_single_producer_multiple_consumers(name:    &str,
+                                                    produce: impl Fn(u32) -> bool        + Send + Sync,
                                                     consume: impl Fn()    -> Option<u32> + Send + Sync) {
 
     const DEBUG_PUBLISHMENTS: bool = false;
     const DEBUG_CONSUMPTIONS: bool = false;
 
     #[cfg(debug_assertions)]
-    return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
+    return println!("{name}: TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
 
-    let consumer_threads = 2-1;
+    let consumer_threads = 4-1;
     let start = 0;
     let finish = 4096000;
 
@@ -172,10 +162,10 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
                     }
                     if DEBUG_CONSUMPTIONS {
                         if i % (expected_successful_consumptions / 100) == 0 {
-                            eprint!("c");
+                            print!("c");
                         }
                         if i % (expected_successful_consumptions / 10) == 0 {
-                            eprint!("(c{}%)", 10 * (i / (expected_successful_consumptions / 10)));
+                            print!("(c{}%)", 10 * (i / (expected_successful_consumptions / 10)));
                         }
                     }
                     let mut result;
@@ -190,7 +180,7 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
                             let observed_successful_productions = observed_successful_productions.load(Relaxed);
                             let observed_successful_consumptions = observed_successful_consumptions.load(Relaxed);
                             if observed_successful_productions == expected_successful_productions && observed_successful_consumptions != expected_successful_consumptions {
-                                eprintln!("Production already stopped but we are no longer consuming anything. So far, {}; wanted: {}", observed_successful_consumptions, expected_successful_consumptions)
+                                println!("{name}: Production already stopped but we are no longer consuming anything. So far, {}; wanted: {}", observed_successful_consumptions, expected_successful_consumptions)
                             }
                         }
                         std::hint::spin_loop();
@@ -199,7 +189,7 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
                     observed_sum.fetch_add(element as u64, Relaxed);
                 }
                 if DEBUG_PUBLISHMENTS {
-                    eprintln!("(c100%)");
+                    println!("(c100%)");
                 }
             })).collect();
 
@@ -211,10 +201,10 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
                 while observed_successful_productions.load(Relaxed) < expected_successful_productions {
                     if DEBUG_PUBLISHMENTS {
                         if i % (expected_successful_productions as u32 / 100) == 0 {
-                            eprint!("p");
+                            print!("p");
                         }
                         if i % (expected_successful_productions as u32 / 10) == 0 {
-                            eprint!("(p{}%)", 10 * (i / (expected_successful_productions as u32 / 10)));
+                            print!("(p{}%)", 10 * (i / (expected_successful_productions as u32 / 10)));
                         }
                     }
                     if produce(i) {
@@ -226,13 +216,13 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
                         let observed_successful_productions = observed_successful_productions.load(Relaxed);
                         let observed_successful_consumptions = observed_successful_consumptions.load(Relaxed);
                         if observed_successful_consumptions == expected_successful_consumptions && observed_successful_productions != expected_successful_productions {
-                            eprintln!("Consumption already stopped but we are no longer producing anything. So far, {}; wanted: {}", observed_successful_productions, expected_successful_productions)
+                            println!("{name}: Consumption already stopped but we are no longer producing anything. So far, {}; wanted: {}", observed_successful_productions, expected_successful_productions)
                         }
                     }
                     observed_productions.fetch_add(1, Relaxed);
                 }
                 if DEBUG_PUBLISHMENTS {
-                    eprintln!("(p100%)");
+                    println!("(p100%)");
                 }
             })).collect();
 
@@ -255,20 +245,20 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
 
         consumer_join_handlers.into_iter()
             .for_each(|h| h.join()
-                .map_err(|err| format!("Error in consumer thread: {:?}", err))
+                .map_err(|err| format!("{name}: Error in consumer thread: {:?}", err))
                 .unwrap());
         producer_join_handlers.into_iter()
             .for_each(|h| h.join()
-                .map_err(|err| format!("Error in producer thread: {:?}", err))
+                .map_err(|err| format!("{name}: Error in producer thread: {:?}", err))
                 .unwrap());
     }).unwrap();
 
     if observed_successful_consumptions.load(Relaxed) > expected_successful_consumptions {
-        eprintln!("BUG!! Thread detected that more elements were consumed than what were published: Expected: {}; Observed: {}",
+        println!("{name}: BUG!! Thread detected that more elements were consumed than what were published: Expected: {}; Observed: {}",
                   expected_successful_consumptions, observed_successful_consumptions.load(Relaxed));
     }
 
-    println!("'container_single_producer_multiple_consumers' test concluded with:");
+    println!("{name}: 'container_single_producer_multiple_consumers' test concluded with:");
     println!("    PUBLISHMENTS:   {:12} successful, {:12} reports of 'full container'",
              observed_successful_productions.load(Relaxed),
              observed_productions.load(Relaxed)- observed_successful_productions.load(Relaxed));
@@ -277,19 +267,20 @@ pub fn container_single_producer_multiple_consumers(produce: impl Fn(u32) -> boo
              observed_consumptions.load(Relaxed) - observed_successful_consumptions.load(Relaxed));
 
     // check
-    assert_eq!(sanity_check_sum.load(Relaxed), expected_sum, "Sanity check failed -- most probably an error in the test itself");
-    assert_eq!(observed_sum.load(Relaxed),     expected_sum, "Sum failed -- container is, currently, not fully concurrent");
+    assert_eq!(sanity_check_sum.load(Relaxed), expected_sum, "{name}: Sanity check failed -- most probably an error in the test itself");
+    assert_eq!(observed_sum.load(Relaxed),     expected_sum, "{name}: Sum failed -- container is, currently, not fully concurrent");
 }
 
 /// WARNING: runs only when compiled in Release mode (long runner test)
-pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> bool        + Send + Sync,
+pub fn container_multiple_producers_single_consumer(name:    &str,
+                                                    produce: impl Fn(u32) -> bool        + Send + Sync,
                                                     consume: impl Fn()    -> Option<u32> + Send + Sync) {
     #[cfg(debug_assertions)]
-    return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
+    return println!("{name}: TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
 
     let start = 0;
     let finish = 4096000;
-    let producer_threads = 2-1;
+    let producer_threads = 4-1;
 
     let expected_sum                           = (start + (finish-1)) * ( (finish - start) / 2 );
     let expected_successful_productions        = finish - start;
@@ -312,7 +303,7 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
                         let observed_successful_productions = observed_successful_productions.load(Relaxed);
                         let observed_successful_consumptions = observed_successful_consumptions.load(Relaxed);
                         if observed_successful_productions == expected_successful_productions && observed_successful_consumptions != expected_successful_consumptions {
-                            eprintln!("Producing already completed, but we are no longer consuming anything. So far, {}; wanted: {}", observed_successful_consumptions, expected_successful_consumptions)
+                            println!("{name}: Producing already completed, but we are no longer consuming anything. So far, {}; wanted: {}", observed_successful_consumptions, expected_successful_consumptions)
                         }
                     },
                     Some(element) => {
@@ -323,7 +314,7 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
                 observed_consumptions.fetch_add(1, Relaxed);
             }
             if observed_successful_consumptions.load(Relaxed) > expected_successful_consumptions {
-                eprintln!("BUG!! Thread detected that more elements were consumed than what were produced: Expected: (at most, at this point) {}; Observed: {}",
+                println!("{name}: BUG!! Thread detected that more elements were consumed than what were produced: Expected: (at most, at this point) {}; Observed: {}",
                           observed_successful_consumptions.load(Relaxed), expected_successful_consumptions);
             }
         });
@@ -363,7 +354,7 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
     }).unwrap();
 
 
-    println!("'container_multiple_producers_single_consumer' test concluded with:");
+    println!("{name}: 'container_multiple_producers_single_consumer' test concluded with:");
     println!("    PRODUCTION:   {:12} successful, {:12} reported container was full",
              observed_successful_productions.load(Relaxed),
              observed_productions.load(Relaxed)- observed_successful_productions.load(Relaxed));
@@ -372,23 +363,24 @@ pub fn container_multiple_producers_single_consumer(produce: impl Fn(u32) -> boo
              observed_consumptions.load(Relaxed)- observed_successful_consumptions.load(Relaxed));
 
     // check
-    assert_eq!(sanity_check_sum.load(Relaxed), expected_sum, "Sanity check failed -- most probably an error in the test itself");
-    assert_eq!(observed_sum.load(Relaxed),     expected_sum, "Sum failed -- stack is, currently, not fully concurrent");
+    assert_eq!(sanity_check_sum.load(Relaxed), expected_sum, "{name}: Sanity check failed -- most probably an error in the test itself");
+    assert_eq!(observed_sum.load(Relaxed),     expected_sum, "{name}: Sum failed -- stack is, currently, not fully concurrent");
 }
 
 /// uses varying number of threads for both produce & consume operations in all-in / all-out mode -- produces everybody and then consumes everybody
 /// -- asserting the consumed elements sum is correct.\
 /// WARNING: runs only when compiled in Release mode (long runner test)
-pub fn container_multiple_producers_and_consumers_all_in_and_out(blocking:       Blocking,
+pub fn container_multiple_producers_and_consumers_all_in_and_out(name:           &str,
+                                                                 blocking:       Blocking,
                                                                  container_size: usize,
                                                                  produce:        impl Fn(u32) -> bool        + Sync,
                                                                  consume:        impl Fn()    -> Option<u32> + Sync) {
     const MINIMUM_CONTAINER_SIZE: usize = 1024*64;
-    const N_THREADS:              usize = 2;    // might as well be num_cpus::get();
+    const N_THREADS:              usize = 4;    // might as well be num_cpus::get();
 
     let loops = 320;
 
-    assert!(container_size >= MINIMUM_CONTAINER_SIZE, "Please provide a container with a minimum size of {}", MINIMUM_CONTAINER_SIZE);
+    assert!(container_size >= MINIMUM_CONTAINER_SIZE, "{name}: Please provide a container with a minimum size of {}", MINIMUM_CONTAINER_SIZE);
 
     // #[cfg(debug_assertions)]
     // return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
@@ -406,25 +398,25 @@ pub fn container_multiple_producers_and_consumers_all_in_and_out(blocking:      
 
             // assert fullness, if applicable
             if blocking == Blocking::NonBlocking {
-                assert!(!produce(999), "Container should be filled-up, therefore it shouldn't have accepted another element");
+                assert!(!produce(999), "{name}: Container should be filled-up, therefore it shouldn't have accepted another element");
             }
 
             // all-out (consume)
             multi_threaded_iterate(start as usize, finish as usize, threads, |_| match consume() {
                 Some(element) => { observed_sum.fetch_add(element as u64, Relaxed); },
-                None => panic!("Container ran out of elements prematurely"),
+                None => panic!("{name}: Container ran out of elements prematurely"),
             });
 
             // assert emptiness, if applicable
             if blocking == Blocking::NonBlocking {
                 match consume() {
-                    Some(element) => panic!("Container should be empty, therefore it shouldn't have popped an element: {}", element),
+                    Some(element) => panic!("{name}: Container should be empty, therefore it shouldn't have popped an element: {}", element),
                     None => (),    // all good here
                 }
             }
 
             // check
-            assert_eq!(observed_sum.load(Relaxed), expected_sum, "Error in all-in / all-out multi-threaded test (with {} threads)", threads);
+            assert_eq!(observed_sum.load(Relaxed), expected_sum, "{name}: Error in all-in / all-out multi-threaded test (with {} threads)", threads);
         }
     }
 }
@@ -432,13 +424,14 @@ pub fn container_multiple_producers_and_consumers_all_in_and_out(blocking:      
 /// uses varying number of threads for both produce & consume operations in single-in / single-out test -- each thread will produce / consume a single element at a time
 /// -- asserting the consumed elements sum is correct.\
 /// WARNING: runs only when compiled in Release mode (long runner test)
-pub fn container_multiple_producers_and_consumers_single_in_and_out(produce: impl Fn(u32) -> bool        + Sync,
+pub fn container_multiple_producers_and_consumers_single_in_and_out(name:    &str,
+                                                                    produce: impl Fn(u32) -> bool        + Sync,
                                                                     consume: impl Fn()    -> Option<u32> + Sync) {
 
-    const N_THREADS: usize = 2;    // might as well be num_cpus::get();
+    const N_THREADS: usize = 4;    // might as well be num_cpus::get();
 
     #[cfg(debug_assertions)]
-    return eprintln!("TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
+    return println!("{name}: TEST DID NOT RUN: runs only when compiled in Release mode (long runner test)");
 
     let start: u64 = 0;
     let finish: u64 = 4096000;
@@ -453,7 +446,7 @@ pub fn container_multiple_producers_and_consumers_single_in_and_out(produce: imp
 
         observed_callback_calls.fetch_add(1, Relaxed);
         // single-in
-        assert!(produce(i), "Container filled up prematurely");
+        assert!(produce(i), "{name}: Container filled up prematurely");
 
         sanity_check_sum.fetch_add(i as u64, Relaxed);
         // single-out
@@ -469,7 +462,7 @@ pub fn container_multiple_producers_and_consumers_single_in_and_out(produce: imp
                     consecutive_consumption_failures += 1;
                     std::thread::sleep(std::time::Duration::from_millis(1));
                     if consecutive_consumption_failures > 100 {
-                        let msg = format!("Container ran out of elements prematurely -- i: {}; sequential counter: {}", i, observed_callback_calls.load(Relaxed));
+                        let msg = format!("{name}: Container ran out of elements prematurely -- i: {}; sequential counter: {}", i, observed_callback_calls.load(Relaxed));
                         eprintln!("{}", msg);
                         panic!("{}", msg);
                     }
@@ -480,15 +473,16 @@ pub fn container_multiple_producers_and_consumers_single_in_and_out(produce: imp
     });
 
     // check
-    assert_eq!(observed_callback_calls.load(Relaxed), expected_callback_calls, "¿Wrong number of callback calls?");
-    assert_eq!(sanity_check_sum.load(Relaxed),        expected_sum,            "Sanity check failed for single-in / single-out multi-threaded test (with {} threads)", N_THREADS);
-    assert_eq!(observed_sum.load(Relaxed),            expected_sum,            "Error in single-in / single-out multi-threaded test (with {} threads)", N_THREADS);
+    assert_eq!(observed_callback_calls.load(Relaxed), expected_callback_calls, "{name}: ¿Wrong number of callback calls?");
+    assert_eq!(sanity_check_sum.load(Relaxed),        expected_sum,            "{name}: Sanity check failed for single-in / single-out multi-threaded test (with {} threads)", N_THREADS);
+    assert_eq!(observed_sum.load(Relaxed),            expected_sum,            "{name}: Error in single-in / single-out multi-threaded test (with {} threads)", N_THREADS);
 
 }
 
 /// makes sure the queue waits on a mutex when appropriate -- dequeueing from empty, enqueueing when full --
 /// and doesn't wait when not needed -- dequeueing an existing element, enqueueing when there are free slots available
-pub fn blocking_behavior(queue_size:    usize,
+pub fn blocking_behavior(name:          &str,
+                         queue_size:    usize,
                          produce:       impl Fn(usize) -> bool          + Send + Sync,
                          consume:       impl Fn()      -> Option<usize> + Send + Sync,
                          try_produce:   impl Fn(usize) -> bool          + Send + Sync,
@@ -499,7 +493,7 @@ pub fn blocking_behavior(queue_size:    usize,
     const TOLERANCE_MILLIS: usize = 10;
     // asserts in several passes, so we're sure blocking side effects on mutexes are fine
     for pass in ["virgin", "non-virgin", "promiscuous"] {
-        println!("  Asserting pass '{}'", pass);
+        println!("  {name}: Asserting pass '{}'", pass);
         assert_block_and_give_up(|| consume(), None, &format!("  Blocking on empty (from a {} container)", pass));
         assert_block_and_give_up(|| consume(), None, "  Blocking on empty (again)");
         assert_non_blocking(|| try_consume(), "  Non-Blocking 'try_consume()'");
@@ -522,7 +516,7 @@ pub fn blocking_behavior(queue_size:    usize,
     }
 
     if interruptable {
-        assert_block_and_succeed(|| consume(), None, || { interrupt(); }, "Interrupted consumption");
+        assert_block_and_succeed(|| consume(), None, || { interrupt(); }, "{name}: Interrupted consumption");
     }
 
     /// asserts the value issued by the `blocking_operation()` (which should give up blocking after `TIMEOUT_MILLIS`)
@@ -578,7 +572,7 @@ pub fn blocking_behavior(queue_size:    usize,
     }
 }
 
-/// measures the independency of producers/consumers, returning:
+/// measures the independency of producers/consumers for zero-copy containers, returning:
 /// ```no_compile
 ///   let (independent_productions_count, dependent_productions_count, independent_consumptions_count, dependent_consumptions_count) = measure_syncing_independency(...)
 /// ```
@@ -711,5 +705,43 @@ pub fn measure_syncing_independency(produce: impl Fn(u32,        &dyn Fn()) -> b
     }).unwrap();
 
     ( independent_productions_count.load(Relaxed), dependent_productions_count.load(Relaxed), independent_consumptions_count.load(Relaxed), dependent_consumptions_count.load(Relaxed) )
+
+}
+
+/// simple sanity checks for `peak_remaining()` implementations
+pub fn peak_remaining<'a>(name:    &str,
+                          produce: impl Fn(u32) -> bool        + Sync,
+                          consume: impl Fn()    -> Option<u32> + Sync,
+                          peak:    impl Fn()    -> [&'a [u32];2]) {
+
+    // tests peeking [&[0..n], &[]]
+    for i in 1..=16 {
+        produce(i);
+    }
+    let expected_sum = (1+16)*(16/2);
+    let mut observed_sum = 0;
+    for item in peak().iter().flat_map(|&slice| slice) {
+        observed_sum += item;
+    }
+    assert_eq!(observed_sum, expected_sum, "{name}: peeking elements from [&[0..n], &[]] didn't work");
+
+    // tests peeking [&[8..n], &[0..8]]
+    for i in 1..=8 {
+        assert_eq!(consume(), Some(i), "{name}: Dequeued element is wrong. Problems with this test's logic or the container gone bonkers?")
+    }
+    for i in 17..=(17+8) {
+        produce(i);
+    }
+    let expected_sum = (9+9+16-1)*(16/2);
+    let mut observed_sum = 0;
+    for item in peak().iter().flat_map(|&slice| slice) {
+        observed_sum += item;
+    }
+    assert_eq!(observed_sum, expected_sum, "{name}: peeking elements from [&[8..n], &[0..8]] didn't work");
+
+    // bring the container to the initial state
+    for i in 9..(9+16) {
+        assert_eq!(consume(), Some(i), "{name}: Dequeued element is wrong. Container gone bonkers?")
+    }
 
 }

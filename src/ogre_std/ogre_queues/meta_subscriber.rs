@@ -71,3 +71,37 @@ pub trait MetaSubscriber<'a, SlotType: 'a> {
     ///   }
     unsafe fn peek_remaining(&self) -> [&[SlotType];2];
 }
+
+/// API for consuming elements from a [meta_queue] or [meta_topic] that will always move the value out of their internal buffer and pass it to the caller.\
+pub trait MoveSubscriber<SlotType> {
+
+    /// Move the next available item out of the pool of objects (copying & forgetting) and hand it over to the caller
+    fn consume_movable(&self) -> Option<SlotType>;
+
+    /// Considering parallelism, this method *might* provide access to all elements available for [consume()].\
+    /// This method is totally not thread safe for ring-buffer based implementations -- the moment it returns, all those elements might have already
+    /// been consumed (furthermore, by the time the references are used, several generations of elements might have
+    /// already lived and died at those slots). It is, thought, safe for unbounded implementations that never collect published elements, like a `log_topic`\
+    /// ... So, use this method only when you're sure the publishing / consumption operations won't interfere with the results
+    /// -- for this reason, this method is marked as `unsafe` (**it is only safe -- and consistent -- to call this method if you're behind a lock
+    /// guarding against these mentioned scenarios**).
+    ///
+    /// The rather wired return type here is to avoid heap allocations: a fixed array of two slices are returned.
+    /// Ring-buffer based implementations will use it to reference the internal buffer -- the second slice is used
+    /// if the sequence of references cycles through the buffer.\
+    /// Use this method like the following:
+    /// ```nocompile
+    ///   // if you don't care for allocating a vector:
+    ///   let peeked_references = queue.peek_all().concat();
+    ///   // if you require zero-allocations:
+    ///   for peeked_chunk in queue.peek_all() {
+    ///     for peeked_reference in peeked_chunk {
+    ///       println!("your_logic_goes_here: {:#?}", *peeked_reference);
+    ///     }
+    ///   }
+    ///   // or, in the condensed, functional form:
+    ///   for peeked_reference in queue.peek_all().iter().flat_map(|&slice| slice) {
+    ///       println!("your_logic_goes_here: {:#?}", *peeked_reference);
+    ///   }
+    unsafe fn peek_remaining(&self) -> [&[SlotType];2];
+}
