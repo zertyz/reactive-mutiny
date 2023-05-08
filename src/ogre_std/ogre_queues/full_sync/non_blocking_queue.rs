@@ -141,7 +141,8 @@ NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     /// See [MetaSubscriber::peek_all()]
     #[inline(always)]
     pub unsafe fn peek_remaining(&self) -> [&[SlotType];2] {
-        self.base_queue.peek_remaining()
+        //self.base_queue.peek_remaining()
+        [&[],&[]]
     }
 
 }

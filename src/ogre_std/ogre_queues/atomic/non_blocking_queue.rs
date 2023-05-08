@@ -43,23 +43,23 @@ NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn metrics_diagnostics(&self) {
-        let enqueue_count         = self.enqueue_count.load(Relaxed);
-        let queue_full_count      = self.queue_full_count.load(Relaxed);
-        let dequeue_count         = self.dequeue_count.load(Relaxed);
-        let queue_empty_count     = self.queue_empty_count.load(Relaxed);
-        let len                 = self.len();
-        let head                  = self.base_queue.head.load(Relaxed);
-        let tail                  = self.base_queue.head.load(Relaxed);
-        let dequeuer_head         = self.base_queue.dequeuer_head.load(Relaxed);
-        let enqueuer_tail         = self.base_queue.enqueuer_tail.load(Relaxed);
-
-        if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % (1<<20) == 0 {
-            println!("Atomic BlockingQueue '{}'", self.queue_name);
-            println!("    STATE:        head: {:8}, tail: {:8}, dequeuer_head: {:8}, enqueuer_tail: {:8} ", head, tail, dequeuer_head, enqueuer_tail);
-            println!("    CONTENTS:     {:12} elements,   {:12} buffer", len, BUFFER_SIZE);
-            println!("    PRODUCTION:   {:12} successful, {:12} reported queue was full",  enqueue_count, queue_full_count);
-            println!("    CONSUMPTION:  {:12} successful, {:12} reported queue was empty", dequeue_count, queue_empty_count);
-        }
+        // let enqueue_count         = self.enqueue_count.load(Relaxed);
+        // let queue_full_count      = self.queue_full_count.load(Relaxed);
+        // let dequeue_count         = self.dequeue_count.load(Relaxed);
+        // let queue_empty_count     = self.queue_empty_count.load(Relaxed);
+        // let len                 = self.len();
+        // let head                  = self.base_queue.head.load(Relaxed);
+        // let tail                  = self.base_queue.head.load(Relaxed);
+        // let dequeuer_head         = self.base_queue.dequeuer_head.load(Relaxed);
+        // let enqueuer_tail         = self.base_queue.enqueuer_tail.load(Relaxed);
+        //
+        // if (enqueue_count + queue_full_count + dequeue_count + queue_empty_count) % (1<<20) == 0 {
+        //     println!("Atomic BlockingQueue '{}'", self.queue_name);
+        //     println!("    STATE:        head: {:8}, tail: {:8}, dequeuer_head: {:8}, enqueuer_tail: {:8} ", head, tail, dequeuer_head, enqueuer_tail);
+        //     println!("    CONTENTS:     {:12} elements,   {:12} buffer", len, BUFFER_SIZE);
+        //     println!("    PRODUCTION:   {:12} successful, {:12} reported queue was full",  enqueue_count, queue_full_count);
+        //     println!("    CONSUMPTION:  {:12} successful, {:12} reported queue was empty", dequeue_count, queue_empty_count);
+        // }
     }
 
 }

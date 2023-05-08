@@ -24,7 +24,8 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call;
     ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
     ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
-    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
+    /// IMPLEMENTORS: #[inline(always)]
+    fn publish<SetterFn:                   FnOnce(&mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
               (&'a self,
@@ -36,35 +37,41 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     /// Advanced method to publish an element: allocates a slot from the pool, returning a reference to it.\
     /// Once called, either [publish_leaked()] or [unleak_slot()] should also be, eventually, called
     /// --  or else the slot will never be returned to the pool for reuse.
-    fn leak_slot(&self) -> Option<&SlotType>;
+    /// IMPLEMENTORS: #[inline(always)]
+    fn leak_slot(&self) -> Option<(/*ref:*/ &mut SlotType, /*id: */u32)>;
 
-    /// Advanced method to publish a slot (previously allocated with [leak_slot()]) and filled by the caller.\
-    /// The slot will proceed to b handed over to consumers, and returned to the pool afterwards.\
-    /// Please note some caveats:
-    ///   1) Ring-Buffer based implementors will, typically, enforce that this method will be executed in the same order in which
-    ///      [leak_slot()] was called -- this may either be done through a context-switch or by simply spinning. This is of concern only
-    ///      if parallel production is being used and, in this case, publishers will be efficient only if they all take the same time between
-    ///      the calls of the two methods;
-    ///   2) Nor Log-based nor Array-based implementors suffer any of the restrictions stated above.
-    fn publish_leaked(&'a self, slot: &'a SlotType);
+    /// Advanced method to publish a slot (previously allocated with [leak_slot()]) and populated by the caller.\
+    /// The slot will proceed to be handed over to consumers (which should return it to the pool afterwards).\
+    /// A return of `None` means the container was full and no publishing was done; otherwise, the number of
+    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.\
+    /// NOTE: unless you're using a shared allocator or an allocator with less slots than this container,
+    /// `None` won't ever be returned here.
+    /// IMPLEMENTORS: #[inline(always)]
+    fn publish_leaked_ref(&'a self, slot: &'a SlotType) -> Option<NonZeroU32>;
 
-    /// Advanced method to return a slot (obtained by [allocate_slot()]) to the pool, so it may be reused.\
-    /// Note that not all implementors allow using this method.\
-    /// It is known that:
-    ///   1) Ring-Buffer based implementors will only accept back the `slot` if no other allocation has been done after that one
-    ///      -- they will fail silently if this is attempted, by hanging forever: so this should only be used on single-thread producers;
-    ///   2) Log-based implementors won't reuse the cancelled slot, so excessive calling this method may cause the application to consume more resources;
-    ///   3) Array-based implementors will deal optimally with the cancelled slots: they will be immediately returned to the pool.
-    fn unleak_slot(&'a self, slot: &'a SlotType);
+    /// The same as [publish_leaked_ref()], but slightly more efficient
+    /// IMPLEMENTORS: #[inline(always)]
+    fn publish_leaked_id(&'a self, slot_id: u32) -> Option<NonZeroU32>;
+
+    /// Advanced method to return a slot (obtained by [allocate_slot()]) to the pool, so it may be reused,
+    /// in case the publishing of the item should be aborted.
+    /// IMPLEMENTORS: #[inline(always)]
+    fn unleak_slot_ref(&'a self, slot: &'a mut SlotType);
+
+    /// The same as [unleak_slot_ref()], but slightly more efficient
+    /// IMPLEMENTORS: #[inline(always)]
+    fn unleak_slot_id(&'a self, slot_id: u32);
 
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
     /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
+    /// IMPLEMENTORS: #[inline(always)]
     fn available_elements_count(&self) -> usize;
 
     /// Returns the maximum number of elements this `meta_publisher` can hold -- \
     /// 0, if the implementor offers an unbounded container,\
     /// > 0, if the implementer uses a ring-buffer of that size.
+    /// IMPLEMENTORS: #[inline(always)]
     fn max_size(&self) -> usize;
 
     /// Returns a string that might be useful to debug or assert algorithms when writing automated tests
@@ -80,6 +87,7 @@ pub trait MovePublisher<SlotType> {
     /// move the data (copy & forget) rather than zero-copying it.\
     /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
     /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
+    /// IMPLEMENTORS: #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32>;
 
     /// Store an item, to be later retrieved with [MoveSubscriber<>], in a way that
@@ -98,6 +106,7 @@ pub trait MovePublisher<SlotType> {
     ///      As a down side, the `new T { fields }` cannot be used here. If that is needed, please use [publish_movable()]
     ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
     ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
+    /// IMPLEMENTORS: #[inline(always)]
     fn publish<SetterFn:                   FnOnce(&mut SlotType),
                ReportFullFn:               Fn() -> bool,
                ReportLenAfterEnqueueingFn: FnOnce(u32)>
@@ -111,11 +120,13 @@ pub trait MovePublisher<SlotType> {
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
     /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
+    /// IMPLEMENTORS: #[inline(always)]
     fn available_elements_count(&self) -> usize;
 
     /// Returns the maximum number of elements this `meta_publisher` can hold -- \
     /// 0, if the implementor offers an unbounded container,\
     /// > 0, if the implementer uses a ring-buffer of that size.
+    /// IMPLEMENTORS: #[inline(always)]
     fn max_size(&self) -> usize;
 
     /// Returns a string that might be useful to debug or assert algorithms when writing automated tests

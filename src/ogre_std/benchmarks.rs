@@ -305,6 +305,8 @@ mod benchmark_stacks {
 #[cfg(any(test,doc))]
 mod benchmark_queues {
     //! Benchmarks all known queues
+    //! TODO: as of 2023-05-08, changes to the queue's publishers & subscribers brought problems to this test. More specifically, NonBlocking & Blocking queues are in trouble now... should they implement the Movable or Zero-Copy? Or both?
+    //!       anyway, we now have `benches`, so... are these really necessary?
 
     use super::*;
     use super::super::{

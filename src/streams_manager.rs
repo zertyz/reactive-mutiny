@@ -4,10 +4,10 @@
 use crate::{
     ogre_std::{
         ogre_queues::{
-            OgreQueue,
-            full_sync::{
-                NonBlockingQueue,
-            },
+            full_sync::full_sync_move::FullSyncMove,
+            meta_container::MoveContainer,
+            meta_publisher::MovePublisher,
+            meta_subscriber::MoveSubscriber,
         },
         ogre_sync,
     },
@@ -32,7 +32,7 @@ pub struct StreamsManagerBase<'a, ItemType:           'a,
 
     /// the id # of streams that can be created are stored here.\
     /// synced with `used_streams`, so creating & dropping streams occurs as fast as possible
-    vacant_streams:         Pin<Box<NonBlockingQueue<u32, MAX_STREAMS>>>,
+    vacant_streams:         Pin<Box<FullSyncMove<u32, MAX_STREAMS>>>,
     /// this is synced with `vacant_streams` to be its counter-part -- so enqueueing is optimized:
     /// it holds the stream ids that are active.
     /// Note: the sentinel value `u32::MAX` is used to indicate a premature end of the list
@@ -65,9 +65,9 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         Self {
             created_streams_count:  AtomicU32::new(0),
             vacant_streams:         {
-                                        let vacant_streams = Box::pin(NonBlockingQueue::<u32, MAX_STREAMS>::new("vacant streams for an OgreMPMCQueue Multi channel"));
+                                        let vacant_streams = Box::pin(FullSyncMove::<u32, MAX_STREAMS>::new());
                                         for stream_id in 0..MAX_STREAMS as u32 {
-                                            vacant_streams.enqueue(stream_id);
+                                            vacant_streams.publish_movable(stream_id);
                                         }
                                         vacant_streams
                                     },
@@ -90,7 +90,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// Creates the room for a new `Stream`, but returns only its `stream_id`, leaving the `Stream` creation per-se to the caller.
     pub fn create_stream_id(&self) -> u32 {
         self.created_streams_count.fetch_add(1, Relaxed);
-        let stream_id = match self.vacant_streams.dequeue() {
+        let stream_id = match self.vacant_streams.consume_movable() {
             Some(stream_id) => stream_id,
             None => panic!("StreamsManager: '{}' has a MAX_STREAMS of {MAX_STREAMS} -- which just got exhausted: stats: {} streams were created; {} dropped. Please, increase the limit or fix the LOGIC BUG!",
                            self.streams_manager_name, self.created_streams_count.load(Relaxed), self.finished_streams_count.load(Relaxed)),
@@ -195,7 +195,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         mutable_self.wakers[stream_id as usize] = None;
         ogre_sync::unlock(&self.wakers_lock);
         mutable_self.finished_streams_count.fetch_add(1, Relaxed);
-        mutable_self.vacant_streams.enqueue(stream_id);
+        mutable_self.vacant_streams.publish_movable(stream_id);
         mutable_self.sync_vacant_and_used_streams();
     }
 
@@ -304,7 +304,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
 
     #[inline(always)]
     pub fn running_streams_count(&self) -> u32 {
-        (MAX_STREAMS - self.vacant_streams.len()) as u32
+        (MAX_STREAMS - self.vacant_streams.available_elements_count()) as u32
     }
 
 }

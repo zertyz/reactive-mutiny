@@ -16,6 +16,7 @@ use std::{
     },
     fmt::Debug,
 };
+use std::num::NonZeroU32;
 use memmap::{
     MmapOptions,
     MmapMut,
@@ -147,15 +148,23 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
         true
     }
 
-    fn leak_slot(&self) -> Option<&SlotType> {
+    fn leak_slot(&self) -> Option<(/*ref:*/ &'a mut SlotType, /*id: */u32)> {
         todo!()
     }
 
-    fn publish_leaked(&'a self, slot: &'a SlotType) {
+    fn publish_leaked_ref(&'a self, slot: &'a SlotType) -> Option<NonZeroU32> {
         todo!()
     }
 
-    fn unleak_slot(&'a self, slot: &'a SlotType) {
+    fn publish_leaked_id(&'a self, slot_id: u32) -> Option<NonZeroU32> {
+        todo!()
+    }
+
+    fn unleak_slot_ref(&'a self, slot: &'a mut SlotType) {
+        todo!()
+    }
+
+    fn unleak_slot_id(&'a self, slot_id: u32) {
         todo!()
     }
 
@@ -181,7 +190,7 @@ pub struct MMapMetaSubscriber<'a, SlotType: 'a> {
 impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscriber<'a, SlotType> {
 
     fn consume<GetterReturnType: 'a,
-               GetterFn:                   FnOnce(&'a mut SlotType) -> GetterReturnType,
+               GetterFn:                   FnOnce(&'a SlotType) -> GetterReturnType,
                ReportEmptyFn:              Fn() -> bool,
                ReportLenAfterDequeueingFn: FnOnce(i32)>
               (&self,
@@ -205,15 +214,19 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
 
     }
 
-    fn consume_leaking(&'a self) -> Option<&'a SlotType> {
+    fn consume_leaking(&'a self) -> Option<(/*ref:*/ &'a SlotType, /*id: */u32)> {
         todo!()
     }
 
-    fn release_leaked(&'a self, slot: &'a SlotType) {
+    fn release_leaked_ref(&'a self, slot: &'a SlotType) {
         todo!()
     }
 
-    unsafe fn peek_remaining(&self) -> [&[SlotType]; 2] {
+    fn release_leaked_id(&'a self, slot_id: u32) {
+        todo!()
+    }
+
+    unsafe fn peek_remaining(&self) -> Vec<&SlotType> {
         todo!()
     }
 }
@@ -266,7 +279,7 @@ mod tests {
 
         // the second essence of a log topic: new consumers might be created at any time and they will access all previous elements
         let consumer_2 = meta_log_topic.subscribe(true);
-        let observed_slot_2: &MyData = consumer_2.consume(|slot| slot,
+        let observed_slot_2: &MyData = consumer_2.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
             .expect("Consuming the element from `consumer_2`");
@@ -274,7 +287,7 @@ mod tests {
 
         // consumers may be scheduled not to replay old events
         let consumer_3 = meta_log_topic.subscribe(false);
-        let observed_slot_3 = consumer_3.consume(|slot| slot,
+        let observed_slot_3 = consumer_3.consume(|slot| unsafe {&*(slot as *const MyData)},
                                              || false,
                                              |_| {});
         assert_eq!(None, observed_slot_3, "`consumer_3` was told not to retrieve old elements...");
@@ -288,7 +301,7 @@ mod tests {
             slot.age = 100 - expected_age;
         }, || false, |_| ());
         assert!(publishing_result, "Publishing of a second element failed");
-        let observed_slot_1: &MyData = consumer_1.consume(|slot| slot,
+        let observed_slot_1: &MyData = consumer_1.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
             .expect("Consuming yet another element from `consumer_1`");
@@ -296,12 +309,12 @@ mod tests {
         let observed_name = String::from_utf8_lossy(observed_name);
         assert_eq!(*observed_name, expected_name.to_ascii_uppercase(), "Name doesn't match");
         assert_eq!(100 - observed_slot_1.age, expected_age, "Age doesn't match");
-        let observed_slot_2: &MyData = consumer_2.consume(|slot| slot,
+        let observed_slot_2: &MyData = consumer_2.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
             .expect("Consuming yet another element from `consumer_2`");
         assert_eq!(observed_slot_2 as *const MyData, observed_slot_1 as *const MyData, "These references should point to the same address");
-        let observed_slot_3: &MyData = consumer_3.consume(|slot| slot,
+        let observed_slot_3: &MyData = consumer_3.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
             .expect("Consuming the element from `consumer_3`");
@@ -346,7 +359,7 @@ mod tests {
         };
         for i in 0..N_ELEMENTS {
             populate_expected_element(i, &mut expected_element);
-            let observed_element = consumer.consume(|slot| slot,
+            let observed_element = consumer.consume(|slot| unsafe {&*(slot as *const MyData)},
                                || false,
                                |_| {})
                 .expect("Consuming an element");
@@ -373,7 +386,7 @@ mod tests {
         meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT,
                                || false,
                                |_| {});
-        let observed_element = consumer.consume(|slot| slot,
+        let observed_element = consumer.consume(|slot| unsafe {&*(slot as *const u128)},
                                                 || false,
                                                 |_| {})
             .expect("Consuming an element");
