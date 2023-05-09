@@ -19,6 +19,7 @@ use std::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroU32,
 };
+use std::sync::Arc;
 
 
 /// Basis for multiple producer / multiple consumer queues using atomics for synchronization,
@@ -32,8 +33,8 @@ use std::{
 pub struct AtomicZeroCopy<SlotType,
                           const BUFFER_SIZE: usize> {
 
-    queue:     AtomicMove<u32, BUFFER_SIZE>,
-    allocator: OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>,
+               queue:     AtomicMove<u32, BUFFER_SIZE>,
+    pub(crate) allocator: Arc<OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>>,
 }
 
 
@@ -45,7 +46,7 @@ AtomicZeroCopy<SlotType, BUFFER_SIZE> {
     fn new() -> Self {
         Self {
             queue:     AtomicMove::new(),
-            allocator: OgreArrayPoolAllocator::new(),
+            allocator: Arc::new(OgreArrayPoolAllocator::new()),
         }
     }
 }

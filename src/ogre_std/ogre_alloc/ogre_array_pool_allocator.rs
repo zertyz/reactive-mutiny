@@ -1,5 +1,6 @@
 //! Resting place for [OgreArrayPoolAllocator]
 
+use std::fmt::{Debug, Formatter};
 use crate::{
     ogre_std::ogre_queues::{
         meta_container::MoveContainer,
@@ -34,7 +35,20 @@ impl<DataType, const POOL_SIZE: usize> OgreArrayPoolAllocator<DataType, POOL_SIZ
 }
 
 
-impl<DataType, const POOL_SIZE: usize>
+impl<DataType:        Debug,
+     const POOL_SIZE: usize>
+Debug
+for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OgreArrayPoolAllocator{{used_slots_count: {}, free_slots_count: {}}}",
+                  POOL_SIZE - self.free_list.available_elements_count(),
+                  self.free_list.available_elements_count())
+    }
+}
+
+
+impl<DataType:        Debug,
+     const POOL_SIZE: usize>
 OgreAllocator<DataType>
 for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 

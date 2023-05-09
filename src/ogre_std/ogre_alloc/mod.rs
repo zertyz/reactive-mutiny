@@ -7,10 +7,10 @@
 //! additions, as the possibility of sharing them with other processes or offloading fat ones to the disk, to avoid swapping.
 
 mod types;
-pub use types::{OgreAllocator, OgreBox};
+pub use types::{OgreAllocator};
 mod types_impls;
 
-pub mod ogre_box;
+pub mod ogre_arc;
 pub mod ogre_array_pool_allocator;
 
 

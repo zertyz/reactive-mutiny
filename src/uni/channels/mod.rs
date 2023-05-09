@@ -3,6 +3,7 @@
 pub mod movable;
 pub mod zero_copy;
 pub mod uni_stream;
+pub mod uni_zero_copy_stream;
 
 use {
     super::{
@@ -128,6 +129,7 @@ mod tests {
     doc_test!(movable_crossbeam_channel_doc_test, movable::crossbeam::Crossbeam<&str, 1024, 1>);
     doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
     doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
+    doc_test!(zero_copy_atomic_queue_doc_test,      zero_copy::atomic::Atomic<&str, 1024, 1>);
 
 
     // *_dropping for known parallel stream implementors

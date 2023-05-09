@@ -3,11 +3,12 @@
 use crate::{
     types::MutinyStreamSource,
     ogre_std::{
+        ogre_alloc::ogre_arc::OgreArc,
         ogre_queues::{
-            atomic::atomic_move::AtomicMove,
-            meta_publisher::MovePublisher,
-            meta_subscriber::MoveSubscriber,
-            meta_container::MoveContainer,
+            atomic::atomic_zero_copy::AtomicZeroCopy,
+            meta_container::MetaContainer,
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
         },
     },
     uni::channels::{
@@ -27,37 +28,38 @@ use std::{
     ops::Deref,
 };
 use async_trait::async_trait;
+use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
+use crate::ogre_std::ogre_alloc::OgreAllocator;
+use crate::uni::channels::uni_zero_copy_stream::UniZeroCopyStream;
 
 
-/// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
-pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
+pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
                       const BUFFER_SIZE: usize,
                       const MAX_STREAMS: usize> {
 
-    /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
-    /// backing storage for events -- AKA, channels
-    channel:       Pin<Box<AtomicMove<ItemType, BUFFER_SIZE>>>,
-
+    channel:         AtomicZeroCopy<ItemType, BUFFER_SIZE>
 }
 
-#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+//#[async_trait]
+impl<'a, ItemType:          Debug + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-UniChannelCommon<'a, ItemType>
-for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+/*UniChannelCommon<'a, OgreArc<ItemType, OgreArrayPoolAllocator<ItemType, BUFFER_SIZE>>>
+for */Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
+pub    fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
-            channel:         Box::pin(AtomicMove::<ItemType, BUFFER_SIZE>::new()),
+            channel:         AtomicZeroCopy::new(),
         })
     }
 
-    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
+pub    fn consumer_stream(self: &Arc<Self>)
+                      -> UniZeroCopyStream<'a, ItemType, OgreArrayPoolAllocator<ItemType, BUFFER_SIZE>, Self>
+                         where Self: MutinyStreamSource<'a, ItemType, OgreArc<ItemType, OgreArrayPoolAllocator<ItemType, BUFFER_SIZE>>> {
         let stream_id = self.streams_manager.create_stream_id();
-        UniStream::new(stream_id, self)
+        UniZeroCopyStream::new(stream_id, self)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -83,10 +85,10 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,
-    const BUFFER_SIZE: usize,
-    const MAX_STREAMS: usize>
-UniMovableChannel<'a, ItemType>
-for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+/*UniMovableChannel<'a, OgreArc<ItemType, OgreArrayPoolAllocator<ItemType, BUFFER_SIZE>>>
+for */Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
@@ -103,7 +105,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn try_send(&self, item: ItemType) -> bool {
+pub    fn try_send(&self, item: ItemType) -> bool {
         let item = ManuallyDrop::new(item);       // ensure it won't be dropped when this function ends, since it will be "moved"
         unsafe {
             self.zero_copy_try_send(|slot| {
@@ -114,15 +116,55 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+
+/*impl<'a, ItemType:          Debug + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MutinyStreamSource<'a, ItemType>
+OgreAllocator<ItemType>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn provide(&self, _stream_id: u32) -> Option<ItemType> {
-        self.channel.consume_movable()
+    fn alloc(&self) -> Option<(&mut ItemType, u32)> {
+        self.channel.allocator.alloc()
+    }
+
+    #[inline(always)]
+    fn dealloc_ref(&self, slot: &mut ItemType) {
+        self.channel.allocator.dealloc_ref(slot)
+    }
+
+    #[inline(always)]
+    fn dealloc_id(&self, slot_id: u32) {
+        self.channel.allocator.dealloc_id(slot_id)
+    }
+
+    #[inline(always)]
+    fn id_from_ref(&self, slot: &ItemType) -> u32 {
+        self.channel.allocator.id_from_ref(slot)
+    }
+
+    #[inline(always)]
+    fn ref_from_id(&self, slot_id: u32) -> &mut ItemType {
+        self.channel.allocator.ref_from_id(slot_id)
+    }
+}*/
+
+
+impl<'a, ItemType:          Debug + Send + Sync + 'static,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+MutinyStreamSource<'a, ItemType, OgreArc<ItemType, OgreArrayPoolAllocator<ItemType, BUFFER_SIZE>>>
+for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    #[inline(always)]
+    fn provide(&self, _stream_id: u32) -> Option<OgreArc<ItemType, OgreArrayPoolAllocator<ItemType, BUFFER_SIZE>>> {
+        match self.channel.consume_leaking() {
+            Some( (_event_ref, slot_id) ) => {
+                let allocator = Arc::clone(&self.channel.allocator);
+                Some(OgreArc::from_allocated(slot_id, allocator))
+            }
+            None => None,
+        }
     }
 
     #[inline(always)]
