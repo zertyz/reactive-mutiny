@@ -9,6 +9,9 @@ use std::fmt::Debug;
 ///   - by id:  offers u32 ids, which should be translated to mutable references before usage... from there, freeing might either be done from the id or the mut ref
 pub trait OgreAllocator<SlotType: Debug>: Debug {
 
+    /// Instantiates a new allocator
+    fn new() -> Self;
+
     /// Returns a mutable reference to the newly allocated slot or `None` if the allocator is, currently, out of space
     /// -- in which case, a [dealloc_ref()] would remedy the situation.\
     /// IMPLEMENTORS: #[inline(always)]

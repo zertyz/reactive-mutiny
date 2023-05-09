@@ -19,6 +19,7 @@ use std::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroU32,
 };
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 
@@ -30,32 +31,36 @@ use std::sync::Arc;
 ///
 /// For thinner payloads, [AtomicMove] should be a better fit, as it doesn't require a secondary container to
 /// hold the objects.
-pub struct AtomicZeroCopy<SlotType,
+pub struct AtomicZeroCopy<SlotType:          Debug,
+                          OgreAllocatorType: OgreAllocator<SlotType>,
                           const BUFFER_SIZE: usize> {
-
+    pub(crate) allocator: Arc<OgreAllocatorType>,
                queue:     AtomicMove<u32, BUFFER_SIZE>,
-    pub(crate) allocator: Arc<OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>>,
+               _phantom:  PhantomData<SlotType>
 }
 
 
 impl<'a, SlotType:          'a + Debug,
+         OgreAllocatorType: OgreAllocator<SlotType> + 'a,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
-AtomicZeroCopy<SlotType, BUFFER_SIZE> {
+AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self {
+            allocator: Arc::new(OgreAllocatorType::new()),
             queue:     AtomicMove::new(),
-            allocator: Arc::new(OgreArrayPoolAllocator::new()),
+            _phantom:  PhantomData::default(),
         }
     }
 }
 
 
 impl<'a, SlotType:          'a + Debug,
+         OgreAllocatorType: OgreAllocator<SlotType> + 'a,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
-AtomicZeroCopy<SlotType, BUFFER_SIZE> {
+AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn publish<SetterFn:                   FnOnce(&mut SlotType),
@@ -130,9 +135,10 @@ AtomicZeroCopy<SlotType, BUFFER_SIZE> {
 
 
 impl<'a, SlotType:          'a + Debug,
+         OgreAllocatorType: OgreAllocator<SlotType> + 'a,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
-AtomicZeroCopy<SlotType, BUFFER_SIZE> {
+AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn consume<GetterReturnType: 'a,

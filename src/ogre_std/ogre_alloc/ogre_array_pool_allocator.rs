@@ -20,18 +20,6 @@ pub struct OgreArrayPoolAllocator<DataType, const POOL_SIZE: usize> {
 
 impl<DataType, const POOL_SIZE: usize> OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 
-    pub fn new() -> Self {
-        Self {
-            pool:      Box::new(unsafe { MaybeUninit::zeroed().assume_init() }),
-            free_list: {
-                           let free_list = FullSyncMove::new();
-                           for slot_id in 0..POOL_SIZE as u32 {
-                               free_list.publish_movable(slot_id);
-                           }
-                           free_list
-                       },
-        }
-    }
 }
 
 
@@ -51,6 +39,19 @@ impl<DataType:        Debug,
      const POOL_SIZE: usize>
 OgreAllocator<DataType>
 for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
+
+    fn new() -> Self {
+        Self {
+            pool:      Box::new(unsafe { MaybeUninit::zeroed().assume_init() }),
+            free_list: {
+                           let free_list = FullSyncMove::new();
+                           for slot_id in 0..POOL_SIZE as u32 {
+                               free_list.publish_movable(slot_id);
+                           }
+                           free_list
+                       },
+        }
+    }
 
     #[inline(always)]
     fn alloc(&self) -> Option<(/*ref:*/ &mut DataType, /*slot_id:*/ u32)> {

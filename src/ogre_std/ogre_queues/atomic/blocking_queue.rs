@@ -24,6 +24,7 @@ use parking_lot::{
     },
 };
 use log::{trace};
+use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
 
 /// Multiple producer / multiple consumer lock-free / blocking queue --
@@ -39,7 +40,7 @@ pub struct BlockingQueue<SlotType:                  Copy+Debug,
     /// locked when the queue is full, unlocked when it is no longer full
     full_guard:         RawMutex,
     /// queue
-    base_queue:         AtomicZeroCopy<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>, BUFFER_SIZE>,
     /// locked when the queue is empty, unlocked when it is no longer empty
     empty_guard:        RawMutex,
     // metrics for dequeue

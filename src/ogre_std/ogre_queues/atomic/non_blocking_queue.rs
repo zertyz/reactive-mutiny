@@ -16,6 +16,7 @@ use std::{
     sync::atomic::{AtomicU64,Ordering::Relaxed},
 };
 use log::trace;
+use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
 
 /// Multiple producer / multiple consumer lock-free & non-blocking queue
@@ -28,7 +29,7 @@ pub struct NonBlockingQueue<SlotType:          Copy+Debug,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         AtomicZeroCopy<SlotType, BUFFER_SIZE>,
+    base_queue:         AtomicZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,

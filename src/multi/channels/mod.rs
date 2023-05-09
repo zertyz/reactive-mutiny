@@ -2,15 +2,14 @@
 
 pub mod movable;
 pub mod zero_copy;
-pub mod multi_stream;
 
 use {
     super::{
         super::{
             types::MutinyStreamSource,
+            mutiny_stream::MutinyStream,
         },
     },
-    multi_stream::MultiStream,
 };
 use std::{
     sync::Arc,
@@ -32,7 +31,7 @@ pub trait MultiChannelCommon<'a, ItemType: Debug> {
     /// Returns `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
     /// If called more than once, each `Stream` will receive all elements sent to the [Multi].\
     /// Panics if called more times than allowed by [Multi]'s `MAX_STREAMS`
-    fn listener_stream(self: &Arc<Self>) -> (MultiStream<'a, ItemType, Self>, u32)
+    fn listener_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32)
                                             where Self: MutinyStreamSource<'a, ItemType, Arc<ItemType>>;
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\

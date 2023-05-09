@@ -1,3 +1,12 @@
+use crate::{
+    MutinyStreamSource,
+    streams_manager::StreamsManagerBase,
+    uni::channels::{
+        UniChannelCommon,
+        UniMovableChannel,
+    },
+    mutiny_stream::MutinyStream,
+};
 use std::{
     fmt::Debug,
     sync::Arc,
@@ -6,10 +15,6 @@ use std::{
 use std::mem::MaybeUninit;
 use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
-use crate::MutinyStreamSource;
-use crate::streams_manager::StreamsManagerBase;
-use crate::uni::channels::uni_stream::{UniStream};
-use crate::uni::channels::{UniChannelCommon, UniMovableChannel};
 use async_trait::async_trait;
 
 
@@ -37,9 +42,9 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
+    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
-        UniStream::new(stream_id, self)
+        MutinyStream::new(stream_id, self)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {

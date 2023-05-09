@@ -4,8 +4,9 @@ use super::{
     super::{
         stream_executor::StreamExecutor,
         instruments::Instruments,
+        mutiny_stream::MutinyStream,
     },
-    channels::{self, UniChannelCommon, UniMovableChannel, uni_stream::UniStream},
+    channels::{self, UniChannelCommon, UniMovableChannel},
 };
 use std::{
     fmt::Debug,
@@ -21,7 +22,7 @@ pub type UniChannelType<'a, ItemType,
                             const MAX_STREAMS: usize> = channels::movable::full_sync::FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type UniStreamType<'a, ItemType,
                            const BUFFER_SIZE: usize,
-                           const MAX_STREAMS: usize> = UniStream<'a, ItemType, UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;
+                           const MAX_STREAMS: usize> = MutinyStream<'a, ItemType, UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;
 
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...

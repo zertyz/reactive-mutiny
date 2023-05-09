@@ -56,7 +56,7 @@ OgreArc<DataType, OgreAllocatorType> {
     /// -- `data` must have been previously allocated by the provided `allocator`
     #[inline(always)]
     pub fn from_allocated(data_id: u32, allocator: Arc<OgreAllocatorType>) -> Self {
-        let inner = Box::new(InnerOgreArc {
+        let inner = Box::new(InnerOgreArc {     // TODO: after all is set, replace Box for one of our allocators to check the performance gains
             allocator,
             data_id,
             references_count: AtomicU32::new(1),

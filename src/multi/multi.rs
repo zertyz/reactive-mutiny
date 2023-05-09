@@ -6,11 +6,9 @@ pub use crate::multi::channels::{
 };
 use super::super::{
     instruments::Instruments,
-    multi::channels::{
-        self,
-        multi_stream::MultiStream,
-    },
+    multi::channels,
     stream_executor::StreamExecutor,
+    mutiny_stream::MutinyStream,
 };
 use std::{
     sync::Arc,
@@ -31,7 +29,7 @@ type MultiChannelType<'a, ItemType,
                           const MAX_STREAMS: usize> = channels::movable::crossbeam::Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 pub type MultiStreamType<'a, ItemType,
                              const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize> = MultiStream<'a, ItemType, MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;
+                             const MAX_STREAMS: usize> = MutinyStream<'a, ItemType, MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>, Arc<ItemType>>;
 
 
 /// `Multi` is an event handler capable of having several "listeners" -- all of which receives all events.\

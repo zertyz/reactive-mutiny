@@ -13,9 +13,9 @@ use crate::{
     uni::channels::{
         UniChannelCommon,
         UniMovableChannel,
-        uni_stream::UniStream,
     },
     streams_manager::StreamsManagerBase,
+    mutiny_stream::MutinyStream,
 };
 use std::{
     time::Duration,
@@ -55,9 +55,9 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self> {
+    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
-        UniStream::new(stream_id, self)
+        MutinyStream::new(stream_id, self)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {

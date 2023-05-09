@@ -2,16 +2,14 @@
 
 pub mod movable;
 pub mod zero_copy;
-pub mod uni_stream;
-pub mod uni_zero_copy_stream;
 
 use {
     super::{
         super::{
             types::MutinyStreamSource,
+            mutiny_stream::MutinyStream,
         },
     },
-    uni_stream::UniStream,
 };
 use std::{
     sync::Arc,
@@ -25,7 +23,8 @@ use async_trait::async_trait;
 /// Implementors should also implement one of [UniMovableChannel] or [UniZeroCopyChannel].
 /// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 #[async_trait]
-pub trait UniChannelCommon<'a, ItemType: Debug> {
+pub trait UniChannelCommon<'a, ItemType:        Debug,
+                               DerivedItemType: = ItemType> {
 
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
@@ -33,8 +32,8 @@ pub trait UniChannelCommon<'a, ItemType: Debug> {
     /// Returns a `Stream` able to receive elements sent through this channel.\
     /// If called more than once, each `Stream` will receive different elements.\
     /// Panics if called more times than allowed by [Uni]'s `MAX_STREAMS`
-    fn consumer_stream(self: &Arc<Self>) -> UniStream<'a, ItemType, Self>
-                                            where Self: MutinyStreamSource<'a, ItemType>;
+    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self, DerivedItemType>
+                                            where Self: MutinyStreamSource<'a, ItemType, DerivedItemType>;
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
@@ -61,7 +60,8 @@ pub trait UniChannelCommon<'a, ItemType: Debug> {
 
 /// Defines how to send events (to a [Uni]) that may be subject of moving (copying from one place in RAM to another), if
 /// compiler optimizations (that would make it zero-copy) are not possible.
-pub trait UniMovableChannel<'a, ItemType: Debug>: UniChannelCommon<'a, ItemType> {
+pub trait UniMovableChannel<'a, ItemType:        Debug,
+                                DerivedItemType: = ItemType>: UniChannelCommon<'a, ItemType, DerivedItemType> {
 
     /// THIS BELONGS TO ZERO-COPY CHANNEL. Move it there when ready!
     /// ============================================================
@@ -93,7 +93,10 @@ pub trait UniMovableChannel<'a, ItemType: Debug>: UniChannelCommon<'a, ItemType>
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use crate::uni::channels::{ movable, zero_copy };
+    use crate::{
+        ogre_std::ogre_alloc::{OgreAllocator, ogre_array_pool_allocator::OgreArrayPoolAllocator},
+        uni::channels::{ movable, zero_copy },
+    };
     use std::{
         fmt::Debug,
         future::Future,
@@ -129,7 +132,7 @@ mod tests {
     doc_test!(movable_crossbeam_channel_doc_test, movable::crossbeam::Crossbeam<&str, 1024, 1>);
     doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
     doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
-    doc_test!(zero_copy_atomic_queue_doc_test,      zero_copy::atomic::Atomic<&str, 1024, 1>);
+    doc_test!(zero_copy_atomic_queue_doc_test,    zero_copy::atomic::Atomic<&str, OgreArrayPoolAllocator<&str, 1024>, 1024, 1>);
 
 
     // *_dropping for known parallel stream implementors

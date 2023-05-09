@@ -3,8 +3,8 @@ use crate::{
     multi::channels::{
         MultiChannelCommon,
         MultiMovableChannel,
-        multi_stream::MultiStream,
     },
+    mutiny_stream::MutinyStream,
     MutinyStreamSource,
 };
 use std::{
@@ -47,9 +47,9 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn listener_stream(self: &Arc<Self>) -> (MultiStream<'a, ItemType, Self>, u32) {
+    fn listener_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
         let stream_id = self.streams_manager.create_stream_id();
-        (MultiStream::new(stream_id, self), stream_id)
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
