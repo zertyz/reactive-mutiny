@@ -319,7 +319,7 @@ mod benchmark_queues {
 
     macro_rules! impl_benchmarkable_container_for {
         ($queue_type: ty) => {
-            impl<SlotType: Copy+Unpin+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
+            impl<SlotType: Copy+Unpin+Debug+Send+Sync, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
                 fn max_size(&self) -> usize {
                     OgreQueue::max_size(self)
                 }
@@ -338,7 +338,7 @@ mod benchmark_queues {
 
     macro_rules! _impl_benchmarkable_container_for_blocking {
         ($queue_type: ty) => {
-            impl<SlotType: Copy+Unpin+Debug, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
+            impl<SlotType: Copy+Unpin+Debug+Send+Sync, const BUFFER_SIZE: usize> BenchmarkableContainer<SlotType> for $queue_type {
                 fn max_size(&self) -> usize {
                     OgreQueue::max_size(self)
                 }

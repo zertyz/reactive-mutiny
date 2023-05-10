@@ -13,17 +13,20 @@ use std::mem::{ManuallyDrop, MaybeUninit};
 use crate::ogre_std::ogre_alloc::types::OgreAllocator;
 
 
-pub struct OgreArrayPoolAllocator<DataType, const POOL_SIZE: usize> {
+pub struct OgreArrayPoolAllocator<DataType:        Send + Sync,
+                                  const POOL_SIZE: usize> {
     pool:      Box<[ManuallyDrop<DataType>; POOL_SIZE]>,
     free_list: FullSyncMove<u32, POOL_SIZE>,
 }
 
-impl<DataType, const POOL_SIZE: usize> OgreArrayPoolAllocator<DataType, POOL_SIZE> {
+impl<DataType:        Send + Sync,
+     const POOL_SIZE: usize>
+OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 
 }
 
 
-impl<DataType:        Debug,
+impl<DataType:        Debug + Send + Sync,
      const POOL_SIZE: usize>
 Debug
 for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
@@ -35,7 +38,7 @@ for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 }
 
 
-impl<DataType:        Debug,
+impl<DataType:        Debug + Send + Sync,
      const POOL_SIZE: usize>
 OgreAllocator<DataType>
 for OgreArrayPoolAllocator<DataType, POOL_SIZE> {

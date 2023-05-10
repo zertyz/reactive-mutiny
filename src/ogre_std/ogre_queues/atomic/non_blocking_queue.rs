@@ -22,7 +22,7 @@ use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocat
 /// Multiple producer / multiple consumer lock-free & non-blocking queue
 /// using atomics for synchronization
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct NonBlockingQueue<SlotType:          Copy+Debug,
+pub struct NonBlockingQueue<SlotType:          Copy+Debug + Send + Sync,
                             const BUFFER_SIZE: usize,
                             const INSTRUMENTS: usize = 0> {
     // metrics for enqueue
@@ -37,7 +37,7 @@ pub struct NonBlockingQueue<SlotType:          Copy+Debug,
     queue_name:         String,
 }
 
-impl<SlotType:          Copy+Debug,
+impl<SlotType:          Copy+Debug + Send + Sync,
     const BUFFER_SIZE: usize,
     const INSTRUMENTS: usize>
 NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
@@ -65,7 +65,7 @@ NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
 }
 
-impl<SlotType:          Copy+Debug,
+impl<SlotType:          Copy+Debug + Send + Sync,
      const BUFFER_SIZE: usize,
      const INSTRUMENTS: usize>
 OgreQueue<SlotType>

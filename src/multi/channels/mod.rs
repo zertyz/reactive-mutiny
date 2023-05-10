@@ -23,7 +23,7 @@ use async_trait::async_trait;
 /// Implementors should also implement one of [MultiMovableChannel] or [MultiZeroCopyChannel].
 /// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 #[async_trait]
-pub trait MultiChannelCommon<'a, ItemType: Debug> {
+pub trait MultiChannelCommon<'a, ItemType: Debug + Send + Sync> {
 
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
@@ -67,7 +67,7 @@ pub trait MultiChannelCommon<'a, ItemType: Debug> {
 
 /// Defines how to send events (to a [Multi]) that may be subject of moving (copying from one place in RAM to another), if
 /// compiler optimizations (that would make it zero-copy) are not possible.
-pub trait MultiMovableChannel<'a, ItemType: Debug>: MultiChannelCommon<'a, ItemType> {
+pub trait MultiMovableChannel<'a, ItemType: Debug + Send + Sync>: MultiChannelCommon<'a, ItemType> {
 
     /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::listener_stream()]
     /// IMPLEMENTORS: #[inline(always)]

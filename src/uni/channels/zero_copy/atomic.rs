@@ -3,7 +3,11 @@
 use crate::{
     types::MutinyStreamSource,
     ogre_std::{
-        ogre_alloc::ogre_arc::OgreArc,
+        ogre_alloc::{
+            OgreAllocator,
+            ogre_array_pool_allocator::OgreArrayPoolAllocator,
+            ogre_arc::OgreArc,
+        },
         ogre_queues::{
             atomic::atomic_zero_copy::AtomicZeroCopy,
             meta_container::MetaContainer,
@@ -16,6 +20,7 @@ use crate::{
         UniMovableChannel,
     },
     streams_manager::StreamsManagerBase,
+    mutiny_stream::MutinyStream,
 };
 use std::{
     time::Duration,
@@ -25,14 +30,13 @@ use std::{
     sync::Arc,
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
+    marker::PhantomData,
 };
-use std::marker::PhantomData;
 use async_trait::async_trait;
-use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
-use crate::ogre_std::ogre_alloc::OgreAllocator;
-use crate::mutiny_stream::MutinyStream;
 
 
+/// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreArc] to allow a complete zero-copy
+/// operation -- no copies either when producing the event nor when consuming it, nor when passing it along to application logic functions.
 pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
                       OgreAllocatorType: OgreAllocator<ItemType> + 'a,
                       const BUFFER_SIZE: usize,
@@ -42,6 +46,7 @@ pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
     channel:         AtomicZeroCopy<ItemType, OgreAllocatorType, BUFFER_SIZE>,
     _phantom:        PhantomData<OgreAllocatorType>,
 }
+
 
 #[async_trait]
 impl<'a, ItemType:          Debug + Send + Sync,
@@ -88,6 +93,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
+
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
@@ -123,7 +129,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl<'a, ItemType:          Debug + Send + Sync + 'static,
-         OgreAllocatorType: OgreAllocator<ItemType> + 'a,
+         OgreAllocatorType: OgreAllocator<ItemType> + Send + Sync + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 MutinyStreamSource<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>

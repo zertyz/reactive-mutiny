@@ -31,7 +31,7 @@ use log::{warn};
 use async_trait::async_trait;
 
 
-/// This channel uses the the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
+/// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
 /// allow enqueueing to happen independently of dequeueing.\
 /// Due to that, this channel requires that `ItemType`s are `Clone`, since they will have to be moved around during dequeueing (as there is no way to keep the queue slot allocated during processing),
 /// making this channel a typical best fit for small & trivial types.\

@@ -23,7 +23,7 @@ use async_trait::async_trait;
 /// Implementors should also implement one of [UniMovableChannel] or [UniZeroCopyChannel].
 /// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 #[async_trait]
-pub trait UniChannelCommon<'a, ItemType:        Debug,
+pub trait UniChannelCommon<'a, ItemType:        Debug + Send + Sync,
                                DerivedItemType: = ItemType> {
 
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
@@ -60,7 +60,7 @@ pub trait UniChannelCommon<'a, ItemType:        Debug,
 
 /// Defines how to send events (to a [Uni]) that may be subject of moving (copying from one place in RAM to another), if
 /// compiler optimizations (that would make it zero-copy) are not possible.
-pub trait UniMovableChannel<'a, ItemType:        Debug,
+pub trait UniMovableChannel<'a, ItemType:        Debug + Send + Sync,
                                 DerivedItemType: = ItemType>: UniChannelCommon<'a, ItemType, DerivedItemType> {
 
     /// THIS BELONGS TO ZERO-COPY CHANNEL. Move it there when ready!
@@ -193,6 +193,7 @@ mod tests {
     dropping!(movable_crossbeam_queue_dropping, movable::crossbeam::Crossbeam<&str, 1024, 2>);
     dropping!(movable_atomic_queue_dropping,    movable::atomic::Atomic<&str, 1024, 2>);
     dropping!(movable_full_sync_queue_dropping, movable::full_sync::FullSync<&str, 1024, 2>);
+    dropping!(zero_copy_atomic_queue_dropping,  zero_copy::atomic::Atomic<&str, OgreArrayPoolAllocator<&str, 1024>, 1024, 2>);
 
 
     // *_parallel_streams for known parallel stream implementors
@@ -227,7 +228,8 @@ mod tests {
                 // check each stream gets a different item, in sequence
                 for i in 0..PARALLEL_STREAMS as u32 {
                     let item = exec_future(streams[i as usize].next(), &format!("receiving on stream #{i}"), 1.0, true).await;
-                    assert_eq!(item, Some(i), "Stream #{i} didn't produce item {i}")
+                    let observed = item.expect("item should not be none");
+                    assert_eq!(observed, i, "Stream #{i} didn't produce item {i}")
                 }
 
                 // checks each stream has no more items
@@ -240,9 +242,10 @@ mod tests {
             }
         }
     }
-    parallel_streams!(movable_crossbeam_mpmc_queue_parallel_streams, movable::crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(movable_atomic_mpmc_queue_parallel_streams,    movable::atomic::Atomic<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(movable_mutex_mpmc_queue_parallel_streams,     movable::full_sync::FullSync<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_crossbeam_parallel_streams, movable::crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_atomic_parallel_streams,    movable::atomic::Atomic<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_mutex_parallel_streams,     movable::full_sync::FullSync<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(zero_copy_atomic_parallel_streams,  zero_copy::atomic::Atomic<u32, OgreArrayPoolAllocator<u32, 1024>, 1024, PARALLEL_STREAMS>);
 
 
     /// assures performance won't be degraded when we make changes
@@ -386,6 +389,12 @@ if counter == count {
         profile_same_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_different_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
+
+        type ZeroCopyAtomic<'a> = zero_copy::atomic::Atomic::<'a, u32, OgreArrayPoolAllocator<u32, BUFFER_SIZE>, BUFFER_SIZE, 1>;
+
+        profile_same_task_same_thread_channel!(ZeroCopyAtomic::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(ZeroCopyAtomic::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(ZeroCopyAtomic::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
 
     }
 

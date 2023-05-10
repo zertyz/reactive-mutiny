@@ -26,7 +26,7 @@ use futures::stream::Stream;
 ///   - then through the user provided `pipeline_builder()`
 ///   - and, finally, to the `StreamExecutor`.
 /// ... allowing all of them to behave as a single function, that gets optimized together.
-pub struct MutinyStream<'a, ItemType:          Debug + 'a,
+pub struct MutinyStream<'a, ItemType:          Debug + Send + Sync + 'a,
                             StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType> + ?Sized,
                             DerivedItemType:   'a = ItemType> {
     stream_id:     u32,
@@ -35,7 +35,7 @@ pub struct MutinyStream<'a, ItemType:          Debug + 'a,
 
 }
 
-impl<'a, ItemType:          Debug,
+impl<'a, ItemType:          Debug + Send + Sync,
          StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType>,
          DerivedItemType>
 MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
@@ -50,7 +50,7 @@ MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
 
 }
 
-impl<'a, ItemType:          Debug + 'a,
+impl<'a, ItemType:          Debug + Send + Sync + 'a,
          StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType>,
          DerivedItemType>
 Stream for
@@ -75,7 +75,7 @@ MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
     }
 }
 
-impl<'a, ItemType:          Debug,
+impl<'a, ItemType:          Debug + Send + Sync,
          StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType> + ?Sized,
          DerivedItemType>
 Drop

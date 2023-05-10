@@ -30,7 +30,7 @@ use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocat
 /// Multiple producer / multiple consumer lock-free / blocking queue --
 /// uses atomics for synchronization but blocks (on empty or full scenarios) using parking-lot mutexes
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct BlockingQueue<SlotType:                  Copy+Debug,
+pub struct BlockingQueue<SlotType:                  Copy+Debug + Send + Sync,
                          const BUFFER_SIZE:         usize,
                          const LOCK_TIMEOUT_MILLIS: usize = 0,
                          const INSTRUMENTS:         usize = 0> {
@@ -50,7 +50,7 @@ pub struct BlockingQueue<SlotType:                  Copy+Debug,
     queue_name: String,
 }
 
-impl<SlotType:                  Copy+Debug,
+impl<SlotType:                  Copy+Debug + Send + Sync,
      const BUFFER_SIZE:         usize,
      const LOCK_TIMEOUT_MILLIS: usize,
      const INSTRUMENTS:         usize>
@@ -162,7 +162,7 @@ BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
 }
 
-impl<SlotType:                  Copy+Debug,
+impl<SlotType:                  Copy+Debug + Send + Sync,
      const BUFFER_SIZE:         usize,
      const LOCK_TIMEOUT_MILLIS: usize,
      const INSTRUMENTS:         usize>
@@ -263,7 +263,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 }
 
 
-impl<SlotType:                  Copy+Debug,
+impl<SlotType:                  Copy+Debug + Send + Sync,
      const BUFFER_SIZE:         usize,
      const LOCK_TIMEOUT_MILLIS: usize,
      const INSTRUMENTS:         usize>

@@ -30,7 +30,7 @@ use crate::ogre_std::ogre_alloc::OgreAllocator;
 ///
 /// For thinner payloads, [FullSyncMove] should be a better fit, as it doesn't require a secondary container to
 /// hold the objects.
-pub struct FullSyncZeroCopy<SlotType:          Debug,
+pub struct FullSyncZeroCopy<SlotType:          Debug + Send + Sync,
                             const BUFFER_SIZE: usize> {
 
     queue:     FullSyncMove<u32, BUFFER_SIZE>,
@@ -38,7 +38,7 @@ pub struct FullSyncZeroCopy<SlotType:          Debug,
 }
 
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Send + Sync,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
 FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
@@ -52,7 +52,7 @@ FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 }
 
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Send + Sync,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
 FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
@@ -129,7 +129,7 @@ FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 }
 
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Sync + Send,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
 FullSyncZeroCopy<SlotType, BUFFER_SIZE> {

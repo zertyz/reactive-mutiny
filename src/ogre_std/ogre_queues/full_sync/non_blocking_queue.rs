@@ -21,7 +21,7 @@ use log::trace;
 
 /// Multiple producer / multiple consumer queues using full synchronization & async functions
 #[repr(C,align(64))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct NonBlockingQueue<SlotType:          Unpin + Debug,
+pub struct NonBlockingQueue<SlotType:          Unpin + Debug + Send + Sync,
                             const BUFFER_SIZE: usize,
                             const INSTRUMENTS: usize = 0> {
     // metrics for enqueue
@@ -35,7 +35,7 @@ pub struct NonBlockingQueue<SlotType:          Unpin + Debug,
     /// for use when debug is enabled
     queue_name:         String,
 }
-impl<SlotType:          Unpin + Debug,
+impl<SlotType:          Unpin + Debug + Send + Sync,
      const BUFFER_SIZE: usize,
      const INSTRUMENTS: usize>
 OgreQueue<SlotType>
@@ -133,7 +133,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     }
 }
 
-impl<SlotType:          Unpin + Debug,
+impl<SlotType:          Unpin + Debug + Send + Sync,
      const BUFFER_SIZE: usize,
      const INSTRUMENTS: usize>
 NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
