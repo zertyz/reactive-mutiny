@@ -5,6 +5,7 @@ use super::{
         stream_executor::StreamExecutor,
         instruments::Instruments,
         mutiny_stream::MutinyStream,
+        types::MutinyStreamSource,
     },
     channels::{self, UniChannelCommon, UniMovableChannel},
 };
@@ -13,6 +14,7 @@ use std::{
     time::Duration,
     sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}},
 };
+use std::marker::PhantomData;
 use minstant::Instant;
 
 
@@ -20,34 +22,33 @@ use minstant::Instant;
 pub type UniChannelType<'a, ItemType,
                             const BUFFER_SIZE: usize,
                             const MAX_STREAMS: usize> = channels::movable::full_sync::FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type UniStreamType<'a, ItemType,
-                           const BUFFER_SIZE: usize,
-                           const MAX_STREAMS: usize> = MutinyStream<'a, ItemType, UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>;
 
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
 pub struct Uni<'a, ItemType:          Send + Sync + Debug,
-                   const BUFFER_SIZE: usize,
-                   const MAX_STREAMS: usize,
-                   const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
-    pub uni_channel:              Arc<UniChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>,
+                   UniChannelType:    UniMovableChannel<'a, ItemType, DerivedItemType> + MutinyStreamSource<'a, ItemType, DerivedItemType>,
+                   const INSTRUMENTS: usize,
+                   DerivedItemType:   = ItemType> {
+    pub uni_channel:              Arc<UniChannelType>,
     pub stream_executor:          Arc<StreamExecutor<INSTRUMENTS>>,
     pub finished_executors_count: AtomicU32,
+        _phantom:                 PhantomData<(&'a ItemType, &'a DerivedItemType)>,
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         const BUFFER_SIZE: usize,
-         const MAX_STREAMS: usize,
-         const INSTRUMENTS: usize>
-Uni<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
+         UniChannelType:    UniMovableChannel<'a, ItemType, DerivedItemType> + MutinyStreamSource<'a, ItemType, DerivedItemType>,
+         const INSTRUMENTS: usize,
+         DerivedItemType>
+Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// creates & returns a pair (`Uni`, `UniStream`)
     pub fn new<IntoString: Into<String>>(uni_name: IntoString,
                                          stream_executor: Arc<StreamExecutor<INSTRUMENTS>>) -> Self {
         Uni {
-            uni_channel:              UniChannelType::<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>::new(uni_name),
+            uni_channel:              UniChannelType::new(uni_name),
             stream_executor,
             finished_executors_count: AtomicU32::new(0),
+            _phantom:                 PhantomData::default(),
         }
     }
 
@@ -61,7 +62,7 @@ Uni<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
         self.uni_channel.try_send(message)
     }
 
-    pub fn consumer_stream(&self) -> UniStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+    pub fn consumer_stream(&self) -> MutinyStream<'a, ItemType, UniChannelType, DerivedItemType> {
         self.uni_channel.consumer_stream()
     }
 

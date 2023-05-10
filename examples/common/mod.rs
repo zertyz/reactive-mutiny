@@ -1,6 +1,8 @@
 //! Common code for `uni-microservice` & `multi-processor` examples
 
 
+use std::ops::Deref;
+
 /// The input event. For the examples, an hypothetical trading exchange shares with us a stream of events
 /// for which we only care for book tops & trades -- all for the same asset
 #[derive(Debug)]
@@ -20,6 +22,13 @@ pub enum ExchangeEvent {
 
     /// Any other events issued by the Exchange are ignored
     Ignored,
+}
+impl Deref for ExchangeEvent {
+    type Target = ExchangeEvent;
+
+    fn deref(&self) -> &Self::Target {
+        self
+    }
 }
 
 /// The result of analysing a sequence of [ExchangeEvent]s.\

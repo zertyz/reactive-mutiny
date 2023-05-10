@@ -5,8 +5,14 @@ use super::{
     super::{
         instruments::Instruments,
         stream_executor::StreamExecutor,
+        mutiny_stream::MutinyStream,
+        types::MutinyStreamSource,
     },
-    uni::{Uni, UniStreamType},
+    uni::{
+        Uni,
+        UniChannelType,
+    },
+    channels::{UniMovableChannel, UniChannelCommon},
 };
 use std::{
     fmt::Debug,
@@ -19,12 +25,12 @@ use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
 
 
-pub struct UniBuilder<InType:              Send + Sync + 'static,
+pub struct UniBuilder<InType:              'static + Debug + Sync + Send,
+                      UniChannelType:      UniMovableChannel<'static, InType, DerivedItemType> + MutinyStreamSource<'static, InType, DerivedItemType> + Sync + Send + 'static,
+                      const INSTRUMENTS:   usize,
+                      DerivedItemType:     'static + Sync + Send,
                       OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
-                      CloseVoidAsyncType:  Future<Output=()> + Send + 'static,
-                      const BUFFER_SIZE:   usize = 1024,
-                      const MAX_STREAMS:   usize = 1,
-                      const INSTRUMENTS:   usize = {Instruments::LogsWithMetrics.into()}> {
+                      CloseVoidAsyncType:  Future<Output=()> + Send + 'static> {
 
     pub on_stream_close_callback: Option<Arc<OnStreamCloseFnType>>,
     pub concurrency_limit:        u32,
@@ -33,16 +39,16 @@ pub struct UniBuilder<InType:              Send + Sync + 'static,
     /// Instrumentation this instance gathers / produces
     pub instruments:              Instruments,
     // phantoms
-    _in_type:                     PhantomData<&'static InType>,
+    _phantom:                     PhantomData<(InType, UniChannelType, DerivedItemType)>,
 
 }
-impl<InType:              Send + Sync + Debug + 'static,
+impl<InType:              'static + Sync + Send + Debug,
+     UniChannelType:      UniMovableChannel<'static, InType, DerivedItemType> + MutinyStreamSource<'static, InType, DerivedItemType> + Sync + Send + 'static,
+     const INSTRUMENTS:   usize,
+     DerivedItemType:     'static + Sync + Send,
      OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
-     CloseVoidAsyncType:  Future<Output=()> + Send + 'static,
-     const BUFFER_SIZE:   usize,
-     const MAX_STREAMS:   usize,
-     const INSTRUMENTS:   usize>
-UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
+     CloseVoidAsyncType:  Future<Output=()> + Send + 'static>
+UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType, OnStreamCloseFnType, CloseVoidAsyncType> {
 
     pub fn new() -> Self {
         Self {
@@ -50,7 +56,7 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
             concurrency_limit:        1,
             futures_timeout:          Duration::ZERO,
             instruments:              Instruments::from(INSTRUMENTS),
-            _in_type:                 Default::default(),
+            _phantom:                 Default::default(),
         }
     }
 
@@ -77,10 +83,10 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
 
                          (self,
                           stream_name:               IntoString,
-                          pipeline_builder:          impl FnOnce(UniStreamType<'static, InType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
+                          pipeline_builder:          impl FnOnce(MutinyStream<'static, InType, UniChannelType, DerivedItemType>) -> OutStreamType,
                           on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static)
 
-                         -> Arc<Uni<'static, InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
+                         -> Arc<Uni<'static, InType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
         let stream_name = stream_name.into();
         let executor = StreamExecutor::with_futures_timeout(stream_name.to_string(), self.futures_timeout);
@@ -112,9 +118,9 @@ UniBuilder<InType, OnStreamCloseFnType, CloseVoidAsyncType, BUFFER_SIZE, MAX_STR
 
                                                   (self,
                                                    stream_name:              IntoString,
-                                                   pipeline_builder:         impl FnOnce(UniStreamType<'static, InType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType)
+                                                   pipeline_builder:         impl FnOnce(MutinyStream<'static, InType, UniChannelType, DerivedItemType>) -> OutStreamType)
 
-                                                  -> Arc<Uni<'static, InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>> {
+                                                  -> Arc<Uni<'static, InType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
         let stream_name = stream_name.into();
         let executor = StreamExecutor::new(stream_name.to_string());

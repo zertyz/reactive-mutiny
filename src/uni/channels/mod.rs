@@ -79,6 +79,12 @@ pub trait UniMovableChannel<'a, ItemType:        Debug + Send + Sync,
 
 }
 
+// TODO 2023-05-10: Transform `UniMovableChannel` (& `MultiMovableChannel`) into `ChannelProducer` and place it in types,
+//                  along with `MutinyStreamSource`, which should be renamed to `ChannelConsumer`.
+//                  Maybe, creating a "FullDuplexChannel" trait with both in it may help with reducing the generics signatures we'll need to use everywhere
+//                  (the full signature may be gathered from / replace the one in uni_builder.rs#29)
+// TODO 2023-05-10: `DerivedItemType` everywhere should be renamed to `ProducedItemType`, for clarity -- and `ItemType`/`InType` to `ConsumedItemType`, maybe?
+
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
 ///          this is due to the implementation notes on [UniChannel]: we can't have a trait to unify all

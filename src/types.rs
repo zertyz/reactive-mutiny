@@ -4,6 +4,25 @@ use std::{
     task::{Waker},
     fmt::Debug,
 };
+use std::future::Future;
+use std::sync::Arc;
+use crate::Instruments;
+use crate::stream_executor::StreamExecutor;
+
+
+/// Default `UniBuilder`, for ease of use -- to be expanded into all options
+pub type UniBuilder<InType,
+                    const BUFFER_SIZE: usize,
+                    const MAX_STREAMS: usize,
+                    const INSTRUMENTS: usize,
+                    OnStreamCloseFnType,
+                    CloseVoidAsyncType>
+    = super::uni::UniBuilder<InType,
+                             super::uni::channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>,
+                             INSTRUMENTS,
+                             InType,
+                             OnStreamCloseFnType,
+                             CloseVoidAsyncType>;
 
 
 /// Source of events for [UniStream] & [MultiStream]
