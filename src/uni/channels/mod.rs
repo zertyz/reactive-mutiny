@@ -6,7 +6,7 @@ pub mod zero_copy;
 use {
     super::{
         super::{
-            types::MutinyStreamSource,
+            types::ChannelConsumer,
             mutiny_stream::MutinyStream,
         },
     },
@@ -20,24 +20,32 @@ use async_trait::async_trait;
 
 
 /// Defines common abstractions on how [Uni]s receives produced events and delivers them to `Stream`s.\
-/// Implementors should also implement one of [UniMovableChannel] or [UniZeroCopyChannel].
+/// Implementors should also implement one of [ChannelProducer] or [UniZeroCopyChannel].
 /// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 #[async_trait]
-pub trait UniChannelCommon<'a, ItemType:        Debug + Send + Sync,
-                               DerivedItemType: = ItemType> {
+pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
+                            DerivedItemType: Debug> {
 
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
 
     /// Returns a `Stream` able to receive elements sent through this channel.\
-    /// If called more than once, each `Stream` will receive different elements.\
+    /// If called more than once, the behavior differs in regard to how the events will be routed,
+    /// depending on the implementor:
+    ///   - [Uni]s implement the "consumer" pattern: each `Stream` will receive a different element;
+    ///   - [Multi]s implement the "listener" pattern: each `Stream` will see all elements
     /// Panics if called more times than allowed by [Uni]'s `MAX_STREAMS`
-    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self, DerivedItemType>
-                                            where Self: MutinyStreamSource<'a, ItemType, DerivedItemType>;
+    fn create_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self, DerivedItemType>
+                                          where Self: ChannelConsumer<'a, DerivedItemType>;
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
     async fn flush(&self, timeout: Duration) -> u32;
+
+    /// Flushes & signals that the given `stream_id` should cease its activities when there are no more elements left
+    /// to process, waiting for the operation to complete for up to `timeout`.\
+    /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
 
     /// Flushes & signals that all streams should cease their activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
@@ -56,34 +64,44 @@ pub trait UniChannelCommon<'a, ItemType:        Debug + Send + Sync,
     /// IMPLEMENTORS: #[inline(always)]
     fn pending_items_count(&self) -> u32;
 
+    /// Tells how many events may be produced ahead of the consumers.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn buffer_size(&self) -> u32;
 }
 
-/// Defines how to send events (to a [Uni]) that may be subject of moving (copying from one place in RAM to another), if
-/// compiler optimizations (that would make it zero-copy) are not possible.
-pub trait UniMovableChannel<'a, ItemType:        Debug + Send + Sync,
-                                DerivedItemType: = ItemType>: UniChannelCommon<'a, ItemType, DerivedItemType> {
-
-    /// THIS BELONGS TO ZERO-COPY CHANNEL. Move it there when ready!
-    /// ============================================================
-    /// For channels that allow optimized allocators, this version of send should be used instead, as it will enforce
-    /// a zero-copy policy (which is likely to payoff for data types some dozens of bytes wide).\
-    /// This is marked as unsafe for extra care should be taken when providing the `item_builder()` callback: it will reuse
-    /// a previous `ItemType`, so care should be taken for old data not to leak out as if it was new.\
-    /// IMPLEMENTORS: #[inline(always)]
-    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool;
+/// Defines how to send events (to a [Uni] or [Multi]).
+pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
+                              DerivedItemType: 'a + Debug = ItemType> {
 
     /// Sends `item` through this channel, synchronously, returning immediately if the buffer is full
     /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.\
     /// IMPLEMENTORS: #[inline(always)]
     fn try_send(&self, item: ItemType) -> bool;
 
+    /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::create_stream()]
+    #[inline(always)]
+    fn send(&self, _item: ItemType) {
+        todo!("`ChannelProducer.send()` is not available for channels where it can't be implemented as zero-copy (including this one)")
+    }
+
+    /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
+    /// -- for instance: the Stream consumes Arc<String> (the derived item type) and the channel is for Strings. With this method one may send an Arc directly.\
+    /// The default implementation, though, is made for types that don't have a derived item type.
+    #[inline(always)]
+    fn send_derived(&self, _derived_item_type: DerivedItemType) {
+        todo!("`ChannelProducer.send_derived()` is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
+    }
+
 }
+
+pub trait FullDuplexChannel<'a, ItemType:        'a + Debug + Send + Sync,
+                                DerivedItemType: 'a + Debug = ItemType>: ChannelCommon<'a, ItemType, DerivedItemType> + ChannelProducer<'a, ItemType> + ChannelConsumer<'a, DerivedItemType> {}
 
 // TODO 2023-05-10: Transform `UniMovableChannel` (& `MultiMovableChannel`) into `ChannelProducer` and place it in types,
 //                  along with `MutinyStreamSource`, which should be renamed to `ChannelConsumer`.
 //                  Maybe, creating a "FullDuplexChannel" trait with both in it may help with reducing the generics signatures we'll need to use everywhere
 //                  (the full signature may be gathered from / replace the one in uni_builder.rs#29)
-// TODO 2023-05-10: `DerivedItemType` everywhere should be renamed to `ProducedItemType`, for clarity -- and `ItemType`/`InType` to `ConsumedItemType`, maybe?
+// TODO 2023-05-10: `DerivedItemType` everywhere should be renamed to `StreamItemType`, for clarity -- and `ItemType`/`InType` to `ChannelItemType`, maybe?
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
@@ -128,7 +146,7 @@ mod tests {
             #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
-                let mut stream = channel.consumer_stream();
+                let mut stream = channel.create_stream();
                 let send_result = channel.try_send("a");
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
@@ -154,8 +172,8 @@ mod tests {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$uni_channel_type>::new("dropping");
                     assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
-                    let mut stream_1 = channel.consumer_stream();
-                    let stream_2 = channel.consumer_stream();
+                    let mut stream_1 = channel.create_stream();
+                    let stream_2 = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating each stream should increase the ref count by 1");
                     channel.try_send("a");
                     exec_future(stream_1.next(), "receiving", 1.0, true).await;
@@ -168,11 +186,11 @@ mod tests {
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$uni_channel_type>::new("dropping");
-                    let stream = channel.consumer_stream();
+                    let stream = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream` + `local ref`: reference count should be 2");
                     drop(stream);
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
-                    let mut stream = channel.consumer_stream();
+                    let mut stream = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.try_send("a");
                     exec_future(stream.next(), "receiving", 1.0, true).await;
@@ -219,7 +237,7 @@ mod tests {
                     .then(|_i| {
                         let channel = channel.clone();
                         async move {
-                            channel.consumer_stream()
+                            channel.create_stream()
                         }
                     })
                     .collect::<Vec<_>>().await;
@@ -269,7 +287,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.consumer_stream();
+                let mut stream = channel.create_stream();
 
                 print!("{} (same task / same thread):           ", profiling_name);
                 std::io::stdout().flush().unwrap();
@@ -297,7 +315,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.consumer_stream();
+                let mut stream = channel.create_stream();
 
                 let sender_future = async {
                     for e in 0..count {
@@ -338,7 +356,7 @@ if counter == count {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.consumer_stream();
+                let mut stream = channel.create_stream();
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     for e in 0..count {

@@ -5,17 +5,13 @@ use super::super::{
     meta_subscriber::MetaSubscriber,
     meta_topic::MetaTopic,
 };
-use std::{
-    fs::{OpenOptions,File},
-    sync::{
-        Arc,
-        atomic::{
-            AtomicUsize,
-            Ordering::Relaxed,
-        }
-    },
-    fmt::Debug,
-};
+use std::{fs::{OpenOptions, File}, sync::{
+    Arc,
+    atomic::{
+        AtomicUsize,
+        Ordering::Relaxed,
+    }
+}, fmt::Debug, ptr};
 use std::num::NonZeroU32;
 use memmap::{
     MmapOptions,
@@ -130,22 +126,16 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
 
 impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, SlotType> {
 
-    fn publish<SetterFn:                   FnOnce(&'a mut SlotType),
-               ReportFullFn:               Fn() -> bool,
-               ReportLenAfterEnqueueingFn: FnOnce(u32)>
-              (&'a self,
-               setter_fn:                      SetterFn,
-               report_full_fn:                 ReportFullFn,
-               report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
-              -> bool {
-
+    #[inline(always)]
+    fn publish(&self, item: SlotType) -> Option<NonZeroU32> {
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
-        setter_fn(&mut mutable_self.buffer[tail]);
+        let slot = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
+        unsafe { ptr::write(slot, item); }
         while self.mmap_contents.consumer_tail.compare_exchange_weak(tail, tail+1, Relaxed, Relaxed).is_err() {
             std::hint::spin_loop();
         }
-        true
+        NonZeroU32::new(1 + tail as u32)
     }
 
     fn leak_slot(&self) -> Option<(/*ref:*/ &'a mut SlotType, /*id: */u32)> {
@@ -254,14 +244,14 @@ mod tests {
         // enqueue
         //////////
 
-        let publishing_result = meta_log_topic.publish(|slot| {
-            for (source, target) in expected_name.as_bytes().iter().zip(slot.name.iter_mut()) {
-                *target = *source;
-            }
-            slot.name_len = expected_name.len() as u8;
-            slot.age = expected_age;
-        }, || false, |_| ());
-        assert!(publishing_result, "Publishing failed");
+        let mut iter = expected_name.as_bytes().iter();
+        let my_data = MyData {
+            name: [0; 254].map(|_| *iter.next().unwrap_or(&0)),
+            name_len: expected_name.len() as u8,
+            age: expected_age,
+        };
+        let publishing_result = meta_log_topic.publish(my_data);
+        assert!(publishing_result.is_some(), "Publishing failed");
 
         // dequeue
         //////////
@@ -293,14 +283,14 @@ mod tests {
         assert_eq!(None, observed_slot_3, "`consumer_3` was told not to retrieve old elements...");
 
         // a new enqueue -- available to all consumers
-        let publishing_result = meta_log_topic.publish(|slot| {
-            for (source, target) in expected_name.as_bytes().iter().zip(slot.name.iter_mut()) {
-                *target = source.to_ascii_uppercase();
-            }
-            slot.name_len = expected_name.len() as u8;
-            slot.age = 100 - expected_age;
-        }, || false, |_| ());
-        assert!(publishing_result, "Publishing of a second element failed");
+        let mut iter = expected_name.as_bytes().iter().map(|c| c.to_ascii_uppercase());
+        let my_data = MyData {
+            name: [0; 254].map(|_| iter.next().unwrap_or(0)),
+            name_len: expected_name.len() as u8,
+            age: 100 - expected_age,
+        };
+        let publishing_result = meta_log_topic.publish(my_data);
+        assert!(publishing_result.is_some(), "Publishing of a second element failed");
         let observed_slot_1: &MyData = consumer_1.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
@@ -343,22 +333,14 @@ mod tests {
         // enqueue
         //////////
         for i in 0..N_ELEMENTS {
-            let publishing_result = meta_log_topic.publish(|slot| populate_expected_element(i, slot),
-                                                                 || false,
-                                                                 |_| {});
-            assert!(publishing_result, "Publishing of event #{i} failed");
+            let publishing_result = meta_log_topic.publish(create_expected_element(i));
+            assert!(publishing_result.is_some(), "Publishing of event #{i} failed");
         }
 
         // dequene & assert
         ///////////////////
-        let mut expected_element = MyData {
-            id: 0,
-            year_of_birth: 0,
-            year_of_death: 0,
-            known_number_of_descendents: 0,
-        };
         for i in 0..N_ELEMENTS {
-            populate_expected_element(i, &mut expected_element);
+            let expected_element = create_expected_element(i);
             let observed_element = consumer.consume(|slot| unsafe {&*(slot as *const MyData)},
                                || false,
                                |_| {})
@@ -366,11 +348,15 @@ mod tests {
             assert_eq!(observed_element, &expected_element, "Element #{i} doesn't match");
         }
 
-        fn populate_expected_element(i: u64, expected_element: &mut MyData) {
-            expected_element.id = i;
-            expected_element.year_of_birth = 1 + i as u16 % 2023;
-            expected_element.year_of_death = expected_element.year_of_birth + (i % 120) as u16;
-            expected_element.known_number_of_descendents = ( (i % expected_element.year_of_birth as u64) * (expected_element.year_of_death - expected_element.year_of_birth) as u64 ) as u32;
+        fn create_expected_element(i: u64) -> MyData {
+            let year_of_birth = 1 + i as u16 % 2023;
+            let year_of_death = year_of_birth + (i % 120) as u16;
+            MyData {
+                id: i,
+                year_of_birth,
+                year_of_death,
+                known_number_of_descendents: ( (i % year_of_birth as u64) * (year_of_death - year_of_birth) as u64 ) as u32,
+            }
         }
 
     }
@@ -383,9 +369,7 @@ mod tests {
         let meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
         let consumer = meta_log_topic.subscribe(true);
-        meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT,
-                               || false,
-                               |_| {});
+        meta_log_topic.publish(EXPECTED_ELEMENT);
         let observed_element = consumer.consume(|slot| unsafe {&*(slot as *const u128)},
                                                 || false,
                                                 |_| {})

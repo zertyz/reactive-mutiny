@@ -1,9 +1,9 @@
 use crate::{
-    MutinyStreamSource,
+    ChannelConsumer,
     streams_manager::StreamsManagerBase,
     uni::channels::{
-        UniChannelCommon,
-        UniMovableChannel,
+        ChannelCommon,
+        ChannelProducer,
     },
     mutiny_stream::MutinyStream,
 };
@@ -16,6 +16,7 @@ use std::mem::MaybeUninit;
 use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
+use crate::uni::channels::FullDuplexChannel;
 
 
 pub struct Crossbeam<'a, ItemType,
@@ -30,7 +31,7 @@ pub struct Crossbeam<'a, ItemType,
 impl<'a, ItemType: 'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-UniChannelCommon<'a, ItemType>
+ChannelCommon<'a, ItemType, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
@@ -42,13 +43,17 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
+    fn create_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
         MutinyStream::new(stream_id, self)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.tx.len() as u32).await
+    }
+
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
+        self.streams_manager.end_stream(stream_id, timeout, || self.tx.len() as u32).await
     }
 
     async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
@@ -68,20 +73,17 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.tx.len() as u32
     }
 
+    #[inline(always)]
+    fn buffer_size(&self) -> u32 {
+        BUFFER_SIZE as u32
+    }
 }
 
 impl<'a, ItemType: 'a + Send + Sync + Debug,
     const BUFFER_SIZE: usize,
     const MAX_STREAMS: usize>
-UniMovableChannel<'a, ItemType>
+ChannelProducer<'a, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
-
-    #[inline(always)]
-    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
-        let mut item = unsafe { MaybeUninit::<ItemType>::uninit().assume_init() };
-        item_builder(&mut item);
-        self.try_send(item)
-    }
 
     #[inline(always)]
     fn try_send(&self, item: ItemType) -> bool {
@@ -99,11 +101,11 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType: 'a + Debug,
     const BUFFER_SIZE: usize,
     const MAX_STREAMS: usize>
-MutinyStreamSource<'a, ItemType> for
+ChannelConsumer<'a, ItemType> for
 Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn provide(&self, stream_id: u32) -> Option<ItemType> {
+    fn consume(&self, stream_id: u32) -> Option<ItemType> {
         match self.rx.try_recv() {
             Ok(event) => {
                 Some(event)
@@ -133,3 +135,9 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.report_stream_dropped(stream_id)
     }
 }
+
+impl <'a, ItemType:          'a + Debug + Send + Sync,
+          const BUFFER_SIZE: usize,
+          const MAX_STREAMS: usize>
+FullDuplexChannel<'a, ItemType, ItemType>
+for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

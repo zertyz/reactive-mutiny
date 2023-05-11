@@ -9,7 +9,7 @@ use crate::{
             meta_container::MoveContainer,
         },
     },
-    MutinyStreamSource,
+    ChannelConsumer,
     mutiny_stream::MutinyStream,
 };
 use std::{
@@ -23,7 +23,7 @@ use std::{
 };
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
-use crate::uni::channels::{UniChannelCommon, UniMovableChannel};
+use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
 
 
 /// This channel uses the fastest of the queues [FullSyncMove], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
@@ -48,7 +48,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-UniChannelCommon<'a, ItemType>
+ChannelCommon<'a, ItemType, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
@@ -58,13 +58,17 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
+    fn create_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
         MutinyStream::new(stream_id, self)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
+    }
+
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
+        self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
     }
 
     async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
@@ -83,41 +87,42 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn pending_items_count(&self) -> u32 {
         self.container.available_elements_count() as u32
     }
+
+    #[inline(always)]
+    fn buffer_size(&self) -> u32 {
+        BUFFER_SIZE as u32
+    }
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
-    const BUFFER_SIZE: usize,
-    const MAX_STREAMS: usize>
-UniMovableChannel<'a, ItemType>
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelProducer<'a, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
-        self.container.publish(item_builder,
-                              || false,
-                              |len| if len <= MAX_STREAMS as u32 { self.streams_manager.wake_stream(len-1) })
-    }
-
-    #[inline(always)]
     fn try_send(&self, item: ItemType) -> bool {
-        let item = ManuallyDrop::new(item);       // ensure it won't be dropped when this function ends, since it will be "moved"
-        unsafe {
-            self.zero_copy_try_send(|slot| {
-                // move `item` to `slot`
-                std::ptr::copy_nonoverlapping(item.deref() as *const ItemType, (slot as *const ItemType) as *mut ItemType, 1);
-            })
+        match self.container.publish_movable(item) {
+            Some(len_after) => {
+                let len_after = len_after.get();
+                if len_after <= MAX_STREAMS as u32 {
+                    self.streams_manager.wake_stream(len_after-1)
+                }
+                true
+            },
+            None => false,
         }
     }
 }
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Debug + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MutinyStreamSource<'a, ItemType>
+ChannelConsumer<'a, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn provide(&self, _stream_id: u32) -> Option<ItemType> {
+    fn consume(&self, _stream_id: u32) -> Option<ItemType> {
         self.container.consume_movable()
     }
 
@@ -136,3 +141,9 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.report_stream_dropped(stream_id);
     }
 }
+
+impl <'a, ItemType:          'a + Debug + Send + Sync,
+          const BUFFER_SIZE: usize,
+          const MAX_STREAMS: usize>
+FullDuplexChannel<'a, ItemType, ItemType>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

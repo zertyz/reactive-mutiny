@@ -16,6 +16,7 @@ use std::{
     sync::atomic::{AtomicU64,Ordering::Relaxed},
     time::Duration,
 };
+use std::num::NonZeroU32;
 use parking_lot::{
     RawMutex,
     lock_api::{
@@ -187,24 +188,30 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
-        self.base_queue.publish(|slot| {
-                                    *slot = element;
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' enqueued element '{:?}'", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.enqueue_count.fetch_add(1, Relaxed);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
-                                        self.metrics_diagnostics();
-                                    }
-                                },
-                                || {
-                                    self.report_full()
-                                },
-                                |len| if len == 1 {
-                                    self.report_no_longer_empty();
-                                })
+        loop {
+            match self.base_queue.publish(element) {
+                Some(len_after) => {
+                    if Instruments::from(INSTRUMENTS).tracing() {
+                        trace!("### QUEUE '{}' enqueued element '{:?}'", self.queue_name, element);
+                    }
+                    if Instruments::from(INSTRUMENTS).metrics() {
+                        self.enqueue_count.fetch_add(1, Relaxed);
+                    }
+                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
+                        self.metrics_diagnostics();
+                    }
+                    if len_after.get() == 1 {
+                        self.report_no_longer_empty();
+                    }
+                    break true
+                },
+                None => {
+                    if !self.report_full() {
+                        break false
+                    }
+                },
+            }
+        }
     }
 
     #[inline(always)]
@@ -274,34 +281,36 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     fn try_enqueue(&self, element: SlotType) -> bool {
-        self.base_queue.publish(|slot| {
-                                    *slot = element;
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.enqueue_count.fetch_add(1, Relaxed);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
-                                        self.metrics_diagnostics();
-                                    }
-                                 },
-                                || {
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### QUEUE '{}' is full when enqueueing element '{:?}' in non-blocking mode", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.queue_full_count.fetch_add(1, Relaxed);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
-                                        self.metrics_diagnostics();
-                                    }
-                                    self.full_guard.try_lock();
-                                    false
-                                },
-                                |len|  if len == 1 {
-                                    self.report_no_longer_empty();
-                                })
+        match self.base_queue.publish(element) {
+            Some(len_after) => {
+                if Instruments::from(INSTRUMENTS).tracing() {
+                    trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);
+                }
+                if Instruments::from(INSTRUMENTS).metrics() {
+                    self.enqueue_count.fetch_add(1, Relaxed);
+                }
+                if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
+                    self.metrics_diagnostics();
+                }
+                if len_after.get() == 1 {
+                    self.report_no_longer_empty();
+                }
+                true
+            },
+            None => {
+                if Instruments::from(INSTRUMENTS).tracing() {
+                    trace!("### QUEUE '{}' is full when enqueueing element '{:?}' in non-blocking mode", self.queue_name, element);
+                }
+                if Instruments::from(INSTRUMENTS).metrics() {
+                    self.queue_full_count.fetch_add(1, Relaxed);
+                }
+                if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
+                    self.metrics_diagnostics();
+                }
+                self.full_guard.try_lock();
+                false
+            },
+        }
     }
 
     fn try_dequeue(&self) -> Option<SlotType> {

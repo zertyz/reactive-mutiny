@@ -270,7 +270,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             .find(|&vacant_stream_id| *vacant_stream_id == stream_id)
             .is_some();
 
-        debug_assert_eq!(false, is_vacant(), "Mutiny's Multi OgreMPMCQueue Channel @ end_stream(): BUG! stream_id {stream_id} is not running! Running ones are {:?}",
+        debug_assert_eq!(false, is_vacant(), "Mutiny's `StreamsManager` @ end_stream(): BUG! stream_id {stream_id} is not running! Running ones are {:?}",
                                              self.used_streams.iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
 
         let start = Instant::now();

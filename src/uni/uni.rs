@@ -5,9 +5,9 @@ use super::{
         stream_executor::StreamExecutor,
         instruments::Instruments,
         mutiny_stream::MutinyStream,
-        types::MutinyStreamSource,
+        types::ChannelConsumer,
     },
-    channels::{self, UniChannelCommon, UniMovableChannel},
+    channels::{self, ChannelCommon, ChannelProducer},
 };
 use std::{
     fmt::Debug,
@@ -26,9 +26,9 @@ pub type UniChannelType<'a, ItemType,
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
 pub struct Uni<'a, ItemType:          Send + Sync + Debug,
-                   UniChannelType:    UniMovableChannel<'a, ItemType, DerivedItemType> + MutinyStreamSource<'a, ItemType, DerivedItemType>,
+                   UniChannelType:    FullDuplexChannel<'a, ItemType, DerivedItemType>,
                    const INSTRUMENTS: usize,
-                   DerivedItemType:   = ItemType> {
+                   DerivedItemType:   Debug = ItemType> {
     pub uni_channel:              Arc<UniChannelType>,
     pub stream_executor:          Arc<StreamExecutor<INSTRUMENTS>>,
     pub finished_executors_count: AtomicU32,
@@ -36,9 +36,9 @@ pub struct Uni<'a, ItemType:          Send + Sync + Debug,
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         UniChannelType:    UniMovableChannel<'a, ItemType, DerivedItemType> + MutinyStreamSource<'a, ItemType, DerivedItemType>,
+         UniChannelType:    FullDuplexChannel<'a, ItemType, DerivedItemType>,
          const INSTRUMENTS: usize,
-         DerivedItemType>
+         DerivedItemType:   Debug>
 Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// creates & returns a pair (`Uni`, `UniStream`)
@@ -53,17 +53,12 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
-    pub fn zero_copy_try_send(&self, item_builder: impl Fn(&mut ItemType)) -> bool {
-        self.uni_channel.zero_copy_try_send(item_builder)
-    }
-
-    #[inline(always)]
     pub fn try_send(&self, message: ItemType) -> bool {
         self.uni_channel.try_send(message)
     }
 
     pub fn consumer_stream(&self) -> MutinyStream<'a, ItemType, UniChannelType, DerivedItemType> {
-        self.uni_channel.consumer_stream()
+        self.uni_channel.create_stream()
     }
 
     pub async fn flush(&self, duration: Duration) -> u32 {
@@ -119,3 +114,4 @@ macro_rules! unis_close_async {
     }
 }
 pub use unis_close_async;
+use crate::uni::channels::FullDuplexChannel;

@@ -130,7 +130,7 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                     -> Result</*&Self*/&Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.stream_name(), pipeline_name.into()), futures_timeout);
-        let (in_stream, in_stream_id) = self.channel.listener_stream();
+        let (in_stream, in_stream_id) = self.channel.create_stream();
         self.add_executor(Arc::clone(&executor), in_stream_id).await?;
         let out_stream = pipeline_builder(in_stream);
         executor
@@ -176,7 +176,7 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                                             -> Result</*&Self*/&Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
-        let (in_stream, in_stream_id) = self.channel.listener_stream();
+        let (in_stream, in_stream_id) = self.channel.create_stream();
         self.add_executor(Arc::clone(&executor), in_stream_id).await?;
         let out_stream = pipeline_builder(in_stream);
         executor
@@ -193,7 +193,7 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     /// If this `Multi` share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [multis_close_async!()]
     pub async fn close(self: &Self, timeout: Duration) {
-        self.channel.end_all_streams(timeout).await;
+        self.channel.gracefully_end_all_streams(timeout).await;
     }
 
     /// Asynchronously blocks until all resources associated with the executor responsible for `pipeline_name` are freed:
@@ -221,7 +221,7 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
         // wait until all elements are taken out from the queue
         executor_info.stream_executor.report_scheduled_to_finish();
-        self.channel.end_stream(executor_info.stream_id, timeout).await;
+        self.channel.gracefully_end_stream(executor_info.stream_id, timeout).await;
         true
     }
 
@@ -245,7 +245,7 @@ macro_rules! multis_close_async {
      $($multi: expr),+) => {
         {
             tokio::join!( $( $multi.channel.flush($timeout), )+ );
-            tokio::join!( $( $multi.channel.end_all_streams($timeout), )+ );
+            tokio::join!( $( $multi.channel.gracefully_end_all_streams($timeout), )+ );
         }
     }
 }

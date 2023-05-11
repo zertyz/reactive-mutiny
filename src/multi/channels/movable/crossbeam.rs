@@ -5,7 +5,7 @@ use crate::{
         MultiMovableChannel,
     },
     mutiny_stream::MutinyStream,
-    MutinyStreamSource,
+    ChannelConsumer,
 };
 use std::{
     fmt::Debug,
@@ -47,7 +47,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn listener_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
         let stream_id = self.streams_manager.create_stream_id();
         (MutinyStream::new(stream_id, self), stream_id)
     }
@@ -56,11 +56,11 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
 
-    async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
         self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
     }
 
-    async fn end_all_streams(&self, timeout: Duration) -> u32 {
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
         self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
     }
 
@@ -126,11 +126,11 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MutinyStreamSource<'a, ItemType, Arc<ItemType>>
+ChannelConsumer<'a, Arc<ItemType>>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn provide(&self, stream_id: u32) -> Option<Arc<ItemType>> {
+    fn consume(&self, stream_id: u32) -> Option<Arc<ItemType>> {
         let receiver = unsafe { self.receivers.get_unchecked(stream_id as usize) };
         match receiver.try_recv() {
             Ok(event) => {

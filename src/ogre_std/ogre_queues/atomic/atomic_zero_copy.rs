@@ -13,12 +13,7 @@ use crate::ogre_std::{
     },
     ogre_sync,
 };
-use std::{
-    fmt::Debug,
-    sync::atomic::{AtomicU32,Ordering::{Acquire,Relaxed,Release}},
-    mem::{ManuallyDrop, MaybeUninit},
-    num::NonZeroU32,
-};
+use std::{fmt::Debug, sync::atomic::{AtomicU32, Ordering::{Acquire, Relaxed, Release}}, mem::{ManuallyDrop, MaybeUninit}, num::NonZeroU32, ptr};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -63,33 +58,13 @@ MetaPublisher<'a, SlotType> for
 AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
-               ReportFullFn:               Fn() -> bool,
-               ReportLenAfterEnqueueingFn: FnOnce(u32)>
-              (&self, setter_fn:                      SetterFn,
-                      report_full_fn:                 ReportFullFn,
-                      report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
-              -> bool {
-
+    fn publish(&self, item: SlotType) -> Option<NonZeroU32> {
         match self.leak_slot() {
-            Some( (slot_ref, slot_id) ) => {
-                setter_fn(slot_ref);
-                match self.publish_leaked_id(slot_id) {
-                    Some(len_after_publishing) => {
-                        report_len_after_enqueueing_fn(len_after_publishing.get());
-                        true
-                    },
-                    None => {
-                        self.unleak_slot_id(slot_id);
-                        report_full_fn();
-                        false
-                    }
-                }
-            }
-            None => {
-                report_full_fn();
-                false
+            Some( (slot, slot_id) ) => {
+                unsafe { ptr::write(slot, item); }
+                self.publish_leaked_id(slot_id)
             },
+            None => None,
         }
     }
 

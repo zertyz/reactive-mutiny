@@ -11,10 +11,7 @@ use super::super::super::{
     },
     instruments::Instruments,
 };
-use std::{
-    fmt::Debug,
-    sync::atomic::{AtomicU64,Ordering::Relaxed},
-};
+use std::{fmt::Debug, ptr, sync::atomic::{AtomicU64, Ordering::Relaxed}};
 use log::trace;
 use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
@@ -84,31 +81,32 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
-        self.base_queue.publish(|slot| {
-                                    *slot = element;
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.enqueue_count.fetch_add(1, Relaxed);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
-                                        self.metrics_diagnostics();
-                                    }
-                                 },
-                                || {
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### '{}' ENQUEUE: queue is full when attempting to enqueue element '{:?}'", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.queue_full_count.fetch_add(1, Relaxed);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
-                                        self.metrics_diagnostics();
-                                    }
-                                    false
-                                },
-                                |_| {})
+        match self.base_queue.publish(element) {
+            Some( len_after ) => {
+                if Instruments::from(INSTRUMENTS).tracing() {
+                    trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
+                }
+                if Instruments::from(INSTRUMENTS).metrics() {
+                    self.enqueue_count.fetch_add(1, Relaxed);
+                }
+                if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
+                    self.metrics_diagnostics();
+                }
+                true
+            },
+            None => {
+                if Instruments::from(INSTRUMENTS).tracing() {
+                    trace!("### '{}' ENQUEUE: queue is full when attempting to enqueue element '{:?}'", self.queue_name, element);
+                }
+                if Instruments::from(INSTRUMENTS).metrics() {
+                    self.queue_full_count.fetch_add(1, Relaxed);
+                }
+                if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
+                    self.metrics_diagnostics();
+                }
+                false
+            },
+        }
     }
 
     #[inline(always)]

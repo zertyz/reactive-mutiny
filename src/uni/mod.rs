@@ -32,7 +32,7 @@ pub mod channels;
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use crate::{instruments::Instruments, MutinyStreamSource, uni::channels::{UniChannelCommon}};
+    use crate::{instruments::Instruments, ChannelConsumer, uni::channels::{ChannelCommon}};
     use std::{
         sync::{
             Arc,
@@ -48,7 +48,7 @@ mod tests {
     };
     use minstant::Instant;
     use crate::mutiny_stream::MutinyStream;
-    use crate::uni::channels::UniMovableChannel;
+    use crate::uni::channels::{ChannelProducer, FullDuplexChannel};
 
 
     /// The `UniBuilder` specialization used for the tests to follow
@@ -452,7 +452,7 @@ mod tests {
         const FACTOR: u32 = 40;
 
         /// measure how long it takes to stream a certain number of elements through the given `uni`
-        async fn profile_uni<'a, UniChannelType:    UniMovableChannel<'a, u32> + MutinyStreamSource<'a, u32> + Sync + Send + 'a,
+        async fn profile_uni<'a, UniChannelType:    FullDuplexChannel<'a, u32, u32> + Sync + Send + 'a,
                                  const INSTRUMENTS: usize>
                             (uni:            Arc<Uni<'a, u32, UniChannelType, INSTRUMENTS>>,
                              profiling_name: &str,

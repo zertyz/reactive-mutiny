@@ -7,11 +7,11 @@ use reactive_mutiny::{
     uni::{
         Uni,
         channels::{
-            UniChannelCommon,
-            UniMovableChannel,
+            ChannelCommon,
+            ChannelProducer,
         },
     },
-    MutinyStreamSource,
+    ChannelConsumer,
     Instruments,
 };
 use std::{
@@ -32,9 +32,10 @@ use std::time::Instant;
 use futures::{SinkExt, Stream, StreamExt};
 use reactive_mutiny::ogre_std::ogre_alloc::ogre_arc::OgreArc;
 use reactive_mutiny::stream_executor::StreamExecutor;
+use reactive_mutiny::uni::channels::FullDuplexChannel;
 
 
-const BUFFER_SIZE: usize = 1024;
+const BUFFER_SIZE: usize = 1<<17;
 const MAX_STREAMS: usize = 1;
 const INSTRUMENTS: usize = {Instruments::NoInstruments.into()};
 
@@ -59,13 +60,13 @@ type AtomicZeroCopyUniBuilder<OnStreamCloseFnType, CloseVoidAsyncType> = reactiv
                                                                                                           INSTRUMENTS, OgreArc<ExchangeEvent, OgreArrayPoolAllocator>, OnStreamCloseFnType, CloseVoidAsyncType>;
 
 
-async fn uni_benchmark<'a, UniChannelType: UniMovableChannel<'a, ExchangeEvent> + MutinyStreamSource<'a, ExchangeEvent> + Sync + Send + 'a>
+async fn uni_benchmark<'a, UniChannelType: FullDuplexChannel<'a, ExchangeEvent, ExchangeEvent> + Sync + Send + 'a>
                       (ident: &str, uni: Uni<'a, ExchangeEvent, UniChannelType, 9999>) {
     // println!("{ident}Here I am, for {:?}", uni)
 }
 
 async fn uni_builder_benchmark<ConsumedEventType:   'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                               UniChannelType:      UniMovableChannel<'static, ExchangeEvent, ConsumedEventType> + MutinyStreamSource<'static, ExchangeEvent, ConsumedEventType> + Sync + Send + 'static,
+                               UniChannelType:      FullDuplexChannel<'static, ExchangeEvent, ConsumedEventType> + Sync + Send + 'static,
                                OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                                CloseVoidAsyncType:  Future<Output=()> + Send + 'static>
                               (ident: &str,
@@ -96,7 +97,7 @@ async fn uni_builder_benchmark<ConsumedEventType:   'static + Debug + Send + Syn
     let start = Instant::now();
     for e in 1..=ITERATIONS {
         while !uni.try_send(ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u64 }) {
-            std::hint::spin_loop();
+            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
         }
     }
     uni.close(Duration::from_secs(5)).await;
@@ -108,7 +109,7 @@ async fn uni_builder_benchmark<ConsumedEventType:   'static + Debug + Send + Syn
              if observed == expected { format!("✓") } else { format!("∅ -- SUM of the first {ITERATIONS} natural numbers differ! Expected: {expected}; Observed: {observed}") });
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() {
     println!("On this code, you may see how to build `Uni`s and `Multi`s using all the available channels");
     println!("-- each providing tradeoffs between features and performance.");

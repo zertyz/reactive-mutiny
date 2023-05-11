@@ -10,29 +10,12 @@ use std::num::NonZeroU32;
 ///      allowing the allocated slot to participate in more complex logics.
 pub trait MetaPublisher<'a, SlotType: 'a> {
 
-    /// Zero-copy enqueue method with the following characteristics:
-    ///   - After allocating a slot for the new element, `setter_fn(&mut slot)` is called to fill it;
-    ///   - If the queue is found to be full, `report_full_fn()` is called. Through this function, specializations may turn implementing structures into a blocking queue and/or compute metrics.
-    ///     Furthermore, if this method returns `true`, the enqueuer should try an allocation again and again;
-    ///   - `report_len_after_enqueueing_fn(len)` is called after the enqueueing was done, received the number of not-yet-collected elements it contained then -- a similar info as [available_elements()].
-    ///     Specializers might use this to awake a number of consumers.
-    /// Returns:
-    ///   - `true` if the enqueueing was done;
-    ///   - `false` otherwise -- possibly due to a bounded queue being full (generally meaning the caller should try again after spin-waiting or sleeping a bit).
-    ///     Keep in mind that blocking-queues are likely never to return false (unless some sort of enqueueing timeout happens).
-    /// Caveats:
-    ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call;
-    ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
-    ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
+    /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
+    /// move the data (copy & forget) rather than zero-copying it.\
+    /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
+    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
     /// IMPLEMENTORS: #[inline(always)]
-    fn publish<SetterFn:                   FnOnce(&mut SlotType),
-               ReportFullFn:               Fn() -> bool,
-               ReportLenAfterEnqueueingFn: FnOnce(u32)>
-              (&'a self,
-               setter_fn:                      SetterFn,
-               report_full_fn:                 ReportFullFn,
-               report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
-              -> bool;
+    fn publish(&self, item: SlotType) -> Option<NonZeroU32>;
 
     /// Advanced method to publish an element: allocates a slot from the pool, returning a reference to it.\
     /// Once called, either [publish_leaked()] or [unleak_slot()] should also be, eventually, called

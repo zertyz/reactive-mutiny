@@ -6,13 +6,13 @@ use super::{
         instruments::Instruments,
         stream_executor::StreamExecutor,
         mutiny_stream::MutinyStream,
-        types::MutinyStreamSource,
+        types::ChannelConsumer,
     },
     uni::{
         Uni,
         UniChannelType,
     },
-    channels::{UniMovableChannel, UniChannelCommon},
+    channels::{ChannelProducer, ChannelCommon},
 };
 use std::{
     fmt::Debug,
@@ -23,12 +23,13 @@ use std::{
 };
 use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
+use crate::uni::channels::FullDuplexChannel;
 
 
 pub struct UniBuilder<InType:              'static + Debug + Sync + Send,
-                      UniChannelType:      UniMovableChannel<'static, InType, DerivedItemType> + MutinyStreamSource<'static, InType, DerivedItemType> + Sync + Send + 'static,
+                      UniChannelType:      ChannelProducer<'static, InType> + ChannelConsumer<'static, DerivedItemType> + Sync + Send + 'static,
                       const INSTRUMENTS:   usize,
-                      DerivedItemType:     'static + Sync + Send,
+                      DerivedItemType:     'static + Debug + Sync + Send,
                       OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                       CloseVoidAsyncType:  Future<Output=()> + Send + 'static> {
 
@@ -43,9 +44,9 @@ pub struct UniBuilder<InType:              'static + Debug + Sync + Send,
 
 }
 impl<InType:              'static + Sync + Send + Debug,
-     UniChannelType:      UniMovableChannel<'static, InType, DerivedItemType> + MutinyStreamSource<'static, InType, DerivedItemType> + Sync + Send + 'static,
+     UniChannelType:      FullDuplexChannel<'static, InType, DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS:   usize,
-     DerivedItemType:     'static + Sync + Send,
+     DerivedItemType:     'static + Debug + Sync + Send,
      OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
      CloseVoidAsyncType:  Future<Output=()> + Send + 'static>
 UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType, OnStreamCloseFnType, CloseVoidAsyncType> {

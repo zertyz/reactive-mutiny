@@ -25,13 +25,12 @@ pub type UniBuilder<InType,
                              CloseVoidAsyncType>;
 
 
-/// Source of events for [UniStream] & [MultiStream]
-pub trait MutinyStreamSource<'a, ItemType:        Debug + 'a,
-                                 DerivedItemType: 'a = ItemType> {
+/// Source of events for [MutinyStream].
+pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {
 
     /// Delivers the next event, whenever the Stream wants it.\
     /// IMPLEMENTORS: use #[inline(always)]
-    fn provide(&self, stream_id: u32) -> Option<DerivedItemType>;
+    fn consume(&self, stream_id: u32) -> Option<DerivedItemType>;
 
     /// Returns `false` if the `Stream` has been signaled to end its operations, causing it to report "out-of-elements" as soon as possible.\
     /// IMPLEMENTORS: use #[inline(always)]

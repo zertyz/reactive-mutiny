@@ -1,7 +1,7 @@
 //! Resting place for [MutinyStream]
 
 use crate::{
-    MutinyStreamSource,
+    ChannelConsumer,
     ogre_std::ogre_alloc::{
         OgreAllocator,
         ogre_arc::OgreArc,
@@ -26,21 +26,21 @@ use futures::stream::Stream;
 ///   - then through the user provided `pipeline_builder()`
 ///   - and, finally, to the `StreamExecutor`.
 /// ... allowing all of them to behave as a single function, that gets optimized together.
-pub struct MutinyStream<'a, ItemType:          Debug + Send + Sync + 'a,
-                            StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType> + ?Sized,
-                            DerivedItemType:   'a = ItemType> {
+pub struct MutinyStream<'a, ItemType:            Debug + Send + Sync + 'a,
+                            ChannelConsumerType: ChannelConsumer<'a, DerivedItemType> + ?Sized,
+                            DerivedItemType:     'a + Debug = ItemType> {
     stream_id:     u32,
-    events_source: Arc<StreamSourceType>,
+    events_source: Arc<ChannelConsumerType>,
     _phantom:      PhantomData<(&'a ItemType, &'a DerivedItemType)>,
 
 }
 
-impl<'a, ItemType:          Debug + Send + Sync,
-         StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType>,
-         DerivedItemType>
-MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
+impl<'a, ItemType:            Debug + Send + Sync,
+         ChannelConsumerType: ChannelConsumer<'a, DerivedItemType>,
+         DerivedItemType:     Debug>
+MutinyStream<'a, ItemType, ChannelConsumerType, DerivedItemType> {
 
-    pub fn new(stream_id: u32, events_source: &Arc<StreamSourceType>) -> Self {
+    pub fn new(stream_id: u32, events_source: &Arc<ChannelConsumerType>) -> Self {
         Self {
             stream_id,
             events_source: events_source.clone(),
@@ -50,17 +50,17 @@ MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
 
 }
 
-impl<'a, ItemType:          Debug + Send + Sync + 'a,
-         StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType>,
-         DerivedItemType>
+impl<'a, ItemType:            Debug + Send + Sync + 'a,
+         ChannelConsumerType: ChannelConsumer<'a, DerivedItemType>,
+         DerivedItemType:     Debug>
 Stream for
-MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
+MutinyStream<'a, ItemType, ChannelConsumerType, DerivedItemType> {
 
     type Item = DerivedItemType;
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let event = self.events_source.provide(self.stream_id);
+        let event = self.events_source.consume(self.stream_id);
         match event {
             Some(_) => Poll::Ready(event),
             None => {
@@ -75,11 +75,11 @@ MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
     }
 }
 
-impl<'a, ItemType:          Debug + Send + Sync,
-         StreamSourceType:  MutinyStreamSource<'a, ItemType, DerivedItemType> + ?Sized,
-         DerivedItemType>
+impl<'a, ItemType:            Debug + Send + Sync,
+         ChannelConsumerType: ChannelConsumer<'a, DerivedItemType> + ?Sized,
+         DerivedItemType:     Debug>
 Drop
-for MutinyStream<'a, ItemType, StreamSourceType, DerivedItemType> {
+for MutinyStream<'a, ItemType, ChannelConsumerType, DerivedItemType> {
     fn drop(&mut self) {
         self.events_source.drop_resources(self.stream_id);
     }

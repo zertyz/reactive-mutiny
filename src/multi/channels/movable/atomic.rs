@@ -15,7 +15,7 @@ use crate::{
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
-    MutinyStreamSource,
+    ChannelConsumer,
 };
 use std::{
     time::Duration,
@@ -63,7 +63,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn listener_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
         let stream_id = self.streams_manager.create_stream_id();
         (MutinyStream::new(stream_id, self), stream_id)
     }
@@ -72,11 +72,11 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
 
-    async fn end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
         self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
     }
 
-    async fn end_all_streams(&self, timeout: Duration) -> u32 {
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
         self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
     }
 
@@ -145,11 +145,11 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MutinyStreamSource<'a, ItemType, Arc<ItemType>>
+ChannelConsumer<'a, Arc<ItemType>>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn provide(&self, stream_id: u32) -> Option<Arc<ItemType>> {
+    fn consume(&self, stream_id: u32) -> Option<Arc<ItemType>> {
         let channel = unsafe { self.channels.get_unchecked(stream_id as usize) };
         channel.consume_movable()
     }

@@ -16,6 +16,7 @@ use std::{
     mem::{MaybeUninit, ManuallyDrop},
     ops::Deref,
 };
+use std::num::NonZeroU32;
 use log::trace;
 
 
@@ -54,27 +55,26 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
-        let element = ManuallyDrop::new(element);       // ensure it won't be dropped when this function ends, since it will be "moved"
-        self.base_queue.publish(|slot| {
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.enqueue_count.fetch_add(1, Relaxed);
-                                    }
-                                    // moves `element` to the buffer -- it won't be dropped after this function ends since it has been wrapped into a `ManuallyDrop`
-                                    unsafe { std::ptr::copy_nonoverlapping(element.deref() as *const SlotType, (slot as *const SlotType) as *mut SlotType, 1) }
-                                 },
-                                || {
-                                    if Instruments::from(INSTRUMENTS).tracing() {
-                                        trace!("### '{}' ENQUEUE: queue is full when attempting to enqueue element '{:?}'", self.queue_name, element);
-                                    }
-                                    if Instruments::from(INSTRUMENTS).metrics() {
-                                        self.queue_full_count.fetch_add(1, Relaxed);
-                                    }
-                                    false
-                                },
-                                |_| {})
+        if Instruments::from(INSTRUMENTS).tracing() {
+            trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
+        }
+        match self.base_queue.publish(element) {
+            Some(len_after) => {
+                if Instruments::from(INSTRUMENTS).metrics() {
+                    self.enqueue_count.fetch_add(1, Relaxed);
+                }
+                true
+            }
+            None => {
+                if Instruments::from(INSTRUMENTS).tracing() {
+                    trace!("### '{}' ENQUEUE: queue is full. Last enqueueing failed", self.queue_name);
+                }
+                if Instruments::from(INSTRUMENTS).metrics() {
+                    self.queue_full_count.fetch_add(1, Relaxed);
+                }
+                false
+            }
+        }
     }
 
     #[inline(always)]

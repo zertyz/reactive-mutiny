@@ -1,7 +1,7 @@
 //! Resting place for [Atomic]
 
 use crate::{
-    types::MutinyStreamSource,
+    types::ChannelConsumer,
     ogre_std::{
         ogre_queues::{
             atomic::atomic_move::AtomicMove,
@@ -11,8 +11,8 @@ use crate::{
         },
     },
     uni::channels::{
-        UniChannelCommon,
-        UniMovableChannel,
+        ChannelCommon,
+        ChannelProducer,
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
@@ -26,7 +26,9 @@ use std::{
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
 };
+use std::num::NonZeroU32;
 use async_trait::async_trait;
+use crate::uni::channels::FullDuplexChannel;
 
 
 /// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
@@ -45,7 +47,7 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-UniChannelCommon<'a, ItemType>
+ChannelCommon<'a, ItemType, ItemType>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
@@ -55,13 +57,17 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn consumer_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
+    fn create_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
         let stream_id = self.streams_manager.create_stream_id();
         MutinyStream::new(stream_id, self)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
+    }
+
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
+        self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
     }
 
     async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
@@ -80,36 +86,30 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn pending_items_count(&self) -> u32 {
         self.channel.available_elements_count() as u32
     }
+
+    #[inline(always)]
+    fn buffer_size(&self) -> u32 {
+        BUFFER_SIZE as u32
+    }
 }
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,
     const BUFFER_SIZE: usize,
     const MAX_STREAMS: usize>
-UniMovableChannel<'a, ItemType>
+ChannelProducer<'a, ItemType>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn zero_copy_try_send(&self, item_builder: impl FnOnce(&mut ItemType)) -> bool {
-        self.channel.publish(item_builder,
-                             || {
-                                   self.streams_manager.wake_all_streams();
-                                   false
-                               },
-                             |len| if len <= 1 {
-                                                                        self.streams_manager.wake_stream(0)
-                                                                    } else if len <= MAX_STREAMS as u32 {
-                                                                        self.streams_manager.wake_stream(len-1)
-                                                                    })
-    }
-
-    #[inline(always)]
     fn try_send(&self, item: ItemType) -> bool {
-        let item = ManuallyDrop::new(item);       // ensure it won't be dropped when this function ends, since it will be "moved"
-        unsafe {
-            self.zero_copy_try_send(|slot| {
-                // move `item` to `slot`
-                std::ptr::copy_nonoverlapping(item.deref() as *const ItemType, (slot as *const ItemType) as *mut ItemType, 1);
-            })
+        match self.channel.publish_movable(item) {
+            Some(len_after) => {
+                let len_after = len_after.get();
+                if len_after <= MAX_STREAMS as u32 {
+                    self.streams_manager.wake_stream(len_after-1)
+                }
+                true
+            },
+            None => false,
         }
     }
 }
@@ -117,11 +117,11 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MutinyStreamSource<'a, ItemType>
+ChannelConsumer<'a, ItemType>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn provide(&self, _stream_id: u32) -> Option<ItemType> {
+    fn consume(&self, _stream_id: u32) -> Option<ItemType> {
         self.channel.consume_movable()
     }
 
@@ -140,3 +140,9 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.report_stream_dropped(stream_id);
     }
 }
+
+impl <'a, ItemType:          'a + Debug + Send + Sync,
+          const BUFFER_SIZE: usize,
+          const MAX_STREAMS: usize>
+FullDuplexChannel<'a, ItemType, ItemType>
+for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

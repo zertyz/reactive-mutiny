@@ -20,7 +20,8 @@ pub trait BenchmarkableContainer<SlotType> {
 /// Given a `container' and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in all-in / all-out mode --
 /// pushes everybody and then pops everybody -- repeating the process until 'deadline' exceeds. Returns the projected (or average) number of
 /// operations per second (each individual push or pop is considered an operation)
-pub fn all_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
+pub fn all_in_and_out_benchmark<ContainerType: BenchmarkableContainer<usize> + Sync>
+                               (container: ContainerType, threads: usize, deadline: Duration) -> f64 {
 
     let container_size = container.max_size();
 
@@ -41,7 +42,8 @@ pub fn all_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> +
 /// Given a `container` and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in single-in / single-out mode --
 /// each thread will push / pop a single element at a time -- repeating the process until 'deadline' exceeds. Returns the projected (or average)
 /// number of operations per second (each individual push or pop is considered an operation)
-pub fn single_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
+pub fn single_in_and_out_benchmark<ContainerType: BenchmarkableContainer<usize> + Sync>
+                                  (container: ContainerType, threads: usize, deadline: Duration) -> f64 {
 
     let loops_per_iteration = 1<<16;
     let ops = compute_operations_per_second(format!("single_in_and_out_benchmark {}", container.implementation_name()),
@@ -61,7 +63,8 @@ pub fn single_in_and_out_benchmark(container: &(dyn BenchmarkableContainer<usize
 /// Given a `container` and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in single producer / multi consumer mode --
 /// a single thread will push and 'threads'-1 will pop -- repeating the process until 'deadline' exceeds. Returns the projected (or average) number of
 /// operations per second (each individual push or pop is considered an operation, as long as they succeed)
-pub fn single_producer_multiple_consumers_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
+pub fn single_producer_multiple_consumers_benchmark<ContainerType: BenchmarkableContainer<usize> + Sync>
+                                                   (container: ContainerType, threads: usize, deadline: Duration) -> f64 {
 
     let container_size = container.max_size();
     let consumer_threads = threads-1;
@@ -113,7 +116,8 @@ pub fn single_producer_multiple_consumers_benchmark(container: &(dyn Benchmarkab
 /// Given a `container` and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in multi producer / single consumer mode --
 /// a single thread will pop and 'threads'-1 will push -- repeating the process until 'deadline' exceeds. Returns the projected (or average) number of
 /// operations per second (each individual push or pop is considered an operation, as long as they succeed)
-pub fn multiple_producers_single_consumer_benchmark(container: &(dyn BenchmarkableContainer<usize> + Sync), threads: usize, deadline: Duration) -> f64 {
+pub fn multiple_producers_single_consumer_benchmark<ContainerType: BenchmarkableContainer<usize> + Sync>
+                                                   (container: ContainerType, threads: usize, deadline: Duration) -> f64 {
 
     let container_size = container.max_size();
     let producer_threads = threads-1;
@@ -265,7 +269,7 @@ mod benchmark_stacks {
         println!();
         for n_threads in [1, 2, 4] {
             println!("{n_threads} threads:");
-            all_in_and_out_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -275,7 +279,7 @@ mod benchmark_stacks {
         println!();
         for n_threads in [1, 2, 4] {
             println!("{n_threads} threads:");
-            single_in_and_out_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -285,7 +289,7 @@ mod benchmark_stacks {
         println!();
         for n_threads in [2, 3, 5] {
             println!("{n_threads} threads:");
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -295,7 +299,7 @@ mod benchmark_stacks {
         println!();
         for n_threads in [2, 3, 5] {
             println!("{n_threads} threads:");
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_stacks::non_blocking_atomic_stack::Stack::<usize, 65536, false, false>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -369,9 +373,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
-            all_in_and_out_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -381,9 +385,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
-            single_in_and_out_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -393,9 +397,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -405,9 +409,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::atomic::BlockingQueue::<usize, 65536, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(&super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 65536, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 

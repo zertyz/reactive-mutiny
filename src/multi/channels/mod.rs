@@ -6,7 +6,7 @@ pub mod zero_copy;
 use {
     super::{
         super::{
-            types::MutinyStreamSource,
+            types::ChannelConsumer,
             mutiny_stream::MutinyStream,
         },
     },
@@ -31,8 +31,8 @@ pub trait MultiChannelCommon<'a, ItemType: Debug + Send + Sync> {
     /// Returns `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
     /// If called more than once, each `Stream` will receive all elements sent to the [Multi].\
     /// Panics if called more times than allowed by [Multi]'s `MAX_STREAMS`
-    fn listener_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32)
-                                            where Self: MutinyStreamSource<'a, ItemType, Arc<ItemType>>;
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32)
+                                          where Self: ChannelConsumer<'a, Arc<ItemType>>;
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
@@ -41,12 +41,12 @@ pub trait MultiChannelCommon<'a, ItemType: Debug + Send + Sync> {
     /// Flushes & signals that the given `stream_id` should cease its activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
-    async fn /*gracefully_*/end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
 
     /// Flushes & signals that all streams should cease their activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
-    async fn /*gracefully_*/end_all_streams(&self, timeout: Duration) -> u32;
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32;
 
     /// Sends a signal to all streams, urging them to cease their operations.\
     /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
@@ -60,8 +60,8 @@ pub trait MultiChannelCommon<'a, ItemType: Debug + Send + Sync> {
     /// IMPLEMENTORS: #[inline(always)]
     fn pending_items_count(&self) -> u32;
 
-    /// Tells how many events may be produced ahead of consumers.\
-    /// IMPLEMENTORS: #[inline(always)]
+    /// Tells how many events may be produced ahead of the consumers.\
+    /// IMPLEMENTORS: `const fn`
     fn buffer_size(&self) -> u32;
 }
 
@@ -69,7 +69,7 @@ pub trait MultiChannelCommon<'a, ItemType: Debug + Send + Sync> {
 /// compiler optimizations (that would make it zero-copy) are not possible.
 pub trait MultiMovableChannel<'a, ItemType: Debug + Send + Sync>: MultiChannelCommon<'a, ItemType> {
 
-    /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::listener_stream()]
+    /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::create_stream()]
     /// IMPLEMENTORS: #[inline(always)]
     fn send(&self, item: ItemType);
 
@@ -114,7 +114,7 @@ mod tests {
             #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
                 let channel = <$multi_channel_type>::new("doc_test");
-                let (mut stream, _stream_id) = channel.listener_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
                 channel.send("a");
                 println!("received: {}", stream.next().await.unwrap());
             }
@@ -138,9 +138,9 @@ mod tests {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$multi_channel_type>::new("stream_and_channel_dropping");
                     assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
-                    let (mut stream_1, _stream_id) = channel.listener_stream();
+                    let (mut stream_1, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
-                    let (mut stream_2, _stream_id_2) = channel.listener_stream();
+                    let (mut stream_2, _stream_id_2) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating a stream should increase the ref count by 1");
                     channel.send("a");
                     println!("received: stream_1: {}; stream_2: {}", stream_1.next().await.unwrap(), stream_2.next().await.unwrap());
@@ -153,11 +153,11 @@ mod tests {
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$multi_channel_type>::new("stream_and_channel_dropping");
-                    let stream = channel.listener_stream();
+                    let stream = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 3");
                     drop(stream);
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
-                    let (mut stream, _stream_id) = channel.listener_stream();
+                    let (mut stream, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.send("a");
                     println!("received: {}", stream.next().await.unwrap());
@@ -200,20 +200,20 @@ mod tests {
 
                 println!("1) streams 1 & 2 about to receive a message");
                 let message = "to `stream1` and `stream2`".to_string();
-                let (stream1, _stream1_id) = channel.listener_stream();
-                let (stream2, _stream2_id) = channel.listener_stream();
+                let (stream1, _stream1_id) = channel.create_stream();
+                let (stream2, _stream2_id) = channel.create_stream();
                 channel.send(message.clone());
                 assert_received(stream1, message.clone(), "`stream1` didn't receive the right message").await;
                 assert_received(stream2, message.clone(), "`stream2` didn't receive the right message").await;
 
                 println!("2) stream3 should timeout");
-                let (stream3, _stream3_id) = channel.listener_stream();
+                let (stream3, _stream3_id) = channel.create_stream();
                 assert_no_message(stream3, "`stream3` simply should timeout (no message will ever be sent through it)").await;
 
                 println!("3) several creations and removals");
                 for i in 0..10240 {
                     let message = format!("gremling #{}", i);
-                    let (gremlin_stream, _gremlin_stream_id) = channel.listener_stream();
+                    let (gremlin_stream, _gremlin_stream_id) = channel.create_stream();
                     channel.send(message.clone());
                     assert_received(gremlin_stream, message, "`gremling_stream` didn't receive the right message").await;
                 }
@@ -258,7 +258,7 @@ mod tests {
                     .then(|_i| {
                         let channel = channel.clone();
                         async move {
-                            let (stream, _stream_id) = channel.listener_stream();
+                            let (stream, _stream_id) = channel.create_stream();
                             stream
                         }
                     })
@@ -307,10 +307,10 @@ mod tests {
                 {
                     println!("Creating & ending a single stream: ");
                     let channel = <$multi_channel_type>::new("end_streams");
-                    let (mut stream, stream_id) = channel.listener_stream();
+                    let (mut stream, stream_id) = channel.create_stream();
                     tokio::spawn(async move {
                         tokio::time::sleep(WAIT_TIME/2).await;
-                        channel.end_stream(stream_id, WAIT_TIME).await;
+                        channel.gracefully_end_stream(stream_id, WAIT_TIME).await;
                     });
                     match tokio::time::timeout(WAIT_TIME, stream.next()).await {
                         Ok(none_item)     => assert_eq!(none_item, None, "Ending a stream should make it return immediately from the waiting state with `None`"),
@@ -320,8 +320,8 @@ mod tests {
                 {
                     println!("Creating & ending two streams: ");
                     let channel = <$multi_channel_type>::new("end_streams");
-                    let (mut first, first_id) = channel.listener_stream();
-                    let (mut second, second_id) = channel.listener_stream();
+                    let (mut first, first_id) = channel.create_stream();
+                    let (mut second, second_id) = channel.create_stream();
                     let first_ended = Arc::new(AtomicBool::new(false));
                     let second_ended = Arc::new(AtomicBool::new(false));
                     {
@@ -347,8 +347,8 @@ mod tests {
                         });
                     }
                     tokio::time::sleep(WAIT_TIME/2).await;
-                    channel.end_stream(first_id, WAIT_TIME).await;
-                    channel.end_stream(second_id, WAIT_TIME).await;
+                    channel.gracefully_end_stream(first_id, WAIT_TIME).await;
+                    channel.gracefully_end_stream(second_id, WAIT_TIME).await;
                     assert_eq!(first_ended.load(Relaxed), true, "`first` stream didn't end in time. Inspect the test output for hints");
                     assert_eq!(second_ended.load(Relaxed), true, "`second` stream didn't end in time. Inspect the test output for hints");
                 }
@@ -371,8 +371,8 @@ mod tests {
             async fn $fn_name() {
                 const PAYLOAD_TEXT: &str = "A shareable playload";
                 let channel = <$multi_channel_type>::new("payload_dropping");
-                let (mut stream_1, _stream_id) = channel.listener_stream();
-                let (mut stream_2, _stream_id) = channel.listener_stream();
+                let (mut stream_1, _stream_id) = channel.create_stream();
+                let (mut stream_2, _stream_id) = channel.create_stream();
                 channel.send(String::from(PAYLOAD_TEXT));
 
                 let payload_1 = stream_1.next().await.unwrap();
@@ -407,7 +407,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let (mut stream, _stream_id) = channel.listener_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
 
                 print!("{} (same task / same thread):           ", profiling_name);
                 std::io::stdout().flush().unwrap();
@@ -435,7 +435,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let (mut stream, _stream_id) = channel.listener_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
 
                 let sender_future = async {
                     let mut e = 0;
@@ -447,7 +447,7 @@ mod tests {
                         }
                         tokio::task::yield_now().await;
                     }
-                    channel.end_all_streams(Duration::from_secs(1)).await;
+                    channel.gracefully_end_all_streams(Duration::from_secs(1)).await;
                 };
 
                 let receiver_future = async {
@@ -477,7 +477,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let (mut stream, _stream_id) = channel.listener_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     let mut e = 0;
