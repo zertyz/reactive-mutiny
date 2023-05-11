@@ -120,6 +120,9 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// Wakes all streams -- suitable for EOL procedures
     pub fn wake_all_streams(&self) {
         for stream_id in 0..MAX_STREAMS as u32 {
+            if stream_id == u32::MAX {
+                break
+            }
             self.wake_stream(stream_id);
         }
     }

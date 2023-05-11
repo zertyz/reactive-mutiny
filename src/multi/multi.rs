@@ -1,8 +1,8 @@
 //! See [super]
 
-pub use crate::multi::channels::{
-    MultiChannelCommon,
-    MultiMovableChannel,
+pub use crate::uni::channels::{
+    ChannelCommon,
+    ChannelProducer,
 };
 use super::super::{
     instruments::Instruments,
@@ -75,7 +75,7 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
 
     #[inline(always)]
     pub fn send_arc(&self, arc_item: &Arc<ItemType>) {
-        self.channel.send_arc(arc_item);
+        self.channel.send_derived(arc_item);
     }
 
     #[inline(always)]

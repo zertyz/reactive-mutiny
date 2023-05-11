@@ -10,7 +10,7 @@ use std::{
     sync::atomic::AtomicU32,
     sync::Arc,
 };
-use reactive_mutiny::multi::MultiMovableChannel;
+use reactive_mutiny::multi::ChannelProducer;
 use chrono::Timelike;
 use neat_date_time::neat_time;
 use tokio::sync::RwLock;

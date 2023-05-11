@@ -19,67 +19,6 @@ use std::{
 use async_trait::async_trait;
 
 
-/// Defines common abstractions on how [Multi]s receives produced events and delivers them to `Stream`s.\
-/// Implementors should also implement one of [MultiMovableChannel] or [MultiZeroCopyChannel].
-/// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
-#[async_trait]
-pub trait MultiChannelCommon<'a, ItemType: Debug + Send + Sync> {
-
-    /// Creates a new instance of this channel, to be referred to (in logs) as `name`
-    fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
-
-    /// Returns `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
-    /// If called more than once, each `Stream` will receive all elements sent to the [Multi].\
-    /// Panics if called more times than allowed by [Multi]'s `MAX_STREAMS`
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32)
-                                          where Self: ChannelConsumer<'a, Arc<ItemType>>;
-
-    /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
-    /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
-    async fn flush(&self, timeout: Duration) -> u32;
-
-    /// Flushes & signals that the given `stream_id` should cease its activities when there are no more elements left
-    /// to process, waiting for the operation to complete for up to `timeout`.\
-    /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
-    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
-
-    /// Flushes & signals that all streams should cease their activities when there are no more elements left
-    /// to process, waiting for the operation to complete for up to `timeout`.\
-    /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
-    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32;
-
-    /// Sends a signal to all streams, urging them to cease their operations.\
-    /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
-    /// nor cares if there are remaining elements to be processed.
-    fn cancel_all_streams(&self);
-
-    /// Informs the caller how many active streams are currently managed by this channel
-    fn running_streams_count(&self) -> u32;
-
-    /// Tells how many events are waiting to be taken out of this channel.\
-    /// IMPLEMENTORS: #[inline(always)]
-    fn pending_items_count(&self) -> u32;
-
-    /// Tells how many events may be produced ahead of the consumers.\
-    /// IMPLEMENTORS: `const fn`
-    fn buffer_size(&self) -> u32;
-}
-
-/// Defines how to send events (to a [Multi]) that may be subject of moving (copying from one place in RAM to another), if
-/// compiler optimizations (that would make it zero-copy) are not possible.
-pub trait MultiMovableChannel<'a, ItemType: Debug + Send + Sync>: MultiChannelCommon<'a, ItemType> {
-
-    /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::create_stream()]
-    /// IMPLEMENTORS: #[inline(always)]
-    fn send(&self, item: ItemType);
-
-    /// MAYBE THIS METHOD WON'T BE REQUIRED ANYMORE, AS WE WON'T BE FORCING ARC ON MOVABLE CHANNELS ANYMORE... AND ZERO-COPY WON'T REQUIRE THIS AT ALL
-    /// IMPLEMENTORS: #[inline(always)]
-    fn send_arc(&self, arc_item: &Arc<ItemType>);
-
-}
-
-
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [multi/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
 ///          this is due to the implementation notes on [UniChannel]: we can't have a trait to unify all
@@ -93,7 +32,8 @@ pub trait MultiMovableChannel<'a, ItemType: Debug + Send + Sync>: MultiChannelCo
 ///     type MultiChannelType<ItemType, BUFFER_SIZE> = atomic_queue::AtomicQueue<ItemType, BUFFER_SIZE>
 #[cfg(any(test,doc))]
 mod tests {
-    use super::{*};
+    use super::*;
+    use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
     use { movable, zero_copy };
     use std::{
         sync::Arc,

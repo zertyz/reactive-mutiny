@@ -244,7 +244,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
         let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
         let mut len_before;
         loop {
-            let tail = self.tail.load(Acquire);
+            let tail = self.tail.load(Relaxed);
             len_before = tail.overflowing_sub(slot_id).0 as i32;
             // queue has elements?
             if len_before > 0 {

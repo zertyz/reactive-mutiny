@@ -1,9 +1,5 @@
 use crate::{
     streams_manager::StreamsManagerBase,
-    multi::channels::{
-        MultiChannelCommon,
-        MultiMovableChannel,
-    },
     mutiny_stream::MutinyStream,
     ChannelConsumer,
 };
@@ -16,6 +12,7 @@ use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
 use log::warn;
+use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
 
 
 pub struct Crossbeam<'a, ItemType:          Send + Sync + Debug,
@@ -29,11 +26,12 @@ pub struct Crossbeam<'a, ItemType:          Send + Sync + Debug,
 
 }
 
+
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MultiChannelCommon<'a, ItemType>
+ChannelCommon<'a, ItemType, Arc<ItemType>>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
@@ -87,20 +85,25 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
 }
 
+
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-MultiMovableChannel<'a, ItemType>
+ChannelProducer<'a, ItemType, Arc<ItemType>>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn try_send(&self, item: ItemType) -> bool {
+        todo!("Crossbeam Arc Multi Channel: try_send() is not implemented for Multis, as not enqueueing an item is an unacceptable condition. Use `send()` or `send_derived()` instead")
+    }
 
     #[inline(always)]
     fn send(&self, item: ItemType) {
         let arc_item = Arc::new(item);
-        self.send_arc(&arc_item);
+        self.send_derived(&arc_item);
     }
 
     #[inline(always)]
-    fn send_arc(&self, arc_item: &Arc<ItemType>) {
+    fn send_derived(&self, arc_item: &Arc<ItemType>) {
         for stream_id in self.streams_manager.used_streams() {
             if *stream_id == u32::MAX {
                 break
@@ -122,6 +125,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
 }
+
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
@@ -161,3 +165,10 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.report_stream_dropped(stream_id);
     }
 }
+
+
+impl <'a, ItemType:          'a + Debug + Send + Sync,
+          const BUFFER_SIZE: usize,
+          const MAX_STREAMS: usize>
+FullDuplexChannel<'a, ItemType, Arc<ItemType>>
+for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

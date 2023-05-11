@@ -16,7 +16,10 @@ use std::{
 use reactive_mutiny::{
     multi::{
         Multi,
-        MultiChannelCommon,
+    },
+    uni::channels::{
+        ChannelCommon,
+        ChannelProducer,
     },
     multis_close_async
 };

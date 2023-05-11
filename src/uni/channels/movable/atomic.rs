@@ -57,9 +57,9 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn create_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self> {
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self>, u32) {
         let stream_id = self.streams_manager.create_stream_id();
-        MutinyStream::new(stream_id, self)
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -106,6 +106,12 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 let len_after = len_after.get();
                 if len_after <= MAX_STREAMS as u32 {
                     self.streams_manager.wake_stream(len_after-1)
+                } else if len_after == 1 + MAX_STREAMS as u32 {
+                    // the Atomic queue may enqueue at the same time it dequeues, so,
+                    // on high pressure for production / consumption & low event payloads (like in our tests),
+                    // the Stream might have dequeued the last element, another enqueue just finished and we triggered the wake before
+                    // the Stream had returned, leaving an element stuck. This code works around this and is required only for the Atomic Queue.
+                    self.streams_manager.wake_stream(len_after - 2)
                 }
                 true
             },

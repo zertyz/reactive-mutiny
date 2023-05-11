@@ -27,7 +27,7 @@ use crate::uni::channels::FullDuplexChannel;
 
 
 pub struct UniBuilder<InType:              'static + Debug + Sync + Send,
-                      UniChannelType:      ChannelProducer<'static, InType> + ChannelConsumer<'static, DerivedItemType> + Sync + Send + 'static,
+                      UniChannelType:      FullDuplexChannel<'static, InType, DerivedItemType> + Sync + Send + 'static,
                       const INSTRUMENTS:   usize,
                       DerivedItemType:     'static + Debug + Sync + Send,
                       OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,

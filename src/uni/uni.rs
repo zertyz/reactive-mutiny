@@ -58,7 +58,8 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     pub fn consumer_stream(&self) -> MutinyStream<'a, ItemType, UniChannelType, DerivedItemType> {
-        self.uni_channel.create_stream()
+        let (stream, _stream_id) = self.uni_channel.create_stream();
+        stream
     }
 
     pub async fn flush(&self, duration: Duration) -> u32 {

@@ -29,13 +29,13 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
 
-    /// Returns a `Stream` able to receive elements sent through this channel.\
+    /// Returns a `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
     /// If called more than once, the behavior differs in regard to how the events will be routed,
     /// depending on the implementor:
     ///   - [Uni]s implement the "consumer" pattern: each `Stream` will receive a different element;
     ///   - [Multi]s implement the "listener" pattern: each `Stream` will see all elements
-    /// Panics if called more times than allowed by [Uni]'s `MAX_STREAMS`
-    fn create_stream(self: &Arc<Self>) -> MutinyStream<'a, ItemType, Self, DerivedItemType>
+    /// Panics if called more times than allowed by [Uni]'s/[Multi]'s `MAX_STREAMS`
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
                                           where Self: ChannelConsumer<'a, DerivedItemType>;
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
@@ -88,20 +88,16 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     /// -- for instance: the Stream consumes Arc<String> (the derived item type) and the channel is for Strings. With this method one may send an Arc directly.\
     /// The default implementation, though, is made for types that don't have a derived item type.
     #[inline(always)]
-    fn send_derived(&self, _derived_item_type: DerivedItemType) {
+    fn send_derived(&self, _derived_item_type: &DerivedItemType) {
         todo!("`ChannelProducer.send_derived()` is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
 
 }
 
+/// A fully fledged channel, that has both the producer and consumer parts
 pub trait FullDuplexChannel<'a, ItemType:        'a + Debug + Send + Sync,
-                                DerivedItemType: 'a + Debug = ItemType>: ChannelCommon<'a, ItemType, DerivedItemType> + ChannelProducer<'a, ItemType> + ChannelConsumer<'a, DerivedItemType> {}
+                                DerivedItemType: 'a + Debug = ItemType>: ChannelCommon<'a, ItemType, DerivedItemType> + ChannelProducer<'a, ItemType, DerivedItemType> + ChannelConsumer<'a, DerivedItemType> {}
 
-// TODO 2023-05-10: Transform `UniMovableChannel` (& `MultiMovableChannel`) into `ChannelProducer` and place it in types,
-//                  along with `MutinyStreamSource`, which should be renamed to `ChannelConsumer`.
-//                  Maybe, creating a "FullDuplexChannel" trait with both in it may help with reducing the generics signatures we'll need to use everywhere
-//                  (the full signature may be gathered from / replace the one in uni_builder.rs#29)
-// TODO 2023-05-10: `DerivedItemType` everywhere should be renamed to `StreamItemType`, for clarity -- and `ItemType`/`InType` to `ChannelItemType`, maybe?
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
@@ -146,7 +142,7 @@ mod tests {
             #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
-                let mut stream = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
                 let send_result = channel.try_send("a");
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
@@ -172,8 +168,8 @@ mod tests {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$uni_channel_type>::new("dropping");
                     assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
-                    let mut stream_1 = channel.create_stream();
-                    let stream_2 = channel.create_stream();
+                    let (mut stream_1, _stream_id) = channel.create_stream();
+                    let (stream_2, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating each stream should increase the ref count by 1");
                     channel.try_send("a");
                     exec_future(stream_1.next(), "receiving", 1.0, true).await;
@@ -186,11 +182,11 @@ mod tests {
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$uni_channel_type>::new("dropping");
-                    let stream = channel.create_stream();
+                    let (stream, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream` + `local ref`: reference count should be 2");
                     drop(stream);
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
-                    let mut stream = channel.create_stream();
+                    let (mut stream, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.try_send("a");
                     exec_future(stream.next(), "receiving", 1.0, true).await;
@@ -237,7 +233,8 @@ mod tests {
                     .then(|_i| {
                         let channel = channel.clone();
                         async move {
-                            channel.create_stream()
+                            let (stream, _stream_id) = channel.create_stream();
+                            stream
                         }
                     })
                     .collect::<Vec<_>>().await;
@@ -287,7 +284,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
 
                 print!("{} (same task / same thread):           ", profiling_name);
                 std::io::stdout().flush().unwrap();
@@ -315,7 +312,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
 
                 let sender_future = async {
                     for e in 0..count {
@@ -356,7 +353,7 @@ if counter == count {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let mut stream = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream();
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     for e in 0..count {
