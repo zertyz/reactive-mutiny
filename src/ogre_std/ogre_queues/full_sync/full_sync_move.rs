@@ -6,11 +6,19 @@ use super::super::{
     meta_subscriber::MoveSubscriber,
     meta_container::MoveContainer,
 };
-use std::{fmt::Debug, mem::{ManuallyDrop, MaybeUninit}, ptr, sync::atomic::{
-    AtomicBool,
-    Ordering::Relaxed,
-}};
+use std::{
+    fmt::Debug,
+    mem::{ManuallyDrop, MaybeUninit},
+    ptr,
+    sync::atomic::{
+        AtomicBool,
+        Ordering::Relaxed,
+    },
+    ops::Deref,
+};
 use std::num::NonZeroU32;
+use std::ops::DerefMut;
+use std::pin::Pin;
 
 
 /// Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
@@ -29,7 +37,7 @@ pub struct FullSyncMove<SlotType:          Debug,
     /// guards critical regions to allow concurrency
     concurrency_guard: AtomicBool,
     /// holder for the elements
-    buffer: [ManuallyDrop<SlotType>; BUFFER_SIZE],
+    buffer: Pin<Box<[ManuallyDrop<SlotType>; BUFFER_SIZE]>>,
 
 }
 
@@ -47,7 +55,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
             head:              0,
             tail:              0,
             concurrency_guard: AtomicBool::new(false),
-            buffer:            unsafe { MaybeUninit::zeroed().assume_init() },
+            buffer:            Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
         }
     }
 
@@ -174,13 +182,17 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ u32)> {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_buffer = unsafe {
+            let const_ptr = self.buffer.as_ptr();
+            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
+            &mut *mut_ptr
+        };
         let mut len_before;
         loop {
             ogre_sync::lock(&self.concurrency_guard);
             len_before = self.tail.overflowing_sub(self.head).0;
             if len_before < BUFFER_SIZE as u32 {
-                break unsafe { Some( (mutable_self.buffer.get_unchecked_mut(self.tail as usize % BUFFER_SIZE), len_before) ) }
+                break unsafe { Some( (mutable_buffer.get_unchecked_mut(self.tail as usize % BUFFER_SIZE), len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_full = report_full_fn();
@@ -216,13 +228,17 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn consume_leaking_internal(&self, report_empty_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ i32)> {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_buffer = unsafe {
+            let const_ptr = self.buffer.as_ptr();
+            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
+            &mut *mut_ptr
+        };
         let mut len_before;
         loop {
             ogre_sync::lock(&self.concurrency_guard);
             len_before = self.available_elements_count() as i32;
             if len_before > 0 {
-                break unsafe { Some( (mutable_self.buffer.get_unchecked_mut(self.head as usize % BUFFER_SIZE), len_before) ) }
+                break unsafe { Some( (mutable_buffer.get_unchecked_mut(self.head as usize % BUFFER_SIZE), len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_empty = report_empty_fn();

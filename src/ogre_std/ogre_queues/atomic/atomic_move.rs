@@ -8,6 +8,8 @@ use super::super::{
 use std::{fmt::Debug, sync::atomic::{AtomicU32, Ordering::{Acquire, Relaxed, Release}}, mem::MaybeUninit, ptr};
 use std::mem::ManuallyDrop;
 use std::num::NonZeroU32;
+use std::pin::Pin;
+use crossbeam::utils::CachePadded;
 
 
 /// Basis for multiple producer / multiple consumer queues using atomics for synchronization,
@@ -17,21 +19,20 @@ use std::num::NonZeroU32;
 /// is a good fit for raw thin payload < 1k.
 ///
 /// For fatter payloads, [AtomicZeroCopy] should be a better fit.
-#[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
 pub struct AtomicMove<SlotType:          Debug,
                       const BUFFER_SIZE: usize> {
     /// marks the first element of the queue, ready for dequeue -- increasing when dequeues are complete
-    pub(crate) head: AtomicU32,
+    pub(crate) head: CachePadded<AtomicU32>,
     /// increase-before-load field, marking where the next element should be written to
     /// -- may receed if exceeded the buffer capacity
-    pub(crate) enqueuer_tail: AtomicU32,
+    pub(crate) enqueuer_tail: CachePadded<AtomicU32>,
     /// holder for the queue elements
-    pub(crate) buffer: [ManuallyDrop<SlotType>; BUFFER_SIZE],
+    pub(crate) buffer: Pin<Box<[ManuallyDrop<SlotType>; BUFFER_SIZE]>>,
     /// increase-before-load field, marking where the next element should be retrieved from
     /// -- may receed if it gets ahead of the published `tail`
-    pub(crate) dequeuer_head: AtomicU32,
+    pub(crate) dequeuer_head: CachePadded<AtomicU32>,
     /// marks the last element of the queue, ready for dequeue -- increasing when enqueues are complete
-    pub(crate) tail: AtomicU32,
+    pub(crate) tail: CachePadded<AtomicU32>,
 }
 
 impl<'a, SlotType:          'a + Debug,
@@ -45,11 +46,11 @@ AtomicMove<SlotType, BUFFER_SIZE> {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
         // }
         Self {
-            head:                 AtomicU32::new(0),
-            tail:                 AtomicU32::new(0),
-            dequeuer_head:        AtomicU32::new(0),
-            enqueuer_tail:        AtomicU32::new(0),
-            buffer:               unsafe { MaybeUninit::zeroed().assume_init() },
+            head:                 CachePadded::new(AtomicU32::new(0)),
+            tail:                 CachePadded::new(AtomicU32::new(0)),
+            dequeuer_head:        CachePadded::new(AtomicU32::new(0)),
+            enqueuer_tail:        CachePadded::new(AtomicU32::new(0)),
+            buffer:               Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
         }
     }
 }

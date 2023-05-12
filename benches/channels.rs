@@ -1,13 +1,21 @@
 //! Compares the performance of Rust's community-provided channels with containers from `ogre-std`'s queues & stacks
 //!
-//! Additionally (and for the sake of mere curiosity), `Multi` channels [multi::channels] are also benchmarked, although they are expected to be
-//! slower (for they provide extra functionalities). Anyway, here we'll know "how slow".
+//! `Atomic`, `Crossbeam` and `FullSync` are, currently, used as the base for `Uni` and `Multi` channels.
 //!
-//! # Analysis 2023-04-30
+//! # Analysis 2023-05-11
 //!
-//!   - our Atomic is the winner for Intel(R) Core(TM) i5-10500H CPU, showing zero-copy pays off. The next best is Crossbeam's, which wins for smaller payloads < 1024 bytes.
-//!   - for lower grades CPUs (including ARM), our Atomic wins with an even larger margin
-//!
+//!   Our Atomic is the winner on all tests, for a variety of Intel, AMD and ARM cpus, followed by our FullSync, then Crossbeam.
+//!   For Intel(R) Core(TM) i5-10500H CPU, we have the following figures:
+//!     - Inter-thread LATENCY:
+//!       - baseline:  62ns
+//!       - Atomic:    302ns
+//!       - FullSync:  378ns
+//!       - Crossbeam: 611ns
+//!     - Inter-thread THROUGHPUT:
+//!       - Atomic:    100µs
+//!       - FullSync:  107µs
+//!       - Crossbeam: 135µs
+//!     - The Same-thread measurements follow the same tendency
 //!
 
 use std::sync::Arc;
@@ -21,9 +29,9 @@ use ogre_std::ogre_queues::{
 };
 use reactive_mutiny::{uni, multi, ogre_std};
 use futures::{Stream, stream};
-use reactive_mutiny::ogre_std::ogre_queues::meta_publisher::MetaPublisher;
-use reactive_mutiny::ogre_std::ogre_queues::meta_container::MetaContainer;
-use reactive_mutiny::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
+use reactive_mutiny::ogre_std::ogre_queues::meta_publisher::{MetaPublisher, MovePublisher};
+use reactive_mutiny::ogre_std::ogre_queues::meta_container::{MetaContainer, MoveContainer};
+use reactive_mutiny::ogre_std::ogre_queues::meta_subscriber::{MetaSubscriber, MoveSubscriber};
 
 
 /// Represents a reasonably sized event, similar to production needs
@@ -38,7 +46,7 @@ impl Default for MessageType {
 }
 
 type ItemType = MessageType;
-const BUFFER_SIZE: usize = 1<<10;
+const BUFFER_SIZE: usize = 1<<14;
 
 
 /// Benchmarks the same-thread latency of our containers against Std, Tokio, Futures & Crossbeam channels.\
@@ -59,14 +67,14 @@ fn bench_same_thread_latency(criterion: &mut Criterion) {
 
     let bench_id = format!("ogre_std's FullSync queue");
     group.bench_function(bench_id, |bencher| bencher.iter(|| {
-        while !full_sync_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {};
-        while full_sync_receiver.consume(|slot| (), || false, |_| {}).is_none() {};
+        while full_sync_sender.publish_movable(ItemType::default()).is_none() {};
+        while full_sync_receiver.consume_movable().is_none() {};
     }));
 
     let bench_id = format!("ogre_std's Atomic queue");
     group.bench_function(bench_id, |bencher| bencher.iter(|| {
-        while !atomic_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {};
-        while atomic_receiver.consume(|slot| (), || false, |_| {}).is_none() {};
+        while atomic_sender.publish_movable(ItemType::default()).is_none() {};
+        while atomic_receiver.consume_movable().is_none() {};
     }));
 
     let bench_id = format!("Std MPSC Channel");
@@ -100,7 +108,9 @@ fn bench_same_thread_latency(criterion: &mut Criterion) {
 /// Latency is measured by the receiver thread, which signals the sender thread to produce an item, then
 /// waits for the element. At any given time, there are only 2 threads running and the measured times are:\
 ///   - the time it takes for a thread to signal another one (this is the same for everybody)
-///   - + the time for the first thread to receive the element
+///   - + the time for the first thread to receive the element.
+/// The "Baseline" measurement is an attempt to determine how much time is spent signaling a thread -- so
+/// the real latency would be the measured values - Baseline
 fn bench_inter_thread_latency(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Inter-thread LATENCY");
@@ -128,7 +138,7 @@ fn bench_inter_thread_latency(criterion: &mut Criterion) {
                 }
             });
             group.bench_function(bench_id, |bencher| bencher.iter(|| {
-                let mut last_count = counter_ref.load(Relaxed);
+                let last_count = counter_ref.load(Relaxed);
                 loop {
                     let current_count = counter_ref.load(Relaxed);
                     if current_count != last_count {
@@ -169,32 +179,32 @@ fn bench_inter_thread_latency(criterion: &mut Criterion) {
 
     bench_it(&mut group,
              format!("ogre_std's FullSync queue"),
-             || while !full_sync_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {},
-             || while full_sync_receiver.consume(|slot| (), || false, |_| {}).is_none() {std::hint::spin_loop()});
+             || while full_sync_sender.publish_movable(ItemType::default()).is_none() {std::hint::spin_loop()},
+             || while full_sync_receiver.consume_movable().is_none() {std::hint::spin_loop()});
 
     bench_it(&mut group,
              format!("ogre_std's Atomic queue"),
-             || while !atomic_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {},
-             || while atomic_receiver.consume(|slot| (), || false, |_| {}).is_none() {std::hint::spin_loop()});
+             || while atomic_sender.publish_movable(ItemType::default()).is_none() {std::hint::spin_loop()},
+             || while atomic_receiver.consume_movable().is_none() {std::hint::spin_loop()});
 
     bench_it(&mut group,
              format!("Std MPSC Channel"),
-             || while std_sender.try_send(ItemType::default()).is_err() {},
+             || while std_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop()},
              || while std_receiver.try_recv().is_err() {std::hint::spin_loop()});
 
     bench_it(&mut group,
              format!("Tokio MPSC Channel"),
-             || while tokio_sender.try_send(ItemType::default()).is_err() {},
+             || while tokio_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop()},
              || while tokio_receiver.try_recv().is_err() {std::hint::spin_loop()});
 
     bench_it(&mut group,
              format!("Futures MPSC Channel"),
-             || while futures_sender.try_send(ItemType::default()).is_err() {},
+             || while futures_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop()},
              || while futures_receiver.try_next().is_err() {std::hint::spin_loop()});
 
     bench_it(&mut group,
              format!("Crossbeam MPMC Channel"),
-             || while crossbeam_sender.try_send(ItemType::default()).is_err() {},
+             || while crossbeam_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop()},
              || while crossbeam_receiver.try_recv().is_err() {std::hint::spin_loop()});
 
     group.finish();
@@ -219,20 +229,20 @@ fn bench_same_thread_throughput(criterion: &mut Criterion) {
     let bench_id = format!("ogre_std's FullSync queue");
     group.bench_function(bench_id, |bencher| bencher.iter(|| {
         for _ in 0..BUFFER_SIZE {
-            while !full_sync_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {};
+            while full_sync_sender.publish_movable(ItemType::default()).is_none() {};
         }
         for _ in 0..BUFFER_SIZE {
-            while full_sync_receiver.consume(|slot| (), || false, |_| {}).is_none() {};
+            while full_sync_receiver.consume_movable().is_none() {};
         }
     }));
 
     let bench_id = format!("ogre_std's Atomic queue");
     group.bench_function(bench_id, |bencher| bencher.iter(|| {
         for _ in 0..BUFFER_SIZE {
-            while !atomic_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {};
+            while atomic_sender.publish_movable(ItemType::default()).is_none() {};
         }
         for _ in 0..BUFFER_SIZE {
-            while atomic_receiver.consume(|slot| (), || false, |_| {}).is_none() {};
+            while atomic_receiver.consume_movable().is_none() {};
         }
     }));
 
@@ -280,10 +290,9 @@ fn bench_same_thread_throughput(criterion: &mut Criterion) {
 }
 
 /// Benchmarks the inter-thread throughput of our containers against Std, Tokio, Futures & Crossbeam channels.\
-/// Throughput is measured by the receiver thread, which signals the sender thread to produce a batch of items,
-/// then waits for the elements. At any given time, there are only 2 threads running and the measured times are:\
-///   - the time it takes for a thread to signal another one (this is the same for everybody)
-///   - + the time it takes to fill the backing buffer with elements + the time to receive all of them
+/// Throughput is measured by the receiver thread, which consumes the events that are produced -- non-stop --
+/// by the producer thread, simulating a high contention scenario.
+/// The measured times are inversely proportional to the number of elements consumed.
 fn bench_inter_thread_throughput(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Inter-thread THROUGHPUT");
@@ -320,44 +329,44 @@ fn bench_inter_thread_throughput(criterion: &mut Criterion) {
     bench_it(&mut group,
              format!("ogre_std's FullSync queue"),
              || for _ in 0..BUFFER_SIZE {
-                            if !full_sync_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()}
+                            if full_sync_sender.publish_movable(ItemType::default()).is_none() {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()}
                         },
-             || while full_sync_receiver.consume(|slot| (), || false, |_| {}).is_none() {std::hint::spin_loop()});
+             || for _ in 0..(BUFFER_SIZE>>5) { while full_sync_receiver.consume_movable().is_none() {std::hint::spin_loop()} });
 
     bench_it(&mut group,
              format!("ogre_std's Atomic queue"),
              || for _ in 0..BUFFER_SIZE {
-                            if !atomic_sender.publish(|slot| *slot = ItemType::default(), || false, |_| {}) {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()}
+                            if atomic_sender.publish_movable(ItemType::default()).is_none() {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()}
                         },
-             || while atomic_receiver.consume(|slot| (), || false, |_| {}).is_none() {std::hint::spin_loop()});
+             || for _ in 0..(BUFFER_SIZE>>5) { while atomic_receiver.consume_movable().is_none() {std::hint::spin_loop()} });
 
     bench_it(&mut group,
              format!("Std MPSC Channel"),
              || for _ in 0..BUFFER_SIZE {
                             if std_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()};
                         },
-             || while std_receiver.try_recv().is_err() {std::hint::spin_loop()});
+             || for _ in 0..(BUFFER_SIZE>>5) { while std_receiver.try_recv().is_err() {std::hint::spin_loop()} });
 
     bench_it(&mut group,
              format!("Tokio MPSC Channel"),
              || for _ in 0..BUFFER_SIZE {
                             if tokio_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()};
                         },
-             || while tokio_receiver.try_recv().is_err() {std::hint::spin_loop()});
+             || for _ in 0..(BUFFER_SIZE>>5) { while tokio_receiver.try_recv().is_err() {std::hint::spin_loop()} });
 
     bench_it(&mut group,
              format!("Futures MPSC Channel"),
              || for _ in 0..BUFFER_SIZE {
                             if futures_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()};
                         },
-             || while futures_receiver.try_next().is_err() {std::hint::spin_loop()});
+             || for _ in 0..(BUFFER_SIZE>>5) { while futures_receiver.try_next().is_err() {std::hint::spin_loop()} });
 
     bench_it(&mut group,
              format!("Crossbeam MPMC Channel"),
              || for _ in 0..BUFFER_SIZE {
                             if crossbeam_sender.try_send(ItemType::default()).is_err() {std::hint::spin_loop();std::hint::spin_loop();std::hint::spin_loop()};
                         },
-             || while crossbeam_receiver.try_recv().is_err() {std::hint::spin_loop()});
+             || for _ in 0..(BUFFER_SIZE>>5) { while crossbeam_receiver.try_recv().is_err() {std::hint::spin_loop()} });
 
     group.finish();
 }

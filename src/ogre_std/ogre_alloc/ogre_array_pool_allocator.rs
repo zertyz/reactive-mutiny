@@ -10,12 +10,13 @@ use crate::{
     },
 };
 use std::mem::{ManuallyDrop, MaybeUninit};
+use std::pin::Pin;
 use crate::ogre_std::ogre_alloc::types::OgreAllocator;
 
 
 pub struct OgreArrayPoolAllocator<DataType:        Send + Sync,
                                   const POOL_SIZE: usize> {
-    pool:      Box<[ManuallyDrop<DataType>; POOL_SIZE]>,
+    pool:      Pin<Box<[ManuallyDrop<DataType>; POOL_SIZE]>>,
     free_list: FullSyncMove<u32, POOL_SIZE>,
 }
 
@@ -45,7 +46,7 @@ for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 
     fn new() -> Self {
         Self {
-            pool:      Box::new(unsafe { MaybeUninit::zeroed().assume_init() }),
+            pool:      Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
             free_list: {
                            let free_list = FullSyncMove::new();
                            for slot_id in 0..POOL_SIZE as u32 {
@@ -58,10 +59,14 @@ for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 
     #[inline(always)]
     fn alloc(&self) -> Option<(/*ref:*/ &mut DataType, /*slot_id:*/ u32)> {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_pool = unsafe {
+            let const_ptr = self.pool.as_ptr();
+            let mut_ptr = const_ptr as *mut [DataType; POOL_SIZE];
+            &mut *mut_ptr
+        };
         match self.free_list.consume_movable() {
             Some(slot_id) => {
-                Some( (&mut mutable_self.pool[slot_id as usize], slot_id) )      // TODO use slice.get_unchecked(index) once we're sure to be correct
+                Some( ( unsafe{mutable_pool.get_unchecked_mut(slot_id as usize)}, slot_id) )
             },
             None => None,
         }
@@ -85,7 +90,11 @@ for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 
     #[inline(always)]
     fn ref_from_id(&self, slot_id: u32) -> &mut DataType {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        unsafe { mutable_self.pool.get_unchecked_mut(slot_id as usize % POOL_SIZE) }
+        let mutable_pool = unsafe {
+            let const_ptr = self.pool.as_ptr();
+            let mut_ptr = const_ptr as *mut [DataType; POOL_SIZE];
+            &mut *mut_ptr
+        };
+        unsafe { mutable_pool.get_unchecked_mut(slot_id as usize % POOL_SIZE) }
     }
 }

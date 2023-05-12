@@ -11,6 +11,7 @@ pub use types::{OgreAllocator};
 mod types_impls;
 
 pub mod ogre_arc;
+pub mod ogre_unique;
 pub mod ogre_array_pool_allocator;
 
 

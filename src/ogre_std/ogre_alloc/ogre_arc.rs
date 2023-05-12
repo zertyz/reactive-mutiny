@@ -1,32 +1,32 @@
 //! Resting place for [OgreArc<>]
 
 use super::types::OgreAllocator;
-use std::{
-    sync::{
-        Arc,
-        atomic::AtomicU32,
-    },
-    ops::{Deref, DerefMut}
-};
+use std::{sync::{
+    Arc,
+    atomic::AtomicU32,
+}, ops::{Deref, DerefMut}, ptr};
+use std::ffi::c_void;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::{PhantomData};
 use std::ptr::NonNull;
-use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic;
+use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
 
 /// Wrapper type for data providing an atomic reference counter for dropping control, similar to `Arc`,
 /// but allowing a custom allocator to be used -- [OgreAllocator].
 /// providing reference counting similar to Arc
-pub struct OgreArc<DataType:          Debug + Send + Sync,
-                   OgreAllocatorType: OgreAllocator<DataType> + Send + Sync> {
+pub struct OgreArc<DataType:          Debug + Send + Sync + 'static,
+                   OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
     inner:    NonNull<InnerOgreArc<DataType, OgreAllocatorType>>,
-    _phantom: PhantomData<DataType>,
 }
 
 
 impl<DataType:          Debug + Send + Sync + 'static,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
 OgreArc<DataType, OgreAllocatorType> {
+
 
     /// Zero-copy the `data` into one of the slots provided by `allocator` -- which will be used to deallocate it when the time comes
     /// --  zero-copying will be enforced (if compiled in Release mode) due to this method being inlined in the caller.\
@@ -42,11 +42,11 @@ OgreArc<DataType, OgreAllocatorType> {
     ///             }
     ///         }
     #[inline(always)]
-    pub fn new(data: DataType, allocator: &Arc<OgreAllocatorType>) -> Option<Self> {
+    pub fn new(data: DataType, allocator: &OgreAllocatorType) -> Option<Self> {
         match allocator.alloc() {
             Some( (slot_ref, slot_id) ) => {
                 unsafe { std::ptr::write(slot_ref, data); }
-                Some(Self::from_allocated(slot_id, Arc::clone(allocator)))
+                Some(Self::from_allocated(slot_id, allocator))
             }
             None => None
         }
@@ -55,20 +55,20 @@ OgreArc<DataType, OgreAllocatorType> {
     /// Wraps `data` with our struct, so it will be properly deallocated when dropped
     /// -- `data` must have been previously allocated by the provided `allocator`
     #[inline(always)]
-    pub fn from_allocated(data_id: u32, allocator: Arc<OgreAllocatorType>) -> Self {
-        let inner = Box::new(InnerOgreArc {     // TODO: after all is set, replace Box for one of our allocators to check the performance gains
-            allocator,
+    pub fn from_allocated(data_id: u32, allocator: &OgreAllocatorType) -> Self {
+        let inner = Box::new(InnerOgreArc {     // Using static pool allocators here proved to be slower (a runtime lookup was needed + null check), so we'll stick with Box for now
+            allocator: unsafe { &*(allocator as *const OgreAllocatorType) },
             data_id,
             references_count: AtomicU32::new(1),
             _phantom:         PhantomData::default(),
         });
         Self {
             inner: Box::leak(inner).into(),
-            _phantom: Default::default(),
         }
     }
 
     /// Returns how many `OgreBox<>` copies references the same data as `self` does
+    #[inline(always)]
     pub fn references_count(&self) -> u32 {
         let inner = unsafe { self.inner.as_ref() };
         inner.references_count.load(Relaxed)
@@ -116,7 +116,6 @@ for OgreArc<DataType, OgreAllocatorType> {
         inner.references_count.fetch_add(1, Relaxed);
         Self {
             inner: self.inner,
-            _phantom: Default::default(),
         }
     }
 }
@@ -165,12 +164,15 @@ for OgreArc<DataType, OgreAllocatorType> {
     #[inline(always)]
     fn drop(&mut self) {
         let inner = unsafe { self.inner.as_mut() };
-        let references = inner.references_count.fetch_sub(1, Relaxed);
-        if references <= 1 {
-            inner.allocator.dealloc_id(inner.data_id);
-            let boxed = unsafe { Box::from_raw(inner) };
-            drop(boxed);
+        let references = inner.references_count.fetch_sub(1, Release);
+        if references != 1 {
+            return;
         }
+        atomic::fence(Acquire);
+        //unsafe { ptr::drop_in_place(Self::get_mut_unchecked(self)) };     // does this belong here on on the allocator? Do a test (using string) to prove its necessity: no leaks should occur
+        inner.allocator.dealloc_id(inner.data_id);
+        let boxed = unsafe { Box::from_raw(inner) };
+        drop(boxed);
     }
 }
 
@@ -188,8 +190,8 @@ for OgreArc<DataType, OgreAllocatorType> {}
 
 /// This is the Unique part that cloned [OgreArc]s reference to
 struct InnerOgreArc<DataType:          Debug + Send + Sync,
-                    OgreAllocatorType: OgreAllocator<DataType> + Send + Sync> {
-    allocator:        Arc<OgreAllocatorType>,
+                    OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
+    allocator:        &'static OgreAllocatorType,
     data_id:          u32,
     references_count: AtomicU32,
     _phantom:         PhantomData<DataType>,
@@ -217,7 +219,7 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     pub fn ssas() {
-        let allocator = Arc::new(OgreArrayPoolAllocator::<u128, 128>::new());
+        let allocator = OgreArrayPoolAllocator::<u128, 128>::new();
         let arc1 = OgreArc::new(128, &allocator).expect("Allocation should have been done");
         println!("arc1 is {arc1} -- {:?}", arc1);
         assert_eq!((*arc1.deref(), arc1.references_count()), (128, 1), "Starting Value and Reference Counts don't match for `arc1`");
@@ -228,6 +230,8 @@ mod tests {
         println!("arc2 is still {arc2} -- {:?}", arc2);
         assert_eq!((*arc2.deref(), arc2.references_count()), (128, 1), "Value and Reference Counts don't match for `arc2` after dropping `arc1`");
         drop(arc2);
+        // TODO assert that allocator have all elements free (change the trait) and do a similar assertion in `OgreUnique`
+        println!("{:?}", allocator);
         println!("all is free");
     }
 

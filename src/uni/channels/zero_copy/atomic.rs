@@ -144,8 +144,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     fn consume(&self, _stream_id: u32) -> Option<OgreArc<ItemType, OgreAllocatorType>> {
         match self.channel.consume_leaking() {
             Some( (_event_ref, slot_id) ) => {
-                let allocator = Arc::clone(&self.channel.allocator);
-                Some(OgreArc::<ItemType, OgreAllocatorType>::from_allocated(slot_id, allocator))
+                Some(OgreArc::<ItemType, OgreAllocatorType>::from_allocated(slot_id, &self.channel.allocator))
             }
             None => None,
         }
