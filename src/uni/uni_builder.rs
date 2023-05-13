@@ -8,10 +8,7 @@ use super::{
         mutiny_stream::MutinyStream,
         types::ChannelConsumer,
     },
-    uni::{
-        Uni,
-        UniChannelType,
-    },
+    uni::Uni,
     channels::{ChannelProducer, ChannelCommon},
 };
 use std::{

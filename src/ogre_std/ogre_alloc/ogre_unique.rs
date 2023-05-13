@@ -10,6 +10,7 @@ use std::marker::{PhantomData};
 use std::ptr::NonNull;
 use std::sync::atomic;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use crate::ogre_std::ogre_alloc::ogre_arc::OgreArc;
 
 
 /// Wrapper type for data that requires a custom Drop to be called (through an [OgreAllocator]).
@@ -43,6 +44,13 @@ OgreUnique<DataType, OgreAllocatorType> {
             data_ref:  unsafe { &*(data_ref as *const DataType) },
         }
     }
+
+    #[inline(always)]
+    pub fn into_ogre_arc(self) -> OgreArc<DataType, OgreAllocatorType> {
+        let undroppable_self = std::mem::ManuallyDrop::new(self);
+        OgreArc::from_allocated(undroppable_self.allocator.id_from_ref(undroppable_self.data_ref), undroppable_self.allocator)
+    }
+
 }
 
 
@@ -102,8 +110,21 @@ PartialEq<DataType>
 for OgreUnique<DataType, OgreAllocatorType>
 where DataType: PartialEq {
 
+    #[inline(always)]
     fn eq(&self, other: &DataType) -> bool {
         self.deref().eq(other)
+    }
+}
+
+
+impl<DataType:          Debug + Send + Sync,
+     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+Into<OgreArc<DataType, OgreAllocatorType>>
+for OgreUnique<DataType, OgreAllocatorType> {
+
+    #[inline(always)]
+    fn into(self) -> OgreArc<DataType, OgreAllocatorType> {
+        self.into_ogre_arc()
     }
 }
 
@@ -148,8 +169,21 @@ mod tests {
         assert_eq!(*unique.deref(), 128, "Value doesn't match");
         drop(unique);
         // TODO assert that allocator have all elements free (change the trait) and do a similar assertion in `OgreArc`
+        println!("all is free:");
         println!("{:?}", allocator);
-        println!("all is free");
+    }
+
+    #[cfg_attr(not(doc),test)]
+    pub fn into_ogrearc() {
+        let allocator = OgreArrayPoolAllocator::<u128, 128>::new();
+        let unique = OgreUnique::new(128, &allocator).expect("Allocation should have been done");
+        let ogre_arc = unique.into_ogre_arc();
+        println!("arc is {ogre_arc} -- {:?}", ogre_arc);
+        assert_eq!((*ogre_arc.deref(), ogre_arc.references_count()), (128, 1), "Starting Value and Reference Counts don't match for the converted `ogre_arc`");
+        drop(ogre_arc);
+        // TODO assert that allocator have all elements free (change the trait) and do a similar assertion in `OgreArc`
+        println!("all is free:");
+        println!("{:?}", allocator);
     }
 
 }

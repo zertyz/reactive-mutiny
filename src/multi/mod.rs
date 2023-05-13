@@ -29,7 +29,7 @@
 mod multi;
 pub use multi::*;
 
-pub(crate) mod channels;
+pub mod channels;
 
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [multi](self) module
@@ -38,6 +38,7 @@ mod tests {
     use super::*;
     use super::super::{
         instruments::Instruments,
+        mutiny_stream::MutinyStream,
     };
     use std::future::Future;
     use std::{
@@ -55,13 +56,16 @@ mod tests {
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
     use tokio::sync::Mutex;
+    use crate::uni::channels::FullDuplexChannel;
+
+
+    type MultiChannelType<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = channels::movable::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 
 
     #[ctor::ctor]
     fn suite_setup() {
         simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
     }
-
 
     /// exercises the code present on the documentation
     #[cfg_attr(not(doc),tokio::test)]
@@ -75,7 +79,7 @@ mod tests {
         fn earth_on_event(stream: impl Stream<Item=Arc<String>>) -> impl Stream<Item=Arc<String>> {
             stream.inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
         }
-        let multi: Multi<String, 1024, 4> = Multi::new("doc_test() event")
+        let multi: Multi<String, MultiChannelType<String, 1024, 4>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new("doc_test() event")
             .spawn_non_futures_non_fallible_executor(1, "local screen", local_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "zeta receiver", zeta_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "earth snapper", earth_on_event, |_| async {}).await?;
@@ -96,12 +100,12 @@ mod tests {
         let observed_sum_1 = Arc::new(AtomicU32::new(0));
         let observed_sum_2 = Arc::new(AtomicU32::new(0));
 
-        let multi: Multi<u32, 1024, 2> = Multi::new("Simple Event")
+        let multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("Simple Event")
             // #1 -- event pipeline
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1",
                                                      |stream| {
                                                          let observed_sum = Arc::clone(&observed_sum_1);
-                                                         stream.map(move |number| observed_sum.fetch_add(*number, Relaxed))
+                                                         stream.map(move |number: Arc<u32>| observed_sum.fetch_add(*number, Relaxed))
                                                      },
                                                      |_| async {}).await?
             // #2 -- event pipeline
@@ -134,7 +138,7 @@ mod tests {
         const PIPELINE_2: &str     = "Pipeline #2";
         const TIMEOUT:    Duration = Duration::ZERO;
 
-        let multi: Multi<u32, 1024, 2> = Multi::new("Event with come and go pipelines");
+        let multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("Event with come and go pipelines");
 
         // correct creating & cancelling executors
         multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_1, |s| s, |_| async {}).await
@@ -203,7 +207,7 @@ mod tests {
         // how to pass it down the pipeline. Also notice the required (as of Rust 1.63)
         // moving of Arc local variables so they will be accessible
 
-        let pipeline1_builder = |stream: MultiStreamType<'static, u32, 1024, 2>| {
+        let pipeline1_builder = |stream: MutinyStream<'static, u32, _, Arc<u32>>| {
             let observed_sum = Arc::clone(&observed_sum_1);
             stream
                 .map(|number| async move {
@@ -224,7 +228,7 @@ mod tests {
                     Ok(number)
                 })
         };
-        let pipeline2_builder = |stream: MultiStreamType<'static, u32, 1024, 2>| {
+        let pipeline2_builder = |stream: MutinyStream<'static, u32, _, Arc<u32>>| {
             let observed_sum = Arc::clone(&observed_sum_2);
             stream
                 .map(|number| async move {
@@ -246,7 +250,7 @@ mod tests {
                 })
         };
 
-        let multi: Multi<u32, 1024, 2> = Multi::new("async event")
+        let multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("async event")
             .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), "Stream Pipeline #1", pipeline1_builder, |_| async {}, |_| async {}).await?
             .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), "Stream Pipeline #2", pipeline2_builder, |_| async {}, |_| async {}).await?;
 
@@ -277,7 +281,7 @@ mod tests {
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
         // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
-        let multi: Pin<Box<Multi<String, 256, N_PIPELINES>>> = Box::pin(Multi::new(event_name));
+        let multi: Multi<String, MultiChannelType<String, 256, N_PIPELINES>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new(event_name);
         for i in 0..N_PIPELINES {
             multi.spawn_non_futures_non_fallible_executor_ref(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
         }
@@ -300,7 +304,7 @@ mod tests {
         // asserts spawn_executor() register statistics appropriately:
         // with counters & with average futures resolution time measurements
         let event_name = "future & fallible event";
-        let multi: Pin<Box<Multi<String, 256, N_PIPELINES>>> = Box::pin(Multi::new(event_name));
+        let multi: Multi<String, MultiChannelType<String, 256, N_PIPELINES>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new(event_name);
         for i in 0..N_PIPELINES {
             multi.spawn_executor_ref(1, Duration::from_millis(150), format!("Pipeline #{} for {}", i, event_name),
                                      |stream| {
@@ -356,13 +360,13 @@ mod tests {
         let six_fire_count = Arc::new(AtomicU32::new(0));
 
         // SIX event
-        let on_six_event = |stream: MultiStreamType<'static, bool, 1024, 2>| {
+        let on_six_event = |stream: MutinyStream<'static, bool, _, Arc<bool>>| {
             let six_fire_count = Arc::clone(&six_fire_count);
             stream.inspect(move |_| {
                 six_fire_count.fetch_add(1, Relaxed);
             })
         };
-        let six_multi: Multi<bool, 1024, 2> = Multi::new("SIX")
+        let six_multi = Multi::<bool, MultiChannelType<bool, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<bool>>::new("SIX")
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_six_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_six_event, |_| async {}).await?;
         let six_multi = Arc::new(six_multi);
@@ -380,7 +384,7 @@ mod tests {
         });
 
         // TWO event
-        let on_two_event = |stream: MultiStreamType<'static, u32, 1024, 2>| {
+        let on_two_event = |stream: MutinyStream<'static, u32, _, Arc<u32>>| {
             let two_fire_count = Arc::clone(&two_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_multi = Arc::clone(&six_multi);
@@ -415,14 +419,14 @@ mod tests {
                 }
             }
         };
-        let two_multi: Multi<u32, 1024, 2> = Multi::new("TWO")
+        let two_multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("TWO")
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_two_event, on_two_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_two_event, on_two_close_builder()).await?;
         let two_multi = Arc::new(two_multi);
         let two_producer = |item| two_multi.send(item);
 
         // FOUR event
-        let on_four_event = |stream: MultiStreamType<'static, u32, 1024, 2>| {
+        let on_four_event = |stream: MutinyStream<'static, u32, _, Arc<u32>>| {
             let four_fire_count = Arc::clone(&four_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_multi = Arc::clone(&six_multi);
@@ -457,7 +461,7 @@ mod tests {
                 }
             }
         };
-        let four_multi: Multi<u32, 1024, 2> = Multi::new("FOUR")
+        let four_multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("FOUR")
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_four_event, on_four_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_four_event, on_four_close_builder()).await?;
         let four_multi = Arc::new(four_multi);
@@ -533,7 +537,7 @@ mod tests {
         }
         let on_err_count_clone_1 = Arc::clone(&on_err_count);
         let on_err_count_clone_2 = Arc::clone(&on_err_count);
-        let multi: Multi<u32, 1024, 2> = Multi::new("Event with error handling")
+        let multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("Event with error handling")
             .spawn_executor(1,
                             Duration::from_millis(100),
                             "Pipeline #1",
@@ -586,7 +590,7 @@ mod tests {
         let bloated_count = Arc::new(AtomicU32::new(0));
         let bloated_last_elapsed_nanos = Arc::new(AtomicU64::new(0));
 
-        let simple_multi: Multi<SystemTime, 1024, 1> = Multi::new("SIMPLE")
+        let simple_multi: Multi<SystemTime, MultiChannelType<SystemTime, 1024, 1>, {Instruments::LogsWithMetrics.into()}, Arc<SystemTime>> = Multi::new("SIMPLE")
             .spawn_non_futures_non_fallible_executor(1, "solo pipeline",
                                                      |stream| {
                                                          let simple_count = Arc::clone(&simple_count);
@@ -609,7 +613,7 @@ mod tests {
         let first_simple_duration = Duration::from_nanos(simple_last_elapsed_nanos.load(Relaxed));
         println!("1. Time to produce & consume a SIMPLE event (no other Multi Tokio tasks): {:?}", first_simple_duration);
 
-        let bloated_multi: Multi<SystemTime, 16, BLOATED_PIPELINES_COUNT> = Multi::new("BLOATED");
+        let bloated_multi: Multi<SystemTime, MultiChannelType<SystemTime, 16, BLOATED_PIPELINES_COUNT>, {Instruments::LogsWithMetrics.into()}, Arc<SystemTime>> = Multi::new("BLOATED");
         for i in 0..BLOATED_PIPELINES_COUNT {
             bloated_multi.spawn_non_futures_non_fallible_executor_ref(1, format!("#{i})"),
                                                                       |stream| {
@@ -667,7 +671,7 @@ mod tests {
         let second_multi_msgs = Arc::new(std::sync::Mutex::new(vec![]));
         let second_multi_msgs_ref = Arc::clone(&second_multi_msgs);
 
-        let second_multi: Multi<String, 1024, 4> = Multi::new("second chained multi, receiving the Arc-wrapped event -- with no copying (and no additional Arc cloning)")
+        let second_multi: Multi<String, MultiChannelType<String, 1024, 4>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new("second chained multi, receiving the Arc-wrapped event -- with no copying (and no additional Arc cloning)")
             .spawn_non_futures_non_fallible_executor(1, "second executor", move |stream| {
                 stream.map(move |message| {
                     println!("`second_multi` received '{:?}'", message);
@@ -678,11 +682,11 @@ mod tests {
             }, |_| async {}).await?;
         let second_multi = Arc::new(second_multi);
         let second_multi_ref = Arc::clone(&second_multi);
-        let first_multi: Multi<String, 1024, 4> = Multi::new("first chained multi, receiving the original events")
+        let first_multi: Multi<String, MultiChannelType<String, 1024, 4>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new("first chained multi, receiving the original events")
             .spawn_non_futures_non_fallible_executor(1, "first executor", move |stream| {
                 stream.map(move |message: Arc<String>| {
                     println!("`first_multi` received '{:?}'", message);
-                    second_multi_ref.send_arc(&message);
+                    second_multi_ref.send_derived(&message);
                     first_multi_msgs_ref
                         .lock().unwrap()
                         .push(message);
@@ -711,12 +715,11 @@ mod tests {
         const FACTOR: u32 = 32;
 
         /// measure how long it takes to stream a certain number of elements through the given `multi`
-        async fn profile_multi<const BUFFER_SIZE: usize,
-                               const MAX_STREAMS: usize,
-                               const INSTRUMENTS: usize>
-                              (multi: &Multi<'_, u32, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>,
+        async fn profile_multi<'a, MultiChannelType:  FullDuplexChannel<'a, u32, Arc<u32>> + Sync + Send + 'a,
+                                   const INSTRUMENTS: usize>
+                              (multi:          &Multi<'a, u32, MultiChannelType, INSTRUMENTS, Arc<u32>>,
                                profiling_name: &str,
-                               count: u32) {
+                               count:          u32) {
             print!("{profiling_name} "); std::io::stdout().flush().unwrap();
             let start = Instant::now();
             let mut e = 0;
@@ -738,23 +741,26 @@ mod tests {
 
         println!();
 
+        type MultiChannelType = channels::movable::crossbeam::Crossbeam<'static, u32, 8192, 1>;
+        type DerivedType      = Arc<u32>;
+
         let profiling_name = "metricfull_non_futures_non_fallible_multi:    ";
-        let multi: Multi<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::MetricsWithoutLogs.into()}, DerivedType> = Multi::new(profiling_name.trim())
             .spawn_non_futures_non_fallible_executor(1, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_multi:    ";
-        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::NoInstruments.into()}, Arc<u32>> = Multi::new(profiling_name.trim())
             .spawn_non_futures_non_fallible_executor(1, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_multi:";
-        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::NoInstruments.into()}, Arc<u32>> = Multi::new(profiling_name.trim())
             .spawn_non_futures_non_fallible_executor(12, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_multi:            ";
-        let multi: Multi<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::MetricsWithoutLogs.into()}, Arc<u32>> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::ZERO, "",
                             |stream| {
                                 stream.map(|number| async move {
@@ -766,7 +772,7 @@ mod tests {
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_futures_fallible_multi:            ";
-        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::NoInstruments.into()}, Arc<u32>> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::ZERO, "",
                             |stream| {
                                 stream.map(|number| async move {
@@ -778,7 +784,7 @@ mod tests {
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "timeoutable_metricfull_futures_fallible_multi:";
-        let multi: Multi<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::MetricsWithoutLogs.into()}, Arc<u32>> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::from_millis(100), "",
                             |stream| {
                                  stream.map(|number| async move {
@@ -790,7 +796,7 @@ mod tests {
         profile_multi(&multi, profiling_name, 768*FACTOR).await;
 
         let profiling_name = "timeoutable_metricless_futures_fallible_multi:";
-        let multi: Multi<u32, 8192, 1, {Instruments::NoInstruments.into()}> = Multi::new(profiling_name.trim())
+        let multi: Multi<u32, MultiChannelType, {Instruments::NoInstruments.into()}, Arc<u32>> = Multi::new(profiling_name.trim())
             .spawn_executor(1, Duration::from_millis(100), "",
                             |stream| {
                                 stream.map(|number| async move {

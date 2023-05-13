@@ -13,21 +13,19 @@ use std::{
     fmt::Debug,
     sync::Arc,
 };
-use reactive_mutiny::{
-    multi::{
-        Multi,
-    },
-    uni::channels::{
-        ChannelCommon,
-        ChannelProducer,
-    },
-    multis_close_async
-};
+use reactive_mutiny::{multi::{
+    Multi,
+}, uni::channels::{
+    ChannelCommon,
+    ChannelProducer,
+}, multis_close_async, ArcMulti};
 use log::warn;
+use reactive_mutiny::mutiny_stream::MutinyStream;
 
 
 /// Default Mutiny type for "per client" events
-type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = Multi<'static, ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = ArcMulti<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+
 
 
 /// Can I refer to internal fields?

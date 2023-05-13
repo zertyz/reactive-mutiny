@@ -231,8 +231,8 @@ mod tests {
         assert_eq!((*arc2.deref(), arc2.references_count()), (128, 1), "Value and Reference Counts don't match for `arc2` after dropping `arc1`");
         drop(arc2);
         // TODO assert that allocator have all elements free (change the trait) and do a similar assertion in `OgreUnique`
+        println!("all is free:");
         println!("{:?}", allocator);
-        println!("all is free");
     }
 
 }

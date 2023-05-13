@@ -10,15 +10,10 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use reactive_mutiny::{
-    multi::{
-        Multi,
-        MultiStreamType,
-    },
-    uni::channels::ChannelProducer,
-};
+use reactive_mutiny::{ArcMulti, multi::Multi, MultiCrossbeamArc, MultiCrossbeamArcChannel, uni::channels::ChannelProducer};
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;
+use reactive_mutiny::mutiny_stream::MutinyStream;
 
 
 /// maximum acceptable subscribers for each symbol:
@@ -43,13 +38,14 @@ const BUFFER: usize = 32;
 
 /// what Ogre Robot's event dispatcher gives us
 type DispatcherPayloadType = (AccountToken, MarketData);
+type DispatcherStreamType = MutinyStream<'static, DispatcherPayloadType, MultiCrossbeamArcChannel<DispatcherPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL>, Arc<DispatcherPayloadType>>;
 
 /// what we give to subscribers
 type SubscriberPayloadType = (AccountToken, MarketData);
 
 
 /// Default Mutiny type for "per client" events
-type SubscribersMulti = Multi<'static, SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type SubscribersMulti = ArcMulti<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 pub struct MarketWatcher {
@@ -86,7 +82,7 @@ impl MarketWatcher {
                           (&self,
                            symbol:           IntoSymbol,
                            subscriber_name:  IntoString,
-                           pipeline_builder: impl FnOnce(MultiStreamType<'static, DispatcherPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL>) -> OutStreamType) {
+                           pipeline_builder: impl FnOnce(DispatcherStreamType) -> OutStreamType) {
         let mut subscribers = self.subscribers.write().await;
         subscribers
             .entry(symbol.into())

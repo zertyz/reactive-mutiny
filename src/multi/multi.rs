@@ -16,20 +16,12 @@ use std::{
     time::Duration,
     future::Future,
 };
+use std::marker::PhantomData;
 use indexmap::IndexMap;
 use futures::{Stream};
 use tokio::{
     sync::{RwLock},
 };
-
-
-/// this is the fastest [MultiChannel] for general use, as revealed in performance tests
-type MultiChannelType<'a, ItemType,
-                          const BUFFER_SIZE: usize,
-                          const MAX_STREAMS: usize> = channels::movable::crossbeam::Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiStreamType<'a, ItemType,
-                             const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize> = MutinyStream<'a, ItemType, MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>, Arc<ItemType>>;
 
 
 /// `Multi` is an event handler capable of having several "listeners" -- all of which receives all events.\
@@ -40,27 +32,29 @@ pub type MultiStreamType<'a, ItemType,
 /// Example:
 /// ```nocompile
 /// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
-pub struct Multi<'a, ItemType:          Send + Sync + Debug,
-                     const BUFFER_SIZE: usize,
-                     const MAX_STREAMS: usize,
-                     const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> {
+pub struct Multi<'a, ItemType:          Send + Sync + Debug + 'a,
+                     MultiChannelType:  FullDuplexChannel<'a, ItemType, DerivedItemType>,
+                     const INSTRUMENTS: usize,
+                     DerivedItemType:   Debug + 'a> {
     pub multi_name:     String,
-    pub channel:        Arc<MultiChannelType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>>,
+    pub channel:        Arc<MultiChannelType>,
     pub executor_infos: RwLock<IndexMap<String, ExecutorInfo<INSTRUMENTS>>>,
+        _phantom:       PhantomData<(&'a ItemType, &'a MultiChannelType, &'a DerivedItemType)>,
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         const BUFFER_SIZE: usize,
-         const MAX_STREAMS: usize,
-         const INSTRUMENTS: usize>
-Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
+         MultiChannelType:  FullDuplexChannel<'a, ItemType, DerivedItemType>,
+         const INSTRUMENTS: usize,
+         DerivedItemType:   Debug + 'a>
+Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
         let multi_name = multi_name.into();
         Multi {
             multi_name:     multi_name.clone(),
-            channel:        MultiChannelType::<ItemType, BUFFER_SIZE, MAX_STREAMS>::new(multi_name.clone()),
+            channel:        MultiChannelType::new(multi_name.clone()),
             executor_infos: RwLock::new(IndexMap::new()),
+            _phantom:       PhantomData::default(),
         }
     }
 
@@ -74,13 +68,13 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
     }
 
     #[inline(always)]
-    pub fn send_arc(&self, arc_item: &Arc<ItemType>) {
+    pub fn send_derived(&self, arc_item: &DerivedItemType) {
         self.channel.send_derived(arc_item);
     }
 
     #[inline(always)]
     pub fn buffer_size(&self) -> u32 {
-        BUFFER_SIZE as u32
+        self.channel.buffer_size()
     }
 
     #[inline(always)]
@@ -100,11 +94,11 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                 concurrency_limit:         u32,
                                 futures_timeout:           Duration,
                                 pipeline_name:             IntoString,
-                                pipeline_builder:          impl FnOnce(MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
-                                on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                    -> ErrVoidAsyncType   + Send + Sync + 'static,
-                                on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
+                                pipeline_builder:          impl FnOnce(MutinyStream<'a, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
+                                on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                          -> ErrVoidAsyncType   + Send + Sync + 'static,
+                                on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                  -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                -> Result</*Self*/Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
+                                -> Result</*Self*/Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
 
         self.spawn_executor_ref(concurrency_limit, futures_timeout, pipeline_name, pipeline_builder, on_err_callback, on_close_callback).await?;
         Ok(self)
@@ -123,11 +117,11 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                     concurrency_limit:         u32,
                                     futures_timeout:           Duration,
                                     pipeline_name:             IntoString,
-                                    pipeline_builder:          impl FnOnce(MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
-                                    on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                    -> ErrVoidAsyncType   + Send + Sync + 'static,
-                                    on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
+                                    pipeline_builder:          impl FnOnce(MutinyStream<'a, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
+                                    on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                          -> ErrVoidAsyncType   + Send + Sync + 'static,
+                                    on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                  -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                    -> Result</*&Self*/&Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
+                                    -> Result</*&Self*/&Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.stream_name(), pipeline_name.into()), futures_timeout);
         let (in_stream, in_stream_id) = self.channel.create_stream();
@@ -152,10 +146,10 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                                         (self,
                                                          concurrency_limit:        u32,
                                                          pipeline_name:            IntoString,
-                                                         pipeline_builder:         impl FnOnce(MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
-                                                         on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                         pipeline_builder:         impl FnOnce(MutinyStream<'a, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
+                                                         on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                  -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                                        -> Result</*Self*/Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
+                                                        -> Result</*Self*/Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
         self.spawn_non_futures_non_fallible_executor_ref(concurrency_limit, pipeline_name, pipeline_builder, on_close_callback).await?;
         Ok(self)
     }
@@ -170,10 +164,10 @@ Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS> {
                                                             (&self,
                                                              concurrency_limit:        u32,
                                                              pipeline_name:            IntoString,
-                                                             pipeline_builder:         impl FnOnce(MultiStreamType<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType,
-                                                             on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                            -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                             pipeline_builder:         impl FnOnce(MutinyStream<'a, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
+                                                             on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                  -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                                            -> Result</*&Self*/&Multi<'a, ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>, Box<dyn std::error::Error>> {
+                                                            -> Result</*&Self*/&Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
         let (in_stream, in_stream_id) = self.channel.create_stream();
@@ -250,6 +244,7 @@ macro_rules! multis_close_async {
     }
 }
 pub use multis_close_async;
+use crate::uni::channels::FullDuplexChannel;
 
 /// Keeps track of the `stream_executor` associated to each `stream_id`
 pub struct ExecutorInfo<const INSTRUMENTS: usize> {

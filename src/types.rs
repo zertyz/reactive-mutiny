@@ -1,13 +1,17 @@
 //! Common types across this module
 
+use crate::{
+    Instruments,
+    stream_executor::StreamExecutor,
+    multi,
+    uni,
+};
 use std::{
     task::{Waker},
     fmt::Debug,
 };
 use std::future::Future;
 use std::sync::Arc;
-use crate::Instruments;
-use crate::stream_executor::StreamExecutor;
 
 
 /// Default `UniBuilder`, for ease of use -- to be expanded into all options
@@ -17,13 +21,27 @@ pub type UniBuilder<InType,
                     const INSTRUMENTS: usize,
                     OnStreamCloseFnType,
                     CloseVoidAsyncType>
-    = super::uni::UniBuilder<InType,
-                             super::uni::channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>,
-                             INSTRUMENTS,
-                             InType,
-                             OnStreamCloseFnType,
-                             CloseVoidAsyncType>;
+    = uni::UniBuilder<InType,
+                      uni::channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>,
+                      INSTRUMENTS,
+                      InType,
+                      OnStreamCloseFnType,
+                      CloseVoidAsyncType>;
 
+/// Default `Multi`, for ease of use -- the other options can be derived from this one
+pub type MultiCrossbeamArcChannel<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::movable::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiCrossbeamArc<ItemType,
+                           const BUFFER_SIZE: usize,
+                           const MAX_STREAMS: usize,
+                           const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+    = multi::Multi<'static, ItemType,
+                            MultiCrossbeamArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                            INSTRUMENTS,
+                            Arc<ItemType>>;
+pub type ArcMulti<ItemType,
+                  const BUFFER_SIZE: usize,
+                  const MAX_STREAMS: usize,
+                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> = MultiCrossbeamArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
 
 /// Source of events for [MutinyStream].
 pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {

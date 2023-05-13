@@ -67,6 +67,11 @@ mod tests {
 
 
 
+    #[ctor::ctor]
+    fn suite_setup() {
+        simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
+    }
+
     /// exercises the code present on the documentation
     #[cfg_attr(not(doc),tokio::test)]
     async fn doc_tests() {
@@ -127,7 +132,7 @@ mod tests {
         // notice how to transform a regular event into a future event &
         // how to pass it down the pipeline. Also notice the required (as of Rust 1.63)
         // moving of Arc local variables so they will be accessible
-        let on_event = |stream: MutinyStream<'static, u32, _>| {
+        let on_event = |stream: MutinyStream<'static, u32, _, u32>| {
             let observed_sum = Arc::clone(&observed_sum);
             stream
                 .map(|number| async move {
@@ -251,7 +256,7 @@ mod tests {
 
         // SIX event
         let six_fire_count_ref = Arc::clone(&six_fire_count);
-        let on_six_event = move |stream: MutinyStream<'static, (), _>| {
+        let on_six_event = move |stream: MutinyStream<'static, (), _, ()>| {
             stream.inspect(move |_| {
                 six_fire_count_ref.fetch_add(1, Relaxed);
             })
@@ -273,7 +278,7 @@ mod tests {
         });
 
         // TWO event
-        let on_two_event = |stream: MutinyStream<'static, u32, _>| {
+        let on_two_event = |stream: MutinyStream<'static, u32, _, u32>| {
             let two_fire_count = Arc::clone(&two_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_uni = Arc::clone(&six_uni);
@@ -311,7 +316,7 @@ mod tests {
         let two_producer = |item| two_uni.try_send(item);
 
         // FOUR event
-        let on_four_event = |stream: MutinyStream<'static, u32, _>| {
+        let on_four_event = |stream: MutinyStream<'static, u32, _, u32>| {
             let four_fire_count = Arc::clone(&four_fire_count);
             let shared_state = Arc::clone(&shared_state);
             let six_uni = Arc::clone(&six_uni);

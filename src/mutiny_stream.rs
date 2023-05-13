@@ -28,7 +28,7 @@ use futures::stream::Stream;
 /// ... allowing all of them to behave as a single function, that gets optimized together.
 pub struct MutinyStream<'a, ItemType:            Debug + Send + Sync + 'a,
                             ChannelConsumerType: ChannelConsumer<'a, DerivedItemType> + ?Sized,
-                            DerivedItemType:     'a + Debug = ItemType> {
+                            DerivedItemType:     'a + Debug> {
     stream_id:     u32,
     events_source: Arc<ChannelConsumerType>,
     _phantom:      PhantomData<(&'a ItemType, &'a DerivedItemType)>,

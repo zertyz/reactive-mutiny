@@ -20,10 +20,6 @@
 #[path = "../common/mod.rs"] mod common;
 
 use common::*;
-use reactive_mutiny::{
-    multi::{MultiStreamType,Multi},
-    stream_executor::StreamExecutor,
-};
 use std::{
     sync::{
         Arc,
@@ -34,6 +30,7 @@ use std::{
     fmt::Debug,
     future,
 };
+use reactive_mutiny::{Instruments, multi::Multi, stream_executor::StreamExecutor, mutiny_stream::MutinyStream, ArcMulti, MultiCrossbeamArcChannel};
 use futures::{SinkExt, Stream, stream, StreamExt, TryStreamExt};
 
 /// Represents a Market Order to be sent to the Exchange
@@ -52,10 +49,13 @@ struct Order {
 const BUFFER_SIZE: usize = 1024;
 const MAX_STREAMS: usize = 16;
 
+/// Stream type for our listeners
+type MultiStreamType = MutinyStream<'static, OrderEvent, MultiCrossbeamArcChannel<OrderEvent, BUFFER_SIZE, MAX_STREAMS>, Arc<OrderEvent>>;
+
 /// The processor of [AnalysisEvent]s, generating [Order] events for our [Multi]
 struct DecisionMaker {
     /// the handler for our [Multi] events
-    orders_event_handler: Multi<'static, OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
+    orders_event_handler: ArcMulti<OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
 }
 
 impl DecisionMaker {
@@ -71,7 +71,7 @@ impl DecisionMaker {
                               OutStreamType:          Stream<Item=OutItemType> + Send + 'static>
                              (&self,
                               listener_name:    IntoString,
-                              pipeline_builder: impl FnOnce(MultiStreamType<'static, OrderEvent, BUFFER_SIZE, MAX_STREAMS>) -> OutStreamType)
+                              pipeline_builder: impl FnOnce(MultiStreamType) -> OutStreamType)
                              -> Result<(), Box<dyn std::error::Error>> {
         self.orders_event_handler.spawn_non_futures_non_fallible_executor_ref(1, format!("`OrderEvent`s listener '{}'", listener_name.into()), pipeline_builder, |_| async {}).await
             .map_err(|err| Box::from(format!("Error adding an `OrderEvent`s listener to the `DecisionMaker`: {:?}", err)))

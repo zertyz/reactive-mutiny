@@ -59,19 +59,27 @@ type AtomicZeroCopyUniBuilder<OnStreamCloseFnType, CloseVoidAsyncType> = reactiv
                                                                                                           reactive_mutiny::uni::channels::zero_copy::atomic::Atomic<'static, ExchangeEvent, OgreArrayPoolAllocator, BUFFER_SIZE, MAX_STREAMS>,
                                                                                                           INSTRUMENTS, OgreArc<ExchangeEvent, OgreArrayPoolAllocator>, OnStreamCloseFnType, CloseVoidAsyncType>;
 
+// Multis
+/////////
 
-async fn uni_benchmark<'a, UniChannelType: FullDuplexChannel<'a, ExchangeEvent, ExchangeEvent> + Sync + Send + 'a>
-                      (ident: &str, uni: Uni<'a, ExchangeEvent, UniChannelType, 9999>) {
-    // println!("{ident}Here I am, for {:?}", uni)
-}
+type AtomicArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
+                                                             reactive_mutiny::multi::channels::movable::atomic::Atomic<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
+                                                             INSTRUMENTS, Arc<ExchangeEvent>>;
+type CrossbeamArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
+                                                                reactive_mutiny::multi::channels::movable::crossbeam::Crossbeam<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
+                                                                INSTRUMENTS, Arc<ExchangeEvent>>;
+type FullSyncArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
+                                                               reactive_mutiny::multi::channels::movable::full_sync::FullSync<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
+                                                               INSTRUMENTS, Arc<ExchangeEvent>>;
 
-async fn uni_builder_benchmark<ConsumedEventType:   'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                               UniChannelType:      FullDuplexChannel<'static, ExchangeEvent, ConsumedEventType> + Sync + Send + 'static,
+
+async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
+                               UniChannelType:      FullDuplexChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static,
                                OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                                CloseVoidAsyncType:  Future<Output=()> + Send + 'static>
                               (ident: &str,
                                name: &str,
-                               uni_builder: reactive_mutiny::uni::UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, ConsumedEventType, OnStreamCloseFnType, CloseVoidAsyncType>) {
+                               uni_builder: reactive_mutiny::uni::UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType, OnStreamCloseFnType, CloseVoidAsyncType>) {
 
     #[cfg(not(debug_assertions))]
     const ITERATIONS: u32 = 1<<24;
@@ -109,6 +117,57 @@ async fn uni_builder_benchmark<ConsumedEventType:   'static + Debug + Send + Syn
              if observed == expected { format!("✓") } else { format!("∅ -- SUM of the first {ITERATIONS} natural numbers differ! Expected: {expected}; Observed: {observed}") });
 }
 
+async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<Target = ExchangeEvent>,
+                                 MultiChannelType: FullDuplexChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
+                                (ident: &str,
+                                 name: &str,
+                                 multi: reactive_mutiny::multi::Multi<'static, ExchangeEvent, MultiChannelType, INSTRUMENTS, DerivedEventType>)
+                                -> Result<(), Box<dyn std::error::Error>> {
+
+    #[cfg(not(debug_assertions))]
+    const ITERATIONS: u32 = 1<<24;
+    #[cfg(debug_assertions)]
+    const ITERATIONS: u32 = 1<<20;
+
+    let mut sum = Arc::new(AtomicU64::new(0));
+
+    multi
+        .spawn_non_futures_non_fallible_executor_ref(1, name, |stream| {
+            let sum = Arc::clone(&sum);
+            stream.map(move |exchange_event| {
+                let val = match *exchange_event {
+                    ExchangeEvent::TradeEvent { unitary_value, quantity } => quantity,
+                    _ => 0,
+                };
+                sum.fetch_add(val, Relaxed)
+            })
+        }, |_| async {}).await
+        .map_err(|err| format!("Couldn't spawn a new executor for Multi {}", multi.multi_name))?;
+
+    print!("{ident}{name}: "); std::io::stdout().flush().unwrap();
+
+    let start = Instant::now();
+    let mut e = 0;
+    'done: loop {
+        for _ in 0..(multi.buffer_size() - multi.pending_items_count()) {
+            if e < ITERATIONS {
+                e += 1;
+                multi.send(ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u64 });
+            } else {
+                break 'done;
+            }
+        }
+    }
+    multi.close(Duration::from_secs(5)).await;
+    let elapsed = start.elapsed();
+    let observed = sum.load(Relaxed);
+    let expected = (1 + ITERATIONS) as u64 * (ITERATIONS / 2) as u64;
+    println!("{:10.2}/s {}",
+             ITERATIONS as f64 / elapsed.as_secs_f64(),
+             if observed == expected { format!("✓") } else { format!("∅ -- SUM of the first {ITERATIONS} natural numbers differ! Expected: {expected}; Observed: {observed}") });
+    Ok(())
+}
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() {
     println!("On this code, you may see how to build `Uni`s and `Multi`s using all the available channels");
@@ -125,5 +184,8 @@ async fn main() {
     println!();
     println!("Multi:");
     println!("    Arc:");
+    multi_builder_benchmark("        ", "Atomic    ", AtomicArcMulti::new("profiling multi")).await;
+    multi_builder_benchmark("        ", "Crossbeam ", CrossbeamArcMulti::new("profiling multi")).await;
+    multi_builder_benchmark("        ", "FullSync  ", FullSyncArcMulti::new("profiling multi")).await;
     println!();
 }

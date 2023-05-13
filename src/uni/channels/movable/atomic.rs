@@ -57,7 +57,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self>, u32) {
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
         let stream_id = self.streams_manager.create_stream_id();
         (MutinyStream::new(stream_id, self), stream_id)
     }

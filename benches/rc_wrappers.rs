@@ -133,7 +133,8 @@ fn bench_deref(criterion: &mut Criterion) {
     group.finish();
 }
 
-/// Measures the cloning & clone dropping times for all of our wrappers of interest
+/// Measures the cloning & clone dropping times for all of our wrappers of interest.
+/// `OgreUnique` times are not included as they should be made an `OgreArc` before cloning.
 fn bench_cloning(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("Cloning & Dropping");

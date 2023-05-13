@@ -25,7 +25,7 @@ use std::{
 use std::num::NonZeroU32;
 use log::{warn};
 use async_trait::async_trait;
-use crate::uni::channels::{ChannelCommon, ChannelProducer};
+use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
@@ -182,3 +182,10 @@ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.cancel_all_streams();
     }
 }
+
+
+impl <'a, ItemType:          'a + Debug + Send + Sync,
+          const BUFFER_SIZE: usize,
+          const MAX_STREAMS: usize>
+FullDuplexChannel<'a, ItemType, Arc<ItemType>>
+for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

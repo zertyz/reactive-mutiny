@@ -18,11 +18,6 @@ use std::marker::PhantomData;
 use minstant::Instant;
 
 
-/// this is the fastest [UniChannel] for general use, as revealed in performance tests
-pub type UniChannelType<'a, ItemType,
-                            const BUFFER_SIZE: usize,
-                            const MAX_STREAMS: usize> = channels::movable::full_sync::FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
 pub struct Uni<'a, ItemType:          Send + Sync + Debug,
