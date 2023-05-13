@@ -30,7 +30,7 @@ use std::{
     fmt::Debug,
     future,
 };
-use reactive_mutiny::{Instruments, multi::Multi, stream_executor::StreamExecutor, mutiny_stream::MutinyStream, ArcMulti, MultiCrossbeamArcChannel};
+use reactive_mutiny::{Instruments, multi::Multi, stream_executor::StreamExecutor, mutiny_stream::MutinyStream, MultiArc, MultiCrossbeamArcChannel};
 use futures::{SinkExt, Stream, stream, StreamExt, TryStreamExt};
 
 /// Represents a Market Order to be sent to the Exchange
@@ -55,7 +55,7 @@ type MultiStreamType = MutinyStream<'static, OrderEvent, MultiCrossbeamArcChanne
 /// The processor of [AnalysisEvent]s, generating [Order] events for our [Multi]
 struct DecisionMaker {
     /// the handler for our [Multi] events
-    orders_event_handler: ArcMulti<OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
+    orders_event_handler: MultiArc<OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
 }
 
 impl DecisionMaker {

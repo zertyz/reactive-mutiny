@@ -15,18 +15,15 @@ use std::sync::Arc;
 
 
 /// Default `UniBuilder`, for ease of use -- to be expanded into all options
-pub type UniBuilder<InType,
-                    const BUFFER_SIZE: usize,
-                    const MAX_STREAMS: usize,
-                    const INSTRUMENTS: usize,
-                    OnStreamCloseFnType,
-                    CloseVoidAsyncType>
+pub type UniFullSyncMoveChannel<InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>;
+pub type UniMove<InType,
+                 const BUFFER_SIZE: usize,
+                 const MAX_STREAMS: usize,
+                 const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
     = uni::UniBuilder<InType,
-                      uni::channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>,
+                      UniFullSyncMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>,
                       INSTRUMENTS,
-                      InType,
-                      OnStreamCloseFnType,
-                      CloseVoidAsyncType>;
+                      InType>;
 
 /// Default `Multi`, for ease of use -- the other options can be derived from this one
 pub type MultiCrossbeamArcChannel<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::movable::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
@@ -38,10 +35,11 @@ pub type MultiCrossbeamArc<ItemType,
                             MultiCrossbeamArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
                             INSTRUMENTS,
                             Arc<ItemType>>;
-pub type ArcMulti<ItemType,
+pub type MultiArc<ItemType,
                   const BUFFER_SIZE: usize,
                   const MAX_STREAMS: usize,
                   const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> = MultiCrossbeamArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
+
 
 /// Source of events for [MutinyStream].
 pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {

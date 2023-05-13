@@ -18,13 +18,13 @@ use reactive_mutiny::{multi::{
 }, uni::channels::{
     ChannelCommon,
     ChannelProducer,
-}, multis_close_async, ArcMulti};
+}, multis_close_async, MultiArc};
 use log::warn;
 use reactive_mutiny::mutiny_stream::MutinyStream;
 
 
 /// Default Mutiny type for "per client" events
-type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = ArcMulti<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = MultiArc<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 

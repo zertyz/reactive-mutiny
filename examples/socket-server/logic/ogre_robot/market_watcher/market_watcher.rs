@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use reactive_mutiny::{ArcMulti, multi::Multi, MultiCrossbeamArc, MultiCrossbeamArcChannel, uni::channels::ChannelProducer};
+use reactive_mutiny::{MultiArc, multi::Multi, MultiCrossbeamArc, MultiCrossbeamArcChannel, uni::channels::ChannelProducer};
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;
 use reactive_mutiny::mutiny_stream::MutinyStream;
@@ -45,7 +45,7 @@ type SubscriberPayloadType = (AccountToken, MarketData);
 
 
 /// Default Mutiny type for "per client" events
-type SubscribersMulti = ArcMulti<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type SubscribersMulti = MultiArc<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 pub struct MarketWatcher {

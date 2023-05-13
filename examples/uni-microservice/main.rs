@@ -13,7 +13,7 @@
 
 use common::*;
 use reactive_mutiny::{
-    UniBuilder,
+    UniMove,
     Instruments,
     uni::{Uni},
 };
@@ -87,11 +87,13 @@ async fn main() {
 
     // Somewhere, when the application starts, the Uni's event processing pipeline should be created
     // -- notice that it is here that that the answers are tied to "Queue B", but it could be anywhere else:
-    let queue_a_events_handle = UniBuilder::<ExchangeEvent, 1024, 1, {Instruments::LogsWithMetrics.into()}, _, _>::new()
-        .on_stream_close(|_| async {})
+    let queue_a_events_handle = UniMove::<ExchangeEvent, 1024, 1>::new()
         .spawn_non_futures_non_fallible_executor("Consumer of binary `ExchangeEvent`s @ Queue A / producer of binary `AnalysisEvent`s @ Queue B",
-                                                 |exchange_events| process(exchange_events)
-                                                     .inspect(|outgoing_event| queue_b_send(outgoing_event)) );
+                                                 |exchange_events| {
+                                                     process(exchange_events)
+                                                         .inspect(|outgoing_event| queue_b_send(outgoing_event))
+                                                 },
+                                                 |_| async {});
 
     // demonstration
     ////////////////

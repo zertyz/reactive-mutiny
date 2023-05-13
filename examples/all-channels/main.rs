@@ -45,19 +45,19 @@ type OgreArrayPoolAllocator = reactive_mutiny::ogre_std::ogre_alloc::ogre_array_
 // Unis
 ///////
 
-type AtomicMoveUniBuilder<OnStreamCloseFnType, CloseVoidAsyncType> = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                                                      reactive_mutiny::uni::channels::movable::atomic::Atomic<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                                                                      INSTRUMENTS, ExchangeEvent, OnStreamCloseFnType, CloseVoidAsyncType>;
-type CrossbeamMoveUniBuilder<OnStreamCloseFnType, CloseVoidAsyncType> = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                                                         reactive_mutiny::uni::channels::movable::crossbeam::Crossbeam<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                                                                         INSTRUMENTS, ExchangeEvent, OnStreamCloseFnType, CloseVoidAsyncType>;
-type FullSyncMoveUniBuilder<OnStreamCloseFnType, CloseVoidAsyncType> = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                                                        reactive_mutiny::uni::channels::movable::full_sync::FullSync<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                                                                        INSTRUMENTS, ExchangeEvent, OnStreamCloseFnType, CloseVoidAsyncType>;
+type AtomicMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
+                                                             reactive_mutiny::uni::channels::movable::atomic::Atomic<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
+                                                             INSTRUMENTS, ExchangeEvent>;
+type CrossbeamMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
+                                                                reactive_mutiny::uni::channels::movable::crossbeam::Crossbeam<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
+                                                                INSTRUMENTS, ExchangeEvent>;
+type FullSyncMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
+                                                               reactive_mutiny::uni::channels::movable::full_sync::FullSync<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
+                                                               INSTRUMENTS, ExchangeEvent>;
 
-type AtomicZeroCopyUniBuilder<OnStreamCloseFnType, CloseVoidAsyncType> = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                                                          reactive_mutiny::uni::channels::zero_copy::atomic::Atomic<'static, ExchangeEvent, OgreArrayPoolAllocator, BUFFER_SIZE, MAX_STREAMS>,
-                                                                                                          INSTRUMENTS, OgreArc<ExchangeEvent, OgreArrayPoolAllocator>, OnStreamCloseFnType, CloseVoidAsyncType>;
+type AtomicZeroCopyUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
+                                                                 reactive_mutiny::uni::channels::zero_copy::atomic::Atomic<'static, ExchangeEvent, OgreArrayPoolAllocator, BUFFER_SIZE, MAX_STREAMS>,
+                                                                 INSTRUMENTS, OgreArc<ExchangeEvent, OgreArrayPoolAllocator>>;
 
 // Multis
 /////////
@@ -74,12 +74,10 @@ type FullSyncArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
 
 
 async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                               UniChannelType:      FullDuplexChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static,
-                               OnStreamCloseFnType: Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
-                               CloseVoidAsyncType:  Future<Output=()> + Send + 'static>
+                               UniChannelType:      FullDuplexChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
                               (ident: &str,
                                name: &str,
-                               uni_builder: reactive_mutiny::uni::UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType, OnStreamCloseFnType, CloseVoidAsyncType>) {
+                               uni_builder: reactive_mutiny::uni::UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
 
     #[cfg(not(debug_assertions))]
     const ITERATIONS: u32 = 1<<24;
@@ -98,7 +96,8 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
                 };
                 sum.fetch_add(val, Relaxed)
             })
-        });
+        },
+        |_| async {});
 
     print!("{ident}{name}: "); std::io::stdout().flush().unwrap();
 
@@ -169,23 +168,25 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("On this code, you may see how to build `Uni`s and `Multi`s using all the available channels");
     println!("-- each providing tradeoffs between features and performance.");
     println!("Performance characteristics of passing our `ExchangeEvent` through all the different channels:");
     println!();
     println!("Uni:");
     println!("    Move:");
-    uni_builder_benchmark("        ", "Atomic    ", AtomicMoveUniBuilder::new().on_stream_close(&|_| async {})).await;
-    uni_builder_benchmark("        ", "Crossbeam ", CrossbeamMoveUniBuilder::new().on_stream_close(&|_| async {})).await;
-    uni_builder_benchmark("        ", "Full Sync ", FullSyncMoveUniBuilder::new().on_stream_close(&|_| async {})).await;
+    uni_builder_benchmark("        ", "Atomic    ", AtomicMoveUniBuilder::new()).await;
+    uni_builder_benchmark("        ", "Crossbeam ", CrossbeamMoveUniBuilder::new()).await;
+    uni_builder_benchmark("        ", "Full Sync ", FullSyncMoveUniBuilder::new()).await;
     println!("    Zero-Copy:");
-    uni_builder_benchmark("        ", "Atomic    ", AtomicZeroCopyUniBuilder::new().on_stream_close(&|_| async {})).await;
+    uni_builder_benchmark("        ", "Atomic    ", AtomicZeroCopyUniBuilder::new()).await;
     println!();
     println!("Multi:");
     println!("    Arc:");
-    multi_builder_benchmark("        ", "Atomic    ", AtomicArcMulti::new("profiling multi")).await;
-    multi_builder_benchmark("        ", "Crossbeam ", CrossbeamArcMulti::new("profiling multi")).await;
-    multi_builder_benchmark("        ", "FullSync  ", FullSyncArcMulti::new("profiling multi")).await;
+    multi_builder_benchmark("        ", "Atomic    ", AtomicArcMulti::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "Crossbeam ", CrossbeamArcMulti::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "FullSync  ", FullSyncArcMulti::new("profiling multi")).await?;
     println!();
+
+    Ok(())
 }
