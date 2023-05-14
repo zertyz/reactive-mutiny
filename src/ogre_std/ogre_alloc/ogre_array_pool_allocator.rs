@@ -15,22 +15,18 @@ use crate::ogre_std::ogre_alloc::types::OgreAllocator;
 
 
 pub struct OgreArrayPoolAllocator<DataType:        Send + Sync,
+                                  ContainerType:   MoveContainer<u32>,
                                   const POOL_SIZE: usize> {
     pool:      Pin<Box<[ManuallyDrop<DataType>; POOL_SIZE]>>,
-    free_list: FullSyncMove<u32, POOL_SIZE>,
-}
-
-impl<DataType:        Send + Sync,
-     const POOL_SIZE: usize>
-OgreArrayPoolAllocator<DataType, POOL_SIZE> {
-
+    free_list: ContainerType,
 }
 
 
 impl<DataType:        Debug + Send + Sync,
+     ContainerType:   MoveContainer<u32>,
      const POOL_SIZE: usize>
 Debug
-for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
+for OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "OgreArrayPoolAllocator{{used_slots_count: {}, free_slots_count: {}}}",
                   POOL_SIZE - self.free_list.available_elements_count(),
@@ -40,15 +36,16 @@ for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
 
 
 impl<DataType:        Debug + Send + Sync,
+     ContainerType:   MoveContainer<u32>,
      const POOL_SIZE: usize>
 OgreAllocator<DataType>
-for OgreArrayPoolAllocator<DataType, POOL_SIZE> {
+for OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
 
     fn new() -> Self {
         Self {
             pool:      Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
             free_list: {
-                           let free_list = FullSyncMove::new();
+                           let free_list = ContainerType::new();
                            for slot_id in 0..POOL_SIZE as u32 {
                                free_list.publish_movable(slot_id);
                            }

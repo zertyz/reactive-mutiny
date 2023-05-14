@@ -26,7 +26,7 @@ pub struct NonBlockingQueue<SlotType:          Copy+Debug + Send + Sync,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         AtomicZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>, BUFFER_SIZE>,
+    base_queue:         AtomicZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, super::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,
@@ -174,6 +174,7 @@ mod tests {
 
     use super::*;
     use super::super::super::super::test_commons::{self,ContainerKind,Blocking};
+
 
     #[cfg_attr(not(doc),test)]
     fn basic_queue_use_cases() {

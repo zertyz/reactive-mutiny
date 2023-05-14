@@ -6,7 +6,7 @@ use crate::{
         ogre_alloc::{
             OgreAllocator,
             ogre_array_pool_allocator::OgreArrayPoolAllocator,
-            ogre_arc::OgreArc,
+            ogre_unique::OgreUnique,
         },
         ogre_queues::{
             atomic::atomic_zero_copy::AtomicZeroCopy,
@@ -18,6 +18,7 @@ use crate::{
     uni::channels::{
         ChannelCommon,
         ChannelProducer,
+        FullDuplexChannel,
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
@@ -33,10 +34,9 @@ use std::{
     marker::PhantomData,
 };
 use async_trait::async_trait;
-use crate::uni::channels::FullDuplexChannel;
 
 
-/// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreArc] to allow a complete zero-copy
+/// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
 /// operation -- no copies either when producing the event nor when consuming it, nor when passing it along to application logic functions.
 pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
                       OgreAllocatorType: OgreAllocator<ItemType> + 'a,
@@ -54,7 +54,7 @@ impl<'a, ItemType:          Debug + Send + Sync,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
+ChannelCommon<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
@@ -66,8 +66,8 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     fn create_stream(self: &Arc<Self>)
-                     -> (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32)
-                         where Self: ChannelConsumer<'a, OgreArc<ItemType, OgreAllocatorType>> {
+                     -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
+                         where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
         let stream_id = self.streams_manager.create_stream_id();
         (MutinyStream::new(stream_id, self), stream_id)
     }
@@ -108,7 +108,7 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelProducer<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
+ChannelProducer<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
@@ -137,14 +137,14 @@ impl<'a, ItemType:          'static + Debug + Send + Sync,
          OgreAllocatorType: 'a + OgreAllocator<ItemType> + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelConsumer<'a, OgreArc<ItemType, OgreAllocatorType>>
+ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn consume(&self, _stream_id: u32) -> Option<OgreArc<ItemType, OgreAllocatorType>> {
+    fn consume(&self, _stream_id: u32) -> Option<OgreUnique<ItemType, OgreAllocatorType>> {
         match self.channel.consume_leaking() {
-            Some( (_event_ref, slot_id) ) => {
-                Some(OgreArc::<ItemType, OgreAllocatorType>::from_allocated(slot_id, &self.channel.allocator))
+            Some( (slot_ref, _slot_id) ) => {
+                Some(OgreUnique::<ItemType, OgreAllocatorType>::from_allocated_ref(slot_ref, &self.channel.allocator))
             }
             None => None,
         }
@@ -168,8 +168,41 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl <'a, ItemType:          'static + Debug + Send + Sync,
-          OgreAllocatorType: 'a + OgreAllocator<ItemType> + Send + Sync,
+          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
+FullDuplexChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}
+
+
+#[cfg(any(test,doc))]
+mod tests {
+    //! Unit tests for zero-copy [atomic](super) module
+
+    use super::*;
+    use crate::{
+        ogre_std::{
+            ogre_alloc,
+            ogre_queues,
+        },
+        types::UniAtomicZeroCopyChannel,
+    };
+
+
+    #[ctor::ctor]
+    fn suite_setup() {
+        simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
+    }
+
+    #[cfg_attr(not(doc),test)]
+    fn can_we_instantiate() {
+        type InType = i32;
+        const BUFFER_SIZE: usize = 1024;
+        const MAX_STREAMS: usize = 1;
+        let channel = Atomic::<'static, InType,
+                                        ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>,
+                                        BUFFER_SIZE,
+                                        MAX_STREAMS>::new("can I instantiate this?");
+        let channel2 = UniAtomicZeroCopyChannel::<&str, 1024, 2>::new("That should be the same channel, but with a ref type instead");
+    }
+}

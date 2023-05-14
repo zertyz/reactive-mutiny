@@ -31,14 +31,20 @@ OgreUnique<DataType, OgreAllocatorType> {
         match allocator.alloc() {
             Some( (slot_ref, _slot_id) ) => {
                 unsafe { std::ptr::write(slot_ref, data); }
-                Some(Self::from_allocated(slot_ref, allocator))
+                Some(Self::from_allocated_ref(slot_ref, allocator))
             }
             None => None
         }
     }
 
     #[inline(always)]
-    pub fn from_allocated(data_ref: &DataType, allocator: &OgreAllocatorType) -> Self {
+    pub fn from_allocated_id(data_id: u32, allocator: &OgreAllocatorType) -> Self {
+        let data_ref = allocator.ref_from_id(data_id);
+        Self::from_allocated_ref(data_ref, allocator)
+    }
+
+    #[inline(always)]
+    pub fn from_allocated_ref(data_ref: &DataType, allocator: &OgreAllocatorType) -> Self {
         Self {
             allocator: unsafe { &*(allocator as *const OgreAllocatorType) },
             data_ref:  unsafe { &*(data_ref as *const DataType) },
@@ -157,13 +163,14 @@ for OgreUnique<DataType, OgreAllocatorType> {}
 mod tests {
     //! Unit tests for [ogre_arc](super) module
 
+    use crate::AllocatorAtomicArray;
     use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
     use super::*;
 
 
     #[cfg_attr(not(doc),test)]
     pub fn ssas() {
-        let allocator = OgreArrayPoolAllocator::<u128, 128>::new();
+        let allocator = AllocatorAtomicArray::<u128, 128>::new();
         let unique = OgreUnique::new(128, &allocator).expect("Allocation should have been done");
         println!("unique is {unique} -- {:?}", unique);
         assert_eq!(*unique.deref(), 128, "Value doesn't match");
@@ -175,7 +182,7 @@ mod tests {
 
     #[cfg_attr(not(doc),test)]
     pub fn into_ogrearc() {
-        let allocator = OgreArrayPoolAllocator::<u128, 128>::new();
+        let allocator = AllocatorAtomicArray::<u128, 128>::new();
         let unique = OgreUnique::new(128, &allocator).expect("Allocation should have been done");
         let ogre_arc = unique.into_ogre_arc();
         println!("arc is {ogre_arc} -- {:?}", ogre_arc);

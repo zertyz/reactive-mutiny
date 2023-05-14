@@ -113,10 +113,7 @@ pub trait FullDuplexChannel<'a, ItemType:        'a + Debug + Send + Sync,
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use crate::{
-        ogre_std::ogre_alloc::{OgreAllocator, ogre_array_pool_allocator::OgreArrayPoolAllocator},
-        uni::channels::{ movable, zero_copy },
-    };
+    use crate::{ogre_std::ogre_alloc::{OgreAllocator, ogre_array_pool_allocator::OgreArrayPoolAllocator}, uni::channels::{movable, zero_copy}, UniAtomicZeroCopyChannel};
     use std::{
         fmt::Debug,
         future::Future,
@@ -152,7 +149,7 @@ mod tests {
     doc_test!(movable_crossbeam_channel_doc_test, movable::crossbeam::Crossbeam<&str, 1024, 1>);
     doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
     doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
-    doc_test!(zero_copy_atomic_queue_doc_test,    zero_copy::atomic::Atomic<&str, OgreArrayPoolAllocator<&str, 1024>, 1024, 1>);
+    doc_test!(zero_copy_atomic_queue_doc_test,    UniAtomicZeroCopyChannel<&str, 1024, 2>);
 
 
     // *_dropping for known parallel stream implementors
@@ -213,7 +210,7 @@ mod tests {
     dropping!(movable_crossbeam_queue_dropping, movable::crossbeam::Crossbeam<&str, 1024, 2>);
     dropping!(movable_atomic_queue_dropping,    movable::atomic::Atomic<&str, 1024, 2>);
     dropping!(movable_full_sync_queue_dropping, movable::full_sync::FullSync<&str, 1024, 2>);
-    dropping!(zero_copy_atomic_queue_dropping,  zero_copy::atomic::Atomic<&str, OgreArrayPoolAllocator<&str, 1024>, 1024, 2>);
+    dropping!(zero_copy_atomic_queue_dropping,  UniAtomicZeroCopyChannel<&str, 1024, 2>);
 
 
     // *_parallel_streams for known parallel stream implementors
@@ -266,7 +263,7 @@ mod tests {
     parallel_streams!(movable_crossbeam_parallel_streams, movable::crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
     parallel_streams!(movable_atomic_parallel_streams,    movable::atomic::Atomic<u32, 1024, PARALLEL_STREAMS>);
     parallel_streams!(movable_mutex_parallel_streams,     movable::full_sync::FullSync<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(zero_copy_atomic_parallel_streams,  zero_copy::atomic::Atomic<u32, OgreArrayPoolAllocator<u32, 1024>, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(zero_copy_atomic_parallel_streams,  UniAtomicZeroCopyChannel<u32, 1024, PARALLEL_STREAMS>);
 
 
     /// assures performance won't be degraded when we make changes
@@ -411,11 +408,9 @@ if counter == count {
         profile_different_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
         profile_different_task_different_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
 
-        type ZeroCopyAtomic<'a> = zero_copy::atomic::Atomic::<'a, u32, OgreArrayPoolAllocator<u32, BUFFER_SIZE>, BUFFER_SIZE, 1>;
-
-        profile_same_task_same_thread_channel!(ZeroCopyAtomic::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(ZeroCopyAtomic::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(ZeroCopyAtomic::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
 
     }
 

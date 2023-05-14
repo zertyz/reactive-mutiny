@@ -213,13 +213,14 @@ for InnerOgreArc<DataType, OgreAllocatorType> {
 mod tests {
     //! Unit tests for [ogre_arc](super) module
 
+    use crate::AllocatorAtomicArray;
     use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
     use super::*;
 
 
     #[cfg_attr(not(doc),test)]
     pub fn ssas() {
-        let allocator = OgreArrayPoolAllocator::<u128, 128>::new();
+        let allocator = AllocatorAtomicArray::<u128, 128>::new();
         let arc1 = OgreArc::new(128, &allocator).expect("Allocation should have been done");
         println!("arc1 is {arc1} -- {:?}", arc1);
         assert_eq!((*arc1.deref(), arc1.references_count()), (128, 1), "Starting Value and Reference Counts don't match for `arc1`");

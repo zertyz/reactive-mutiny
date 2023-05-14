@@ -41,7 +41,7 @@ pub struct BlockingQueue<SlotType:                  Copy+Debug + Send + Sync,
     /// locked when the queue is full, unlocked when it is no longer full
     full_guard:         RawMutex,
     /// queue
-    base_queue:         AtomicZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>, BUFFER_SIZE>,
+    base_queue:         AtomicZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, super::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>, BUFFER_SIZE>,
     /// locked when the queue is empty, unlocked when it is no longer empty
     empty_guard:        RawMutex,
     // metrics for dequeue

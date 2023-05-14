@@ -5,6 +5,7 @@ use crate::{
     stream_executor::StreamExecutor,
     multi,
     uni,
+    ogre_std::{ogre_queues, ogre_alloc},
 };
 use std::{
     task::{Waker},
@@ -14,8 +15,26 @@ use std::future::Future;
 use std::sync::Arc;
 
 
-/// Default `UniBuilder`, for ease of use -- to be expanded into all options
-pub type UniFullSyncMoveChannel<InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>;
+// allocators
+pub type AllocatorAtomicArray<InType, const BUFFER_SIZE: usize> = ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>;
+
+// Uni channels
+pub type UniAtomicMoveChannel    <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::atomic::Atomic      <'static, InType, BUFFER_SIZE, MAX_STREAMS>;
+pub type UniCrossbeamMoveChannel <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::crossbeam::Crossbeam<'static, InType, BUFFER_SIZE, MAX_STREAMS>;
+pub type UniFullSyncMoveChannel  <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::full_sync::FullSync <'static, InType, BUFFER_SIZE, MAX_STREAMS>;
+pub type UniAtomicZeroCopyChannel<InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::zero_copy::atomic::Atomic    <'static, InType, AllocatorAtomicArray<InType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
+
+/// Default 'UniBuilder' for "zero-copying" data that will be shared around
+pub type UniZeroCopy<InType,
+                     const BUFFER_SIZE: usize,
+                     const MAX_STREAMS: usize,
+                     const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+    = uni::UniBuilder<InType,
+                      UniAtomicZeroCopyChannel<InType, BUFFER_SIZE, MAX_STREAMS>,
+                      INSTRUMENTS,
+                      InType>;
+
+/// Default `UniBuilder` for "moving" data around
 pub type UniMove<InType,
                  const BUFFER_SIZE: usize,
                  const MAX_STREAMS: usize,

@@ -14,6 +14,8 @@ use std::{fmt::Debug, mem::{ManuallyDrop, MaybeUninit}, sync::atomic::{
     AtomicBool,
     Ordering::Relaxed,
 }, num::NonZeroU32, ptr};
+use std::marker::PhantomData;
+use std::sync::Arc;
 use crate::ogre_std::ogre_alloc::OgreAllocator;
 
 
@@ -26,31 +28,37 @@ use crate::ogre_std::ogre_alloc::OgreAllocator;
 /// For thinner payloads, [FullSyncMove] should be a better fit, as it doesn't require a secondary container to
 /// hold the objects.
 pub struct FullSyncZeroCopy<SlotType:          Debug + Send + Sync,
+                            OgreAllocatorType: OgreAllocator<SlotType>,
                             const BUFFER_SIZE: usize> {
 
+    allocator: Arc<OgreAllocatorType>,
     queue:     FullSyncMove<u32, BUFFER_SIZE>,
-    allocator: OgreArrayPoolAllocator<SlotType, BUFFER_SIZE>,
+    _phantom:  PhantomData<SlotType>
+
 }
 
 
 impl<'a, SlotType:          'a + Debug + Send + Sync,
+         OgreAllocatorType: OgreAllocator<SlotType>,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
-FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
+FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     fn new() -> Self {
         Self {
+            allocator: Arc::new(OgreAllocatorType::new()),
             queue:     FullSyncMove::new(),
-            allocator: OgreArrayPoolAllocator::new(),
+            _phantom:  PhantomData::default(),
         }
     }
 }
 
 
 impl<'a, SlotType:          'a + Debug + Send + Sync,
+         OgreAllocatorType: OgreAllocator<SlotType>,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
-FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
+FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn publish(&self, item: SlotType) -> Option<NonZeroU32> {
@@ -105,9 +113,10 @@ FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
 
 
 impl<'a, SlotType:          'a + Debug + Sync + Send,
+         OgreAllocatorType: OgreAllocator<SlotType>,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
-FullSyncZeroCopy<SlotType, BUFFER_SIZE> {
+FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn consume<GetterReturnType: 'a,

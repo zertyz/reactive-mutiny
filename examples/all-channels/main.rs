@@ -3,17 +3,6 @@
 #[path = "../common/mod.rs"] mod common;
 
 use common::{ExchangeEvent};
-use reactive_mutiny::{
-    uni::{
-        Uni,
-        channels::{
-            ChannelCommon,
-            ChannelProducer,
-        },
-    },
-    ChannelConsumer,
-    Instruments,
-};
 use std::{
     future, sync::{
         Arc,
@@ -21,18 +10,29 @@ use std::{
     },
     time::Duration,
     io::Write,
+    fmt::Debug,
+    future::Future,
+    ops::Deref,
+    sync::atomic::{
+        AtomicU64, Ordering::Relaxed,
+    },
+    time::Instant,
 };
-use std::fmt::Debug;
-use std::future::Future;
-use std::ops::Deref;
-use std::sync::atomic::{
-    AtomicU64, Ordering::Relaxed,
+use reactive_mutiny::{
+    ogre_std::ogre_alloc::ogre_unique::OgreUnique,
+    stream_executor::StreamExecutor,
+    uni::{
+        Uni,
+        channels::{
+            ChannelCommon,
+            ChannelProducer,
+            FullDuplexChannel,
+        },
+    },
+    ChannelConsumer,
+    Instruments,
 };
-use std::time::Instant;
 use futures::{SinkExt, Stream, StreamExt};
-use reactive_mutiny::ogre_std::ogre_alloc::ogre_arc::OgreArc;
-use reactive_mutiny::stream_executor::StreamExecutor;
-use reactive_mutiny::uni::channels::FullDuplexChannel;
 
 
 const BUFFER_SIZE: usize = 1<<17;
@@ -40,7 +40,7 @@ const MAX_STREAMS: usize = 1;
 const INSTRUMENTS: usize = {Instruments::NoInstruments.into()};
 
 // allocators
-type OgreArrayPoolAllocator = reactive_mutiny::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<ExchangeEvent, BUFFER_SIZE>;
+type OgreArrayAtomicAllocator = reactive_mutiny::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<ExchangeEvent, reactive_mutiny::ogre_std::ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>;
 
 // Unis
 ///////
@@ -56,8 +56,8 @@ type FullSyncMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
                                                                INSTRUMENTS, ExchangeEvent>;
 
 type AtomicZeroCopyUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                 reactive_mutiny::uni::channels::zero_copy::atomic::Atomic<'static, ExchangeEvent, OgreArrayPoolAllocator, BUFFER_SIZE, MAX_STREAMS>,
-                                                                 INSTRUMENTS, OgreArc<ExchangeEvent, OgreArrayPoolAllocator>>;
+                                                                 reactive_mutiny::uni::channels::zero_copy::atomic::Atomic<'static, ExchangeEvent, OgreArrayAtomicAllocator, BUFFER_SIZE, MAX_STREAMS>,
+                                                                 INSTRUMENTS, OgreUnique<ExchangeEvent, OgreArrayAtomicAllocator>>;
 
 // Multis
 /////////

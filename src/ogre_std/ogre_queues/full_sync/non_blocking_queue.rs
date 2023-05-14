@@ -18,6 +18,7 @@ use std::{
 };
 use std::num::NonZeroU32;
 use log::trace;
+use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
 
 /// Multiple producer / multiple consumer queues using full synchronization & async functions
@@ -29,7 +30,7 @@ pub struct NonBlockingQueue<SlotType:          Unpin + Debug + Send + Sync,
     enqueue_count:      AtomicU64,
     queue_full_count:   AtomicU64,
     /// queue
-    base_queue:         FullSyncZeroCopy<SlotType, BUFFER_SIZE>,
+    base_queue:         FullSyncZeroCopy<SlotType, OgreArrayPoolAllocator<SlotType, super::full_sync_move::FullSyncMove<u32, BUFFER_SIZE>, BUFFER_SIZE>, BUFFER_SIZE>,
     // metrics for dequeue
     dequeue_count:      AtomicU64,
     queue_empty_count:  AtomicU64,

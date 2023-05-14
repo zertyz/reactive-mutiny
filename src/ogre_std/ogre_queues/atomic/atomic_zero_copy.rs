@@ -29,6 +29,7 @@ use std::sync::Arc;
 pub struct AtomicZeroCopy<SlotType:          Debug,
                           OgreAllocatorType: OgreAllocator<SlotType>,
                           const BUFFER_SIZE: usize> {
+
     pub(crate) allocator: Arc<OgreAllocatorType>,
                queue:     AtomicMove<u32, BUFFER_SIZE>,
                _phantom:  PhantomData<SlotType>
