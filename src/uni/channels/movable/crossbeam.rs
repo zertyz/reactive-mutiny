@@ -82,7 +82,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType: 'a + Send + Sync + Debug,
     const BUFFER_SIZE: usize,
     const MAX_STREAMS: usize>
-ChannelProducer<'a, ItemType>
+ChannelProducer<'a, ItemType, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]

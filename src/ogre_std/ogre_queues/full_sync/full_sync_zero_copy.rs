@@ -31,9 +31,9 @@ pub struct FullSyncZeroCopy<SlotType:          Debug + Send + Sync,
                             OgreAllocatorType: OgreAllocator<SlotType>,
                             const BUFFER_SIZE: usize> {
 
-    allocator: Arc<OgreAllocatorType>,
-    queue:     FullSyncMove<u32, BUFFER_SIZE>,
-    _phantom:  PhantomData<SlotType>
+    pub(crate) allocator: Arc<OgreAllocatorType>,
+               queue:     FullSyncMove<u32, BUFFER_SIZE>,
+               _phantom:  PhantomData<SlotType>
 
 }
 

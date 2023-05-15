@@ -71,7 +71,7 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
 
 /// Defines how to send events (to a [Uni] or [Multi]).
 pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
-                              DerivedItemType: 'a + Debug = ItemType> {
+                              DerivedItemType: 'a + Debug> {
 
     /// Sends `item` through this channel, synchronously, returning immediately if the buffer is full
     /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.\

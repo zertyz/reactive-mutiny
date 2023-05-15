@@ -1,4 +1,4 @@
-//! Resting place for [Atomic]
+//! Resting place for the Zero-Copy [Atomic] Uni Channel
 
 use crate::{
     types::ChannelConsumer,
@@ -43,7 +43,9 @@ pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
                       const BUFFER_SIZE: usize,
                       const MAX_STREAMS: usize> {
 
+    /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    /// backing storage for events
     channel:         AtomicZeroCopy<ItemType, OgreAllocatorType, BUFFER_SIZE>,
     _phantom:        PhantomData<OgreAllocatorType>,
 }
@@ -66,8 +68,8 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     fn create_stream(self: &Arc<Self>)
-                     -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
-                         where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
+                    -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
+                        where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
         let stream_id = self.streams_manager.create_stream_id();
         (MutinyStream::new(stream_id, self), stream_id)
     }

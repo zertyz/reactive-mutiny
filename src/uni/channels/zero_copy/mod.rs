@@ -2,4 +2,4 @@
 //! in which case, they will outperform the [movable] channels variants
 
 pub mod atomic;
-//pub mod full_sync;
+pub mod full_sync;

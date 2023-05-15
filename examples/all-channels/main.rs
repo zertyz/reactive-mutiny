@@ -18,59 +18,20 @@ use std::{
     },
     time::Instant,
 };
-use reactive_mutiny::{
-    ogre_std::ogre_alloc::ogre_unique::OgreUnique,
-    stream_executor::StreamExecutor,
-    uni::{
-        Uni,
-        channels::{
-            ChannelCommon,
-            ChannelProducer,
-            FullDuplexChannel,
-        },
+use reactive_mutiny::{ogre_std::ogre_alloc::ogre_unique::OgreUnique, stream_executor::StreamExecutor, uni::{
+    Uni,
+    channels::{
+        ChannelCommon,
+        ChannelProducer,
+        FullDuplexChannel,
     },
-    ChannelConsumer,
-    Instruments,
-};
+}, ChannelConsumer, Instruments, UniZeroCopyAtomic, UniZeroCopyFullSync, UniMoveAtomic, UniMoveCrossbeam, UniMoveFullSync, MultiAtomicArc, MultiCrossbeamArc, MultiFullSyncArc};
 use futures::{SinkExt, Stream, StreamExt};
 
 
 const BUFFER_SIZE: usize = 1<<17;
 const MAX_STREAMS: usize = 1;
 const INSTRUMENTS: usize = {Instruments::NoInstruments.into()};
-
-// allocators
-type OgreArrayAtomicAllocator = reactive_mutiny::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<ExchangeEvent, reactive_mutiny::ogre_std::ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>;
-
-// Unis
-///////
-
-type AtomicMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                             reactive_mutiny::uni::channels::movable::atomic::Atomic<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                             INSTRUMENTS, ExchangeEvent>;
-type CrossbeamMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                reactive_mutiny::uni::channels::movable::crossbeam::Crossbeam<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                                INSTRUMENTS, ExchangeEvent>;
-type FullSyncMoveUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                               reactive_mutiny::uni::channels::movable::full_sync::FullSync<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                               INSTRUMENTS, ExchangeEvent>;
-
-type AtomicZeroCopyUniBuilder = reactive_mutiny::uni::UniBuilder<ExchangeEvent,
-                                                                 reactive_mutiny::uni::channels::zero_copy::atomic::Atomic<'static, ExchangeEvent, OgreArrayAtomicAllocator, BUFFER_SIZE, MAX_STREAMS>,
-                                                                 INSTRUMENTS, OgreUnique<ExchangeEvent, OgreArrayAtomicAllocator>>;
-
-// Multis
-/////////
-
-type AtomicArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
-                                                             reactive_mutiny::multi::channels::movable::atomic::Atomic<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                             INSTRUMENTS, Arc<ExchangeEvent>>;
-type CrossbeamArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
-                                                                reactive_mutiny::multi::channels::movable::crossbeam::Crossbeam<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                                INSTRUMENTS, Arc<ExchangeEvent>>;
-type FullSyncArcMulti = reactive_mutiny::multi::Multi<'static, ExchangeEvent,
-                                                               reactive_mutiny::multi::channels::movable::full_sync::FullSync<'static, ExchangeEvent, BUFFER_SIZE, MAX_STREAMS>,
-                                                               INSTRUMENTS, Arc<ExchangeEvent>>;
 
 
 async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
@@ -156,6 +117,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
                 break 'done;
             }
         }
+        std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
     }
     multi.close(Duration::from_secs(5)).await;
     let elapsed = start.elapsed();
@@ -175,17 +137,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("Uni:");
     println!("    Move:");
-    uni_builder_benchmark("        ", "Atomic    ", AtomicMoveUniBuilder::new()).await;
-    uni_builder_benchmark("        ", "Crossbeam ", CrossbeamMoveUniBuilder::new()).await;
-    uni_builder_benchmark("        ", "Full Sync ", FullSyncMoveUniBuilder::new()).await;
+    uni_builder_benchmark("        ", "Atomic    ", UniMoveAtomic::   <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
+    uni_builder_benchmark("        ", "Crossbeam ", UniMoveCrossbeam::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
+    uni_builder_benchmark("        ", "Full Sync ", UniMoveFullSync:: <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
     println!("    Zero-Copy:");
-    uni_builder_benchmark("        ", "Atomic    ", AtomicZeroCopyUniBuilder::new()).await;
+    uni_builder_benchmark("        ", "Atomic    ", UniZeroCopyAtomic::  <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
+    uni_builder_benchmark("        ", "Full Sync ", UniZeroCopyFullSync::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
     println!();
     println!("Multi:");
     println!("    Arc:");
-    multi_builder_benchmark("        ", "Atomic    ", AtomicArcMulti::new("profiling multi")).await?;
-    multi_builder_benchmark("        ", "Crossbeam ", CrossbeamArcMulti::new("profiling multi")).await?;
-    multi_builder_benchmark("        ", "FullSync  ", FullSyncArcMulti::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "Atomic    ", MultiAtomicArc::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "Crossbeam ", MultiCrossbeamArc::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "FullSync  ", MultiFullSyncArc::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("profiling multi")).await?;
     println!();
 
     Ok(())
