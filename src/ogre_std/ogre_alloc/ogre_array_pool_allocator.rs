@@ -17,7 +17,7 @@ use crate::ogre_std::ogre_alloc::types::OgreAllocator;
 pub struct OgreArrayPoolAllocator<DataType:        Send + Sync,
                                   ContainerType:   MoveContainer<u32>,
                                   const POOL_SIZE: usize> {
-    pool:      Pin<Box<[ManuallyDrop<DataType>; POOL_SIZE]>>,
+    pool:      Box<[DataType; POOL_SIZE]>,
     free_list: ContainerType,
 }
 
@@ -43,7 +43,7 @@ for OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
 
     fn new() -> Self {
         Self {
-            pool:      Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
+            pool:      Box::new(unsafe { MaybeUninit::zeroed().assume_init() }),
             free_list: {
                            let free_list = ContainerType::new();
                            for slot_id in 0..POOL_SIZE as u32 {
@@ -55,18 +55,28 @@ for OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
     }
 
     #[inline(always)]
-    fn alloc(&self) -> Option<(/*ref:*/ &mut DataType, /*slot_id:*/ u32)> {
-        let mutable_pool = unsafe {
-            let const_ptr = self.pool.as_ptr();
-            let mut_ptr = const_ptr as *mut [DataType; POOL_SIZE];
-            &mut *mut_ptr
-        };
-        match self.free_list.consume_movable() {
-            Some(slot_id) => {
-                Some( ( unsafe{mutable_pool.get_unchecked_mut(slot_id as usize)}, slot_id) )
-            },
-            None => None,
+    fn alloc_ref(&self) -> Option<(&mut DataType, u32)> {
+        if let Some(slot_id) = self.free_list.consume_movable() {
+            let mutable_pool = unsafe {
+                let const_ptr = self.pool.as_ptr();
+                let mut_ptr = const_ptr as *mut [DataType; POOL_SIZE];
+                &mut *mut_ptr
+            };
+            let slot_ref = unsafe { mutable_pool.get_unchecked_mut(slot_id as usize) };
+            return Some( ( slot_ref, slot_id) );
         }
+        None
+    }
+
+    #[inline(always)]
+    fn alloc_with<F: FnOnce(&mut DataType)>
+                 (&self, setter: F)
+                 -> Option<(/*ref:*/ &mut DataType, /*slot_id:*/ u32)> {
+        self.alloc_ref()
+            .map(|(slot_ref, slot_id)| {
+                setter(slot_ref);
+                (slot_ref, slot_id)
+            })
     }
 
     #[inline(always)]

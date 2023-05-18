@@ -48,8 +48,8 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
-    pub fn try_send(&self, message: ItemType) -> bool {
-        self.uni_channel.try_send(message)
+    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        self.uni_channel.try_send(setter)
     }
 
     pub fn consumer_stream(&self) -> MutinyStream<'a, ItemType, UniChannelType, DerivedItemType> {

@@ -58,6 +58,7 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
     fn cancel_all_streams(&self);
 
     /// Informs the caller how many active streams are currently managed by this channel
+    /// IMPLEMENTORS: #[inline(always)]
     fn running_streams_count(&self) -> u32;
 
     /// Tells how many events are waiting to be taken out of this channel.\
@@ -73,24 +74,33 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
 pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
                               DerivedItemType: 'a + Debug> {
 
-    /// Sends `item` through this channel, synchronously, returning immediately if the buffer is full
+    /// Calls `setter`, passing a slot so the payload may be filled, then sends the event through this channel asynchronously.\
     /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.\
     /// IMPLEMENTORS: #[inline(always)]
-    fn try_send(&self, item: ItemType) -> bool;
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool;
 
-    /// Sends `event` through this channel, to be received by all `Streams` returned by [MultiChannelCommon::create_stream()]
+    /// Sends an event through this channel, after calling `setter` to fill the payload.\
+    /// If the channel is full, this function may wait until sending it is possible.\
+    /// IMPLEMENTORS: #[inline(always]
     #[inline(always)]
-    fn send(&self, _item: ItemType) {
+    fn send<F: FnOnce(&mut ItemType)>(&self, _setter: F) {
         todo!("`ChannelProducer.send()` is not available for channels where it can't be implemented as zero-copy (including this one)")
     }
 
     /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
     /// -- for instance: the Stream consumes Arc<String> (the derived item type) and the channel is for Strings. With this method one may send an Arc directly.\
-    /// The default implementation, though, is made for types that don't have a derived item type.
+    /// The default implementation, though, is made for types that don't have a derived item type.\
+    /// IMPLEMENTORS: #[inline(always)]
     #[inline(always)]
-    fn send_derived(&self, _derived_item_type: &DerivedItemType) {
+    fn send_derived(&self, _derived_item: &DerivedItemType) {
         todo!("`ChannelProducer.send_derived()` is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
+
+    /// Similar to [try_send()], but accepts the penalty that the compiler may impose of copying / moving the data around,
+    /// in opposition to set it only once, in its resting place -- useful to send cloned items and other objects with a custom drop
+    /// IMPLEMENTORS: #[inline(always)]
+    /// TODO 2023-05-17: consider restricting this entry for types that require dropping, and the zero-copy versions for those who don't
+    fn try_send_movable(&self, item: ItemType) -> bool;
 
 }
 
@@ -140,7 +150,7 @@ mod tests {
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
                 let (mut stream, _stream_id) = channel.create_stream();
-                let send_result = channel.try_send("a");
+                let send_result = channel.try_send(|slot| *slot = "a");
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
             }
@@ -168,7 +178,7 @@ mod tests {
                     let (mut stream_1, _stream_id) = channel.create_stream();
                     let (stream_2, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating each stream should increase the ref count by 1");
-                    channel.try_send("a");
+                    channel.try_send(|slot| *slot = "a");
                     exec_future(stream_1.next(), "receiving", 1.0, true).await;
                     // dropping the streams & channel will decrease the Arc reference count to 1
                     drop(stream_1);
@@ -185,7 +195,7 @@ mod tests {
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
                     let (mut stream, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
-                    channel.try_send("a");
+                    channel.try_send(|slot| *slot = "a");
                     exec_future(stream.next(), "receiving", 1.0, true).await;
                     // dropping the stream & channel will decrease the Arc reference count to 1
                     drop(stream);
@@ -198,7 +208,7 @@ mod tests {
                 //     let mut stream = channel.consumer_stream().unwrap();
                 //     drop(stream);
                 //     let mut stream = channel.consumer_stream().unwrap();
-                //     channel.try_send("a");
+                //     channel.try_send(|slot| *slot = "a");
                 //     drop(channel);
                 //     stream.next().await.unwrap();
                 // }
@@ -238,7 +248,7 @@ mod tests {
 
                 // send
                 for i in 0..PARALLEL_STREAMS as u32 {
-                    while !channel.try_send(i) {
+                    while !channel.try_send(|slot| *slot = i) {
                         std::hint::spin_loop();
                     };
                 }
@@ -288,7 +298,7 @@ mod tests {
 
                 let start = Instant::now();
                 for e in 0..count {
-                    channel.try_send(e);
+                    channel.try_send(|slot| *slot = e);
                     if let Some(consumed_e) = stream.next().await {
                         assert_eq!(consumed_e, e, "{profiling_name}: produced and consumed items differ");
                     } else {
@@ -313,7 +323,7 @@ mod tests {
 
                 let sender_future = async {
                     for e in 0..count {
-                        while !channel.try_send(e) {
+                        while !channel.try_send(|slot| *slot = e) {
                             tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                         }
                     }
@@ -354,7 +364,7 @@ if counter == count {
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     for e in 0..count {
-                        while !channel.try_send(e) {
+                        while !channel.try_send(|slot| *slot = e) {
                             std::hint::spin_loop();
                         }
                     }

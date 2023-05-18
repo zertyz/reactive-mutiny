@@ -17,8 +17,8 @@ use crate::ogre_std::ogre_alloc::ogre_arc::OgreArc;
 /// Similar to C++'s `unique_ptr`
 pub struct OgreUnique<DataType:          Debug + Send + Sync + 'static,
                       OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
-    allocator:        &'static OgreAllocatorType,
-    data_ref:         &'static DataType,
+    allocator: &'static OgreAllocatorType,
+    data_ref:  &'static DataType,
 }
 
 
@@ -27,14 +27,12 @@ impl<DataType:          Debug + Send + Sync + 'static,
 OgreUnique<DataType, OgreAllocatorType> {
 
     #[inline(always)]
-    pub fn new(data: DataType, allocator: &OgreAllocatorType) -> Option<Self> {
-        match allocator.alloc() {
-            Some( (slot_ref, _slot_id) ) => {
-                unsafe { std::ptr::write(slot_ref, data); }
-                Some(Self::from_allocated_ref(slot_ref, allocator))
-            }
-            None => None
-        }
+    pub fn new<F: FnOnce(&mut DataType)>(setter: F, allocator: &OgreAllocatorType) -> Option<Self> {
+        allocator.alloc_ref()
+            .map(|(slot_ref, _slot_id)| {
+                setter(slot_ref);
+                Self::from_allocated_ref(slot_ref, allocator)
+            })
     }
 
     #[inline(always)]
@@ -171,7 +169,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     pub fn ssas() {
         let allocator = AllocatorAtomicArray::<u128, 128>::new();
-        let unique = OgreUnique::new(128, &allocator).expect("Allocation should have been done");
+        let unique = OgreUnique::new(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
         println!("unique is {unique} -- {:?}", unique);
         assert_eq!(*unique.deref(), 128, "Value doesn't match");
         drop(unique);
@@ -183,7 +181,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     pub fn into_ogrearc() {
         let allocator = AllocatorAtomicArray::<u128, 128>::new();
-        let unique = OgreUnique::new(128, &allocator).expect("Allocation should have been done");
+        let unique = OgreUnique::new(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
         let ogre_arc = unique.into_ogre_arc();
         println!("arc is {ogre_arc} -- {:?}", ogre_arc);
         assert_eq!((*ogre_arc.deref(), ogre_arc.references_count()), (128, 1), "Starting Value and Reference Counts don't match for the converted `ogre_arc`");

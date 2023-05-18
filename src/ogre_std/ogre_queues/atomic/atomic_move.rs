@@ -63,8 +63,8 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
         match self.leak_slot_internal(|| false) {
-            Some( (slot, slot_id, len_before) ) => {
-                unsafe { ptr::write(slot, item); }
+            Some( (slot_ref, slot_id, len_before) ) => {
+                unsafe { ptr::write(slot_ref, item); }
                 self.publish_leaked_internal(slot_id);
                 NonZeroU32::new(len_before+1)
             },
@@ -83,12 +83,12 @@ AtomicMove<SlotType, BUFFER_SIZE> {
               -> bool {
 
         match self.leak_slot_internal(report_full_fn) {
-            Some( (slot, slot_id, len_before) ) => {
-                setter_fn(slot);
+            Some( (slot_ref, slot_id, len_before) ) => {
+                setter_fn(slot_ref);
                 self.publish_leaked_internal(slot_id);
                 report_len_after_enqueueing_fn(len_before+1);
                 true
-            },
+            }
             None => false,
         }
     }

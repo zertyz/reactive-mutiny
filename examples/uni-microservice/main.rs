@@ -47,7 +47,7 @@ fn process(exchange_events_stream: impl Stream<Item=ExchangeEvent>) -> impl Stre
     // We only care for `TradeEvent` -- all other input events won't generate an "answer"
     exchange_events_stream.filter_map(move |incoming_event| future::ready({
         match incoming_event {
-            ExchangeEvent::TradeEvent { unitary_value, quantity } => {
+            ExchangeEvent::TradeEvent { unitary_value, .. } => {
                 let state = state_store.get_or_insert_with(|| State {
                     base_value:     unitary_value,
                     last_value:     unitary_value,
@@ -101,19 +101,19 @@ async fn main() {
     // The application's queue client will propagate the events like this
     let queue_a_send = |incoming: ExchangeEvent| {
         println!("Queue A: received '{:?}'", incoming);
-        queue_a_events_handle.try_send(incoming);
+        queue_a_events_handle.try_send(|slot| *slot = incoming);
     };
 
     // simulates some events were received
     queue_a_send(ExchangeEvent::BookTopEvent { best_bid: 9.0, best_ask: 11.0 });
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.12, quantity: 100 });
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100 });     // delta: +0.01
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.14, quantity: 100 });     // delta: +0.02
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100 });
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100 });
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.14, quantity: 100 });
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100 });
-    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.12, quantity: 100 });     // delta: -0.01
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.12, quantity: 100, time: 10 });
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100, time: 20 });     // delta: +0.01
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.14, quantity: 100, time: 30 });     // delta: +0.02
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100, time: 40 });
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100, time: 50 });
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.14, quantity: 100, time: 60 });
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.13, quantity: 100, time: 70 });
+    queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.12, quantity: 100, time: 80 });     // delta: -0.01
 
     // when the app is to shutdown, kills the executor & closes the channel:
     queue_a_events_handle.close(Duration::from_secs(10)).await;

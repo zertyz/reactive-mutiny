@@ -127,11 +127,23 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
 impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, SlotType> {
 
     #[inline(always)]
-    fn publish(&self, item: SlotType) -> Option<NonZeroU32> {
+    fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> Option<NonZeroU32> {
         let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
         let slot = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
-        unsafe { ptr::write(slot, item); }
+        setter(slot);
+        while self.mmap_contents.consumer_tail.compare_exchange_weak(tail, tail+1, Relaxed, Relaxed).is_err() {
+            std::hint::spin_loop();
+        }
+        NonZeroU32::new(1 + tail as u32)
+    }
+
+    #[inline(always)]
+    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
+        let slot_ref = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
+        *slot_ref = item;
         while self.mmap_contents.consumer_tail.compare_exchange_weak(tail, tail+1, Relaxed, Relaxed).is_err() {
             std::hint::spin_loop();
         }
@@ -250,7 +262,7 @@ mod tests {
             name_len: expected_name.len() as u8,
             age: expected_age,
         };
-        let publishing_result = meta_log_topic.publish(my_data);
+        let publishing_result = meta_log_topic.publish(|slot| *slot = my_data);
         assert!(publishing_result.is_some(), "Publishing failed");
 
         // dequeue
@@ -289,7 +301,7 @@ mod tests {
             name_len: expected_name.len() as u8,
             age: 100 - expected_age,
         };
-        let publishing_result = meta_log_topic.publish(my_data);
+        let publishing_result = meta_log_topic.publish(|slot| *slot = my_data);
         assert!(publishing_result.is_some(), "Publishing of a second element failed");
         let observed_slot_1: &MyData = consumer_1.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
@@ -333,7 +345,7 @@ mod tests {
         // enqueue
         //////////
         for i in 0..N_ELEMENTS {
-            let publishing_result = meta_log_topic.publish(create_expected_element(i));
+            let publishing_result = meta_log_topic.publish(|slot| *slot = create_expected_element(i));
             assert!(publishing_result.is_some(), "Publishing of event #{i} failed");
         }
 
@@ -369,7 +381,7 @@ mod tests {
         let meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
         let consumer = meta_log_topic.subscribe(true);
-        meta_log_topic.publish(EXPECTED_ELEMENT);
+        meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT);
         let observed_element = consumer.consume(|slot| unsafe {&*(slot as *const u128)},
                                                 || false,
                                                 |_| {})

@@ -17,7 +17,8 @@ pub enum ExchangeEvent {
     /// Issued when two parties agreed on a transaction which caused transfer of money & property
     TradeEvent {
         unitary_value: f64,
-        quantity:      u64,
+        quantity:      u128,
+        time:          u64,
     },
 
     /// Any other events issued by the Exchange are ignored

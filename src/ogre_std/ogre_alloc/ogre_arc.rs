@@ -36,36 +36,78 @@ OgreArc<DataType, OgreAllocatorType> {
     ///         let allocator = <something from ogre_alloc::*>;
     ///         let data = <build your data here>;
     ///         let allocated_data = loop {
-    ///             match OgreBox::new(data, allocator) {
+    ///             match OgreBox::new(|slot| *slot = data, allocator) {
     ///                 Some(instance) => break instance,
     ///                 None => <<out_of_elements_code>>,   // sleep, warning, etc...
     ///             }
     ///         }
     #[inline(always)]
-    pub fn new(data: DataType, allocator: &OgreAllocatorType) -> Option<Self> {
-        match allocator.alloc() {
-            Some( (slot_ref, slot_id) ) => {
-                unsafe { std::ptr::write(slot_ref, data); }
-                Some(Self::from_allocated(slot_id, allocator))
-            }
-            None => None
-        }
+    pub fn new<F: FnOnce(&mut DataType)>(setter: F, allocator: &OgreAllocatorType) -> Option<Self> {
+        Self::new_with_clones::<1, F>(setter, allocator)
+            .map(|ogre_arcs| unsafe { ogre_arcs.into_iter().next().unwrap_unchecked() })
     }
+
+    /// Similar to [new()], but pre-loads the `referenec_count` to the specified `COUNT` value, returning all the clones.
+    /// This method is faster than calling [new()] & [clone()]
+    #[inline(always)]
+    pub fn new_with_clones<const COUNT: usize,
+                           F:           FnOnce(&mut DataType)>
+                          (setter:    F,
+                           allocator: &OgreAllocatorType)
+                          -> Option<[Self; COUNT]> {
+        allocator.alloc_ref()
+            .map(|(slot_ref, slot_id)| {
+                setter(slot_ref);
+                Self::from_allocated_with_clones::<COUNT>(slot_id, allocator)
+            })
+    }
+
 
     /// Wraps `data` with our struct, so it will be properly deallocated when dropped
     /// -- `data` must have been previously allocated by the provided `allocator`
     #[inline(always)]
     pub fn from_allocated(data_id: u32, allocator: &OgreAllocatorType) -> Self {
+        unsafe { Self::from_allocated_with_clones::<1>(data_id, allocator).into_iter().next().unwrap_unchecked() }
+    }
+
+    /// Similar to [from_allocate()], but pre-loads the `reference_count` to the specified `COUNT` value, returning all the clones,
+    /// which is faster than repetitive calls to [clone()].
+    #[inline(always)]
+    pub fn from_allocated_with_clones<const COUNT: usize>(data_id: u32, allocator: &OgreAllocatorType) -> [Self; COUNT] {
         let inner = Box::new(InnerOgreArc {     // Using static pool allocators here proved to be slower (a runtime lookup was needed + null check), so we'll stick with Box for now
             allocator: unsafe { &*(allocator as *const OgreAllocatorType) },
             data_id,
-            references_count: AtomicU32::new(1),
+            references_count: AtomicU32::new(COUNT as u32),
             _phantom:         PhantomData::default(),
         });
+        let inner: NonNull<InnerOgreArc<DataType, OgreAllocatorType>> = Box::leak(inner).into();
+        [0; COUNT].map(|_| Self {
+            inner,
+        })
+    }
+
+    /// Increments the reference count of the passed [OgreUnique] by `count`.\
+    /// To be used in conjunction with [raw_copy()] in order to produce several clones at once,
+    /// in the hope it will be faster than calling [clone()] several times\
+    /// IMPORTANT: failure to call [raw_copy()] the same number of times as the parameter to [increment_references()] will crash the program
+    #[inline(always)]
+    pub unsafe fn increment_references(&self, count: u32) -> &Self {
+        let inner = unsafe { self.inner.as_ref() };
+        inner.references_count.fetch_add(count, Relaxed);
+        self
+    }
+
+    /// Copies the [OgreUnique] (a simple 64-bit pointer) without increasing the reference count -- but it will still be decreased when dropped.\
+    /// To be used after a call to [increment_references()] in order to produce several clones at once,
+    /// in the hope it will be faster than calling [clone()] several times.\
+    /// IMPORTANT: failure to call [raw_copy()] the same number of times as the parameter to [increment_references()] will crash the program
+    #[inline(always)]
+    pub unsafe fn raw_copy(&self) -> Self {
         Self {
-            inner: Box::leak(inner).into(),
+            inner: self.inner,
         }
     }
+
 
     /// Returns how many `OgreBox<>` copies references the same data as `self` does
     #[inline(always)]
@@ -221,7 +263,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     pub fn ssas() {
         let allocator = AllocatorAtomicArray::<u128, 128>::new();
-        let arc1 = OgreArc::new(128, &allocator).expect("Allocation should have been done");
+        let arc1 = OgreArc::new(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
         println!("arc1 is {arc1} -- {:?}", arc1);
         assert_eq!((*arc1.deref(), arc1.references_count()), (128, 1), "Starting Value and Reference Counts don't match for `arc1`");
         let arc2 = arc1.clone();

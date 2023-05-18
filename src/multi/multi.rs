@@ -63,13 +63,23 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
-    pub fn send(&self, item: ItemType) {
-        self.channel.send(item);
+    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        self.channel.try_send(setter)
+    }
+
+    #[inline(always)]
+    pub fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
+        self.channel.send(setter);
     }
 
     #[inline(always)]
     pub fn send_derived(&self, arc_item: &DerivedItemType) {
         self.channel.send_derived(arc_item);
+    }
+
+    #[inline(always)]
+    pub fn try_send_movable(&self, item: ItemType) -> bool {
+        self.channel.try_send_movable(item)
     }
 
     #[inline(always)]
@@ -223,7 +233,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     async fn add_executor(&self, stream_executor: Arc<StreamExecutor<INSTRUMENTS>>, stream_id: u32) -> Result<(), Box<dyn std::error::Error>> {
         let mut internal_multis = self.executor_infos.write().await;
         if internal_multis.contains_key(&stream_executor.executor_name()) {
-            Err(Box::from(format!("Can't add a new listener pipeline to a Multi: an executor with the same name is already present: '{}'", stream_executor.executor_name())))
+            Err(Box::from(format!("an executor with the same name is already present: '{}'", stream_executor.executor_name())))
         } else {
             internal_multis.insert(stream_executor.executor_name(), ExecutorInfo { stream_executor, stream_id });
             Ok(())

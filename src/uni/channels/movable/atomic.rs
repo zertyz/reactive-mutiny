@@ -100,7 +100,22 @@ ChannelProducer<'a, ItemType, ItemType>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send(&self, item: ItemType) -> bool {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        self.channel.publish(setter, || false, |len_after| {
+            if len_after <= MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_after - 1)
+            } else if len_after == 1 + MAX_STREAMS as u32 {
+                // the Atomic queue may enqueue at the same time it dequeues, so,
+                // on high pressure for production / consumption & low event payloads (like in our tests),
+                // the Stream might have dequeued the last element, another enqueue just finished and we triggered the wake before
+                // the Stream had returned, leaving an element stuck. This code works around this and is required only for the Atomic Queue.
+                self.streams_manager.wake_stream(len_after - 2)
+            }
+        })
+    }
+
+    #[inline(always)]
+    fn try_send_movable(&self, item: ItemType) -> bool {
         match self.channel.publish_movable(item) {
             Some(len_after) => {
                 let len_after = len_after.get();
@@ -118,6 +133,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             None => false,
         }
     }
+
 }
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,

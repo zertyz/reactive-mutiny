@@ -59,10 +59,21 @@ MetaPublisher<'a, SlotType> for
 AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish(&self, item: SlotType) -> Option<NonZeroU32> {
+    fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> Option<NonZeroU32> {
         match self.leak_slot() {
-            Some( (slot, slot_id) ) => {
-                unsafe { ptr::write(slot, item); }
+            Some( (slot_ref, slot_id) ) => {
+                setter(slot_ref);
+                self.publish_leaked_id(slot_id)
+            },
+            None => None,
+        }
+    }
+
+    #[inline(always)]
+    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
+        match self.leak_slot() {
+            Some( (slot_ref, slot_id) ) => {
+                *slot_ref = item;
                 self.publish_leaked_id(slot_id)
             },
             None => None,
@@ -71,7 +82,7 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn leak_slot(&self) -> Option<(/*ref:*/ &mut SlotType, /*id: */u32)> {
-        self.allocator.alloc()
+        self.allocator.alloc_ref()
     }
 
     #[inline(always)]

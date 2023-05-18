@@ -186,10 +186,11 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         instance
     }
 
+    /// TODO 2023-05-17: make it zero-copy <F: FnOnce(&mut ItemType)>
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
         loop {
-            match self.base_queue.publish(element) {
+            match self.base_queue.publish(|slot| *slot = element) {
                 Some(len_after) => {
                     if Instruments::from(INSTRUMENTS).tracing() {
                         trace!("### QUEUE '{}' enqueued element '{:?}'", self.queue_name, element);
@@ -280,8 +281,9 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
         todo!("no longer used method. remove as soon as it is guaranteed to be useless")
     }
 
+    /// TODO 2023-05-17: make it zero-copy <F: FnOnce(&mut ItemType)>
     fn try_enqueue(&self, element: SlotType) -> bool {
-        match self.base_queue.publish(element) {
+        match self.base_queue.publish(|slot| *slot = element) {
             Some(len_after) => {
                 if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);

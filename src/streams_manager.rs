@@ -37,6 +37,8 @@ pub struct StreamsManagerBase<'a, ItemType:           'a,
     /// it holds the stream ids that are active.
     /// Note: the sentinel value `u32::MAX` is used to indicate a premature end of the list
     used_streams:           Pin<Box<[u32; MAX_STREAMS]>>,
+    /// redundant over `created_streams_count` & `finished_streams_count`
+    used_streams_count:     AtomicU32,
     /// used to coordinate syncing between `vacant_streams` and `used_streams`
     streams_lock:           AtomicBool,
     /// counter streams created
@@ -63,7 +65,6 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
 
     pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Self {
         Self {
-            created_streams_count:  AtomicU32::new(0),
             vacant_streams:         {
                                         let vacant_streams = Box::pin(FullSyncMove::<u32, MAX_STREAMS>::new());
                                         for stream_id in 0..MAX_STREAMS as u32 {
@@ -72,11 +73,13 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
                                         vacant_streams
                                     },
             used_streams:           Box::pin([u32::MAX; MAX_STREAMS]),
-            wakers:                 Box::pin((0..MAX_STREAMS).map(|_| Option::<Waker>::None).collect::<Vec<_>>().try_into().unwrap()),
+            used_streams_count:     AtomicU32::new(0),
+            created_streams_count:  AtomicU32::new(0),
             finished_streams_count: AtomicU32::new(0),
+            wakers:                 Box::pin((0..MAX_STREAMS).map(|_| Option::<Waker>::None).collect::<Vec<_>>().try_into().unwrap()),
+            wakers_lock:            AtomicBool::new(false),
             keep_streams_running:   Box::pin([false; MAX_STREAMS]),
             streams_lock:           AtomicBool::new(false),
-            wakers_lock:            AtomicBool::new(false),
             streams_manager_name:   streams_manager_name.into(),
             _phanrom:               Default::default(),
         }
@@ -90,6 +93,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// Creates the room for a new `Stream`, but returns only its `stream_id`, leaving the `Stream` creation per-se to the caller.
     pub fn create_stream_id(&self) -> u32 {
         self.created_streams_count.fetch_add(1, Relaxed);
+        self.used_streams_count.fetch_add(1, Relaxed);
         let stream_id = match self.vacant_streams.consume_movable() {
             Some(stream_id) => stream_id,
             None => panic!("StreamsManager: '{}' has a MAX_STREAMS of {MAX_STREAMS} -- which just got exhausted: stats: {} streams were created; {} dropped. Please, increase the limit or fix the LOGIC BUG!",
@@ -198,6 +202,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         mutable_self.wakers[stream_id as usize] = None;
         ogre_sync::unlock(&self.wakers_lock);
         mutable_self.finished_streams_count.fetch_add(1, Relaxed);
+        mutable_self.used_streams_count.fetch_sub(1, Relaxed);
         mutable_self.vacant_streams.publish_movable(stream_id);
         mutable_self.sync_vacant_and_used_streams();
     }
@@ -307,7 +312,8 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
 
     #[inline(always)]
     pub fn running_streams_count(&self) -> u32 {
-        (MAX_STREAMS - self.vacant_streams.available_elements_count()) as u32
+        self.used_streams_count.load(Relaxed)
+        // could also be: (MAX_STREAMS - self.vacant_streams.available_elements_count()) as u32
     }
 
 }

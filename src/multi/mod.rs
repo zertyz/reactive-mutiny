@@ -83,7 +83,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "local screen", local_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "zeta receiver", zeta_on_event, |_| async {}).await?
             .spawn_non_futures_non_fallible_executor(1, "earth snapper", earth_on_event, |_| async {}).await?;
-        let producer = |item: &str| multi.send(item.to_string());
+        let producer = |item: &str| multi.try_send_movable(item.to_string());
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
         multi.close(Duration::ZERO).await;
@@ -115,7 +115,7 @@ mod tests {
                                                           stream.map(move |number| observed_sum.fetch_add(*number, Relaxed))
                                                       },
                                                      |_| async {}).await?;
-        let producer = |item| multi.send(item);
+        let producer = |item| multi.send(|slot| *slot = item);
 
         // produces some events concurrently -- they will be shared with all executable pipelines
         let shared_producer = &producer;
@@ -180,7 +180,7 @@ mod tests {
                                                           |_| async {} ).await
             .expect("Single instance of PIPELINE_2 should have been created");
 
-        multi.send(97);
+        multi.send(|slot| *slot = 97);
         multi.close(Duration::ZERO).await;
 
         assert_eq!(*last_message.try_lock().unwrap(), 97, "event didn't complete");
@@ -254,7 +254,7 @@ mod tests {
             .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), "Stream Pipeline #1", pipeline1_builder, |_| async {}, |_| async {}).await?
             .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), "Stream Pipeline #2", pipeline2_builder, |_| async {}, |_| async {}).await?;
 
-        let producer = |item| multi.send(item);
+        let producer = |item| multi.send(|slot| *slot = item);
 
         let shared_producer = &producer;
         stream::iter(PARTS)
@@ -285,7 +285,7 @@ mod tests {
         for i in 0..N_PIPELINES {
             multi.spawn_non_futures_non_fallible_executor_ref(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
         }
-        let producer = |item: &str| multi.send(item.to_string());
+        let producer = |item: &str| multi.try_send_movable(item.to_string());
         producer("'only count successes' payload");
         multi.close(Duration::from_secs(5)).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
@@ -325,7 +325,7 @@ mod tests {
                                      |_| async {}
             ).await?;
         }
-        let producer = |item: &str| multi.send(item.to_string());
+        let producer = |item: &str| multi.try_send_movable(item.to_string());
         // for this test, produce each event twice
         for _ in 0..2 {
             producer("'successful' payload");
@@ -399,7 +399,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(2, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                six_multi.send(true);
+                                six_multi.send(|slot| *slot = true);
                             }
                         } else if *payload == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -423,7 +423,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_two_event, on_two_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_two_event, on_two_close_builder()).await?;
         let two_multi = Arc::new(two_multi);
-        let two_producer = |item| two_multi.send(item);
+        let two_producer = |item| two_multi.send(|slot| *slot = item);
 
         // FOUR event
         let on_four_event = |stream: MutinyStream<'static, u32, _, Arc<u32>>| {
@@ -441,7 +441,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(4, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                six_multi.send(true);
+                                six_multi.send(|slot| *slot = true);
                             }
                         } else if *payload == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -465,7 +465,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_four_event, on_four_close_builder()).await?
             .spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_four_event, on_four_close_builder()).await?;
         let four_multi = Arc::new(four_multi);
-        let four_producer = |item| four_multi.send(item);
+        let four_producer = |item| four_multi.send(|slot| *slot = item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
         //       so we can test race conditions for the 'close producer' functions
@@ -564,7 +564,7 @@ mod tests {
                             },
                             |_| async {}
             ).await?;
-        let producer = |item| multi.send(item);
+        let producer = |item| multi.send(|slot| *slot = item);
         producer(0);
         producer(1);
         producer(2);
@@ -601,7 +601,7 @@ mod tests {
                                                          })
                                                      },
                                                      |_| async {}).await?;
-        let simple_producer = |item| simple_multi.send(item);
+        let simple_producer = |item| simple_multi.send(|slot| *slot = item);
 
         // 1) Measure the time to produce & consume a SIMPLE event -- No other multi tokio tasks are available
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -626,7 +626,7 @@ mod tests {
                                                                       },
                                                                       |_| async {}).await?;
         }
-        let bloated_producer = |item| bloated_multi.send(item);
+        let bloated_producer = |item| bloated_multi.send(|slot| *slot = item);
 
         // 2) Bloat the Tokio Runtime with a lot of tasks -- multi executors in our case -- verifying all of them will run once
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -692,8 +692,8 @@ mod tests {
                         .push(message);
                 })
             }, |_| async {}).await?;
-        let producer = |item: &str| first_multi.send(item.to_string());
-        expected_msgs.iter().for_each(|&msg| producer(msg));
+        let producer = |item: &str| first_multi.try_send_movable(item.to_string());
+        expected_msgs.iter().for_each(|&msg| { producer(msg); });
         multis_close_async!(Duration::ZERO, first_multi, second_multi);
         let expected_msgs: Vec<Arc<String>> = expected_msgs.into_iter()
             .map(|msg| Arc::new(msg.to_string()))
@@ -726,7 +726,7 @@ mod tests {
             while e < count {
                 let buffer_entries_left = multi.buffer_size() - multi.pending_items_count();
                 for _ in 0..buffer_entries_left {
-                    multi.send(e);
+                    multi.send(|slot| *slot = e);
                     e += 1;
                 }
                 std::hint::spin_loop();

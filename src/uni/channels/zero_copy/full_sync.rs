@@ -113,8 +113,22 @@ ChannelProducer<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send(&self, item: ItemType) -> bool {
-        match self.channel.publish(item) {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        match self.channel.publish(setter) {
+            Some(len_after) => {
+                let len_after = len_after.get();
+                if len_after <= MAX_STREAMS as u32 {
+                    self.streams_manager.wake_stream(len_after-1)
+                }
+                true
+            },
+            None => false,
+        }
+    }
+
+    #[inline(always)]
+    fn try_send_movable(&self, item: ItemType) -> bool {
+        match self.channel.publish_movable(item) {
             Some(len_after) => {
                 let len_after = len_after.get();
                 if len_after <= MAX_STREAMS as u32 {

@@ -1,4 +1,4 @@
-//! Resting place for the [Atomic] Multi Channel
+//! Resting place for the Arc based [Atomic] Zero-Copy Multi Channel
 
 use crate::{
     ogre_std::{
@@ -22,6 +22,7 @@ use std::{
     fmt::Debug,
     task::{Waker},
 };
+use std::mem::MaybeUninit;
 use std::num::NonZeroU32;
 use log::{warn};
 use async_trait::async_trait;
@@ -91,7 +92,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.used_streams().iter()
             .filter(|&&stream_id| stream_id != u32::MAX)
             .map(|&stream_id| unsafe { self.channels.get_unchecked(stream_id as usize) }.available_elements_count())
-            .sum::<usize>() as u32
+            .max().unwrap_or(0) as u32
     }
 
     #[inline(always)]
@@ -106,14 +107,16 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
 ChannelProducer<'a, ItemType, Arc<ItemType>>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    fn try_send(&self, item: ItemType) -> bool {
-        todo!("Atomic Arc Multi Channel: try_send() is not implemented for Multis, as not enqueueing an item is an unacceptable condition. Use `send()` or `send_derived()` instead")
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        self.send(setter);
+        true
     }
 
     #[inline(always)]
-    fn send(&self, item: ItemType) {
-        let arc_item = Arc::new(item);
-        self.send_derived(&arc_item);
+    fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
+        let mut item = unsafe { MaybeUninit::uninit().assume_init() };
+        setter(&mut item);
+        self.try_send_movable(item);
     }
 
     #[inline(always)]
@@ -142,6 +145,12 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         }
     }
 
+    #[inline(always)]
+    fn try_send_movable(&self, item: ItemType) -> bool {
+        let arc_item = Arc::new(item);
+        self.send_derived(&arc_item);
+        true
+    }
 }
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,

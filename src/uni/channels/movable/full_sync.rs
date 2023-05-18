@@ -101,7 +101,16 @@ ChannelProducer<'a, ItemType, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send(&self, item: ItemType) -> bool {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        self.container.publish(setter, || false, |len_after| {
+            if len_after <= MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_after - 1)
+            }
+        })
+    }
+
+    #[inline(always)]
+    fn try_send_movable(&self, item: ItemType) -> bool {
         match self.container.publish_movable(item) {
             Some(len_after) => {
                 let len_after = len_after.get();

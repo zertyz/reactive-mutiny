@@ -86,7 +86,14 @@ ChannelProducer<'a, ItemType, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send(&self, item: ItemType) -> bool {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        let mut item = unsafe { MaybeUninit::uninit().assume_init() };
+        setter(&mut item);
+        self.try_send_movable(item)
+    }
+
+    #[inline(always)]
+    fn try_send_movable(&self, item: ItemType) -> bool {
         match self.tx.len() {
             len_before if len_before <= 2 => {
                 let ret = self.tx.try_send(item).is_ok();

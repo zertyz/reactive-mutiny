@@ -54,12 +54,13 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
         }
     }
 
+    /// TODO: 2023-05-17: make it zero-copy <F: FnOnce(&mut ItemType)>
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
         if Instruments::from(INSTRUMENTS).tracing() {
             trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
         }
-        match self.base_queue.publish(element) {
+        match self.base_queue.publish(|slot| *slot = element) {
             Some(len_after) => {
                 if Instruments::from(INSTRUMENTS).metrics() {
                     self.enqueue_count.fetch_add(1, Relaxed);

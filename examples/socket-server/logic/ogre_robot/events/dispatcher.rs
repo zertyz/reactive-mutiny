@@ -60,7 +60,7 @@ impl Dispatcher {
             ClientIdentification::FullAdvisor      { version, symbol, account_token } => register_advisor(&self.full_advisors,    symbol, account_token).await,
             ClientIdentification::WatcherAdvisor   { version, symbol, account_token } => register_advisor(&self.watcher_advisors, symbol, account_token).await,
         } {
-            self.events.identified_client_connected.channel.send(account_token);
+            self.events.identified_client_connected.channel.send(|slot| *slot = account_token);
             true
         } else {
             false
@@ -73,7 +73,7 @@ impl Dispatcher {
             ClientIdentification::FullAdvisor      { version, symbol, account_token } => unregister_advisor(&self.full_advisors, symbol,    account_token).await,
             ClientIdentification::WatcherAdvisor   { version, symbol, account_token } => unregister_advisor(&self.watcher_advisors, symbol, account_token).await,
         } {
-            self.events.client_disconnected.channel.send((account_token, disconnection_reason));
+            self.events.client_disconnected.channel.send(|slot| *slot = (account_token, disconnection_reason));
             true
         } else {
             false
@@ -86,7 +86,7 @@ impl Dispatcher {
             ClientIdentification::FullAdvisor      { version, symbol, account_token } => account_token,
             ClientIdentification::WatcherAdvisor   { version, symbol, account_token } => account_token,
         };
-        self.events.market_data.channel.send((account_token.clone(), market_data));
+        self.events.market_data.channel.send(|slot| *slot = (account_token.clone(), market_data));
     }
 
     async fn register_market_data_provider<IntoSymbol:       Into<Symbol>,

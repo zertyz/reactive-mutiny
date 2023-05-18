@@ -1,3 +1,5 @@
+//! Resting place for the Arc based [Crossbeam] Zero-Copy Multi Channel
+
 use crate::{
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
@@ -8,6 +10,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use std::mem::MaybeUninit;
 use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
@@ -75,7 +78,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.used_streams().iter()
             .filter(|&&stream_id| stream_id != u32::MAX)
             .map(|&stream_id| unsafe { self.receivers.get_unchecked(stream_id as usize) }.len())
-            .sum::<usize>() as u32
+            .max().unwrap_or(0) as u32
     }
 
     #[inline(always)]
@@ -92,14 +95,16 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
 ChannelProducer<'a, ItemType, Arc<ItemType>>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    fn try_send(&self, item: ItemType) -> bool {
-        todo!("Crossbeam Arc Multi Channel: try_send() is not implemented for Multis, as not enqueueing an item is an unacceptable condition. Use `send()` or `send_derived()` instead")
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+        self.send(setter);
+        true
     }
 
     #[inline(always)]
-    fn send(&self, item: ItemType) {
-        let arc_item = Arc::new(item);
-        self.send_derived(&arc_item);
+    fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
+        let mut item = unsafe { MaybeUninit::uninit().assume_init() };
+        setter(&mut item);
+        self.try_send_movable(item);
     }
 
     #[inline(always)]
@@ -124,6 +129,11 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         }
     }
 
+    fn try_send_movable(&self, item: ItemType) -> bool {
+        let arc_item = Arc::new(item);
+        self.send_derived(&arc_item);
+        true
+    }
 }
 
 

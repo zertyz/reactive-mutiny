@@ -95,7 +95,7 @@ impl DecisionMaker {
                 None
             };
             if let Some(order) = order {
-                self.orders_event_handler.send(order);
+                self.orders_event_handler.send(|slot| *slot = order);
             }
             ()
         })

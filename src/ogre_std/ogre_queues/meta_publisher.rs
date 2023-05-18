@@ -10,12 +10,22 @@ use std::num::NonZeroU32;
 ///      allowing the allocated slot to participate in more complex logics.
 pub trait MetaPublisher<'a, SlotType: 'a> {
 
-    /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
-    /// move the data (copy & forget) rather than zero-copying it.\
+    /// Passes a slot reference to `setter`, so to fill in the information for the event to be published,
+    /// to be later retrieved with [MoveSubscriber<>], in a way that the compiler won't scape zero-copying it
+    /// (even in debug mode).\
     /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
     /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
     /// IMPLEMENTORS: #[inline(always)]
-    fn publish(&self, item: SlotType) -> Option<NonZeroU32>;
+    fn publish<F: FnOnce(&mut SlotType)>
+              (&self, setter: F) -> Option<NonZeroU32>;
+
+    /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
+    /// move the data (copy & forget) rather than zero-copying it -- which may be useful for data that
+    /// requires a custom dropping function.\
+    /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
+    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
+    /// IMPLEMENTORS: #[inline(always)]
+    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32>;
 
     /// Advanced method to publish an element: allocates a slot from the pool, returning a reference to it.\
     /// Once called, either [publish_leaked()] or [unleak_slot()] should also be, eventually, called
