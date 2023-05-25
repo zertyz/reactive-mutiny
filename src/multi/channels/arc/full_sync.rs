@@ -83,6 +83,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         self.streams_manager.cancel_all_streams();
     }
 
+    #[inline(always)]
     fn running_streams_count(&self) -> u32 {
         self.streams_manager.running_streams_count()
     }
@@ -90,7 +91,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn pending_items_count(&self) -> u32 {
         self.streams_manager.used_streams().iter()
-            .filter(|&&stream_id| stream_id != u32::MAX)
+            .take_while(|&&stream_id| stream_id != u32::MAX)
             .map(|&stream_id| unsafe { self.channels.get_unchecked(stream_id as usize) }.available_elements_count())
             .max().unwrap_or(0) as u32
     }
@@ -108,6 +109,7 @@ impl<'a, ItemType:          'a + Send + Sync + Debug,
 ChannelProducer<'a, ItemType, Arc<ItemType>>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
+    #[inline(always)]
     fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
         self.send(setter);
         true

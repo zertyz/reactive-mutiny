@@ -42,6 +42,11 @@ pub trait MetaSubscriber<'a, SlotType: 'a> {
     /// IMPLEMENTORS: #[inline(always)]
     fn release_leaked_id(&'a self, slot_id: u32);
 
+    /// Returns the same information as [MetaPublisher::available_elements_count()] for implementors that doesn't allow several subscribers;
+    /// For those that allow it (that is, use the "Listener Pattern"), returns how much elements are left for consumption
+    /// IMPLEMENTORS: #[inline(always)]
+    fn remaining_elements_count(&self) -> usize;
+
     /// Considering parallelism, this method *might* provide access to all elements available for [consume()].\
     /// This method is totally not thread safe for ring-buffer based implementations -- the moment it returns, all those elements might have already
     /// been consumed (furthermore, by the time the references are used, several generations of elements might have

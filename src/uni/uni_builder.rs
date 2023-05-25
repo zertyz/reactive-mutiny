@@ -62,6 +62,7 @@ UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         self
     }
 
+    #[must_use]
     pub fn spawn_executor<IntoString:             Into<String>,
                           OutItemType:            Send + Debug,
                           OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -93,7 +94,7 @@ UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                     let handle = Arc::clone(&handle);
                         async move {
                         handle.finished_executors_count.fetch_add(1, Relaxed);
-                        on_close_callback(executor);
+                        on_close_callback(executor).await;
                     }
                 },
                 out_stream
@@ -101,6 +102,7 @@ UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         returned_handle
     }
 
+    #[must_use]
     pub fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                    OutItemType:            Send + Debug,
                                                    OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
@@ -109,7 +111,7 @@ UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                                                   (self,
                                                    stream_name:              IntoString,
                                                    pipeline_builder:         impl FnOnce(MutinyStream<'static, InType, UniChannelType, DerivedItemType>) -> OutStreamType,
-                                                   on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                   on_close_callback:        impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                               -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                                   -> Arc<Uni<'static, InType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
@@ -126,7 +128,7 @@ UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                     let handle = Arc::clone(&handle);
                     async move {
                         handle.finished_executors_count.fetch_add(1, Relaxed);
-                        on_close_callback(executor);
+                        on_close_callback(executor).await;
                     }
                 },
                 out_stream

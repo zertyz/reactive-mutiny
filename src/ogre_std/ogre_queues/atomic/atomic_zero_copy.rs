@@ -173,6 +173,11 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
     }
 
     #[inline(always)]
+    fn remaining_elements_count(&self) -> usize {
+        self.available_elements_count()
+    }
+
+    #[inline(always)]
     unsafe fn peek_remaining(&self) -> Vec<&SlotType> {
         self.queue.peek_remaining().iter()
             .flat_map(|&slice| slice)

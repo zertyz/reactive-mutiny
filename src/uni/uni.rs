@@ -52,6 +52,17 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         self.uni_channel.try_send(setter)
     }
 
+    #[inline(always)]
+    pub fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
+        self.uni_channel.send(setter)
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn try_send_movable(&self, item: ItemType) -> bool {
+        self.uni_channel.try_send_movable(item)
+    }
+
     pub fn consumer_stream(&self) -> MutinyStream<'a, ItemType, UniChannelType, DerivedItemType> {
         let (stream, _stream_id) = self.uni_channel.create_stream();
         stream
@@ -65,7 +76,8 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// waiting for all events to be fully processed and calling the "on close" callback.\
     /// If this Uni share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
-    pub async fn close(&self, timeout: Duration) -> bool{
+    #[must_use]
+    pub async fn close(&self, timeout: Duration) -> bool {
         let start = Instant::now();
         if self.uni_channel.gracefully_end_all_streams(timeout).await > 0 {
             false

@@ -76,7 +76,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn pending_items_count(&self) -> u32 {
         self.streams_manager.used_streams().iter()
-            .filter(|&&stream_id| stream_id != u32::MAX)
+            .take_while(|&&stream_id| stream_id != u32::MAX)
             .map(|&stream_id| unsafe { self.receivers.get_unchecked(stream_id as usize) }.len())
             .max().unwrap_or(0) as u32
     }

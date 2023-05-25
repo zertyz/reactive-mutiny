@@ -1,4 +1,4 @@
-//! Resting place for the Arc based [Atomic] Zero-Copy Multi Channel
+//! Resting place for the `OgreArc` based [Atomic] Zero-Copy Multi Channel
 
 use crate::{
     ogre_std::{
@@ -8,7 +8,13 @@ use crate::{
             meta_subscriber::MoveSubscriber,
             meta_container::MoveContainer,
         },
+        ogre_alloc::{
+            ogre_arc::OgreArc,
+            ogre_array_pool_allocator::OgreArrayPoolAllocator,
+            OgreAllocator,
+        },
     },
+    uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel},
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
     ChannelConsumer,
@@ -21,15 +27,10 @@ use std::{
     pin::Pin,
     fmt::Debug,
     task::{Waker},
+    num::NonZeroU32,
 };
-use std::num::NonZeroU32;
-use log::{warn};
 use async_trait::async_trait;
-use crate::ogre_std::ogre_alloc::ogre_arc::OgreArc;
-use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
-use crate::ogre_std::ogre_alloc::OgreAllocator;
-use crate::ogre_std::ogre_queues::atomic::atomic_zero_copy::AtomicZeroCopy;
-use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
+use log::{warn};
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
@@ -39,8 +40,8 @@ use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
 /// Please, measure your `Multi`s using all available channels [Atomic], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
 /// See also [multi::channels::ogre_full_sync_mpmc_queue].\
 /// Refresher: the backing queue requires `BUFFER_SIZE` to be a power of 2 -- the same applies to `MAX_STREAMS`, which will also have its own queue
-pub struct Atomic<'a, ItemType:          Send + Sync + Debug + 'static,
-                      OgreAllocatorType: OgreAllocator<ItemType> + 'static + Sync + Send,  // OgreArrayPoolAllocator<ItemType, AtomicMove<ItemType, BUFFER_SIZE>, BUFFER_SIZE>
+pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
+                      OgreAllocatorType: OgreAllocator<ItemType> + 'static + Sync + Send,
                       const BUFFER_SIZE: usize = 1024,
                       const MAX_STREAMS: usize = 16> {
 
@@ -99,7 +100,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn pending_items_count(&self) -> u32 {
         self.streams_manager.used_streams().iter()
-            .filter(|&&stream_id| stream_id != u32::MAX)
+            .take_while(|&&stream_id| stream_id != u32::MAX)
             .map(|&stream_id| unsafe { self.dispatcher_managers.get_unchecked(stream_id as usize) }.available_elements_count())
             .max().unwrap_or(0) as u32
     }
@@ -120,35 +121,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
         if let Some(ogre_arc_item) = OgreArc::new(setter, &self.allocator) {
-            let running_streams_count = self.streams_manager.running_streams_count();
-            unsafe { ogre_arc_item.increment_references(running_streams_count) };
-            let used_streams = self.streams_manager.used_streams();
-            for i in 0..running_streams_count {
-                let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
-                if stream_id != u32::MAX {
-                    let dispatcher_manager = unsafe { self.dispatcher_managers.get_unchecked(stream_id as usize) };
-//                  loop {
-                    match dispatcher_manager.publish_movable(unsafe { ogre_arc_item.raw_copy() }) {
-                        Some(len_after_publishing) => {
-                            if len_after_publishing.get() <= 2 {
-                                self.streams_manager.wake_stream(stream_id);
-                            }
-//                          break;
-                        },
-                        None => {
-                            // WARNING: THIS SHOULD NEVER HAPPEN IF BUFFER_SIZE OF THE ALLOCATOR IS THE SAME AS THE DISPATCHER MANAGERS, as there is no way that there are more elements into a dispatcher manager than elements in the allocator
-                            //          if this class ever gets to accept a bigger BUFFER_SIZE for the allocator, the this code might make sense (and the loops should be uncommented as well). For the time being, it could be replaced by a panic!() instead, saying it is a bug.
-                            // self.streams_manager.wake_stream(*stream_id);
-                            // warn!("Multi Channel's OgreArc-Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
-                            //   channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
-                            // std::thread::sleep(Duration::from_millis(500));
-                            panic!("BUG! This should never happen! See the comment in the code -- Multi Channel's OgreArc-Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
-                                   channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
-                        },
-                    }
-//                  }
-                }
-            }
+            self.send_derived(&ogre_arc_item);
             true
         } else {
             false
@@ -156,18 +129,47 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn send<F: FnOnce(&mut ItemType)>(&self, _setter: F) {
-        todo!("send() seems not to make sense for this channel... if you have an argument, contact us -- try_send will be full if consumers are slow OR the items stays allocated for too long after being processed.");
+    fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
+        loop {
+            if let Some((mut slot_ref, slot_id)) = self.allocator.alloc_ref() {
+                setter(&mut slot_ref);
+                let ogre_arc_item = OgreArc::from_allocated(slot_id, &self.allocator);
+                self.send_derived(&ogre_arc_item);
+                break
+            }
+            std::hint::spin_loop();
+        }
     }
 
     #[inline(always)]
-    fn send_derived(&self, _arc_item: &OgreArc<ItemType, OgreAllocatorType>) {
-        todo!("send_derived() seems not to make sense for this channel... if you have an argument, contact us");
+    fn send_derived(&self, ogre_arc_item: &OgreArc<ItemType, OgreAllocatorType>) {
+        let running_streams_count = self.streams_manager.running_streams_count();
+        unsafe { ogre_arc_item.increment_references(running_streams_count) };
+        let used_streams = self.streams_manager.used_streams();
+        for i in 0..running_streams_count {
+            let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
+            if stream_id != u32::MAX {
+                let dispatcher_manager = unsafe { self.dispatcher_managers.get_unchecked(stream_id as usize) };
+                match dispatcher_manager.publish_movable(unsafe { ogre_arc_item.raw_copy() }) {
+                    Some(len_after_publishing) => {
+                        if len_after_publishing.get() <= 2 {
+                            self.streams_manager.wake_stream(stream_id);
+                        }
+                    },
+                    None => {
+                        // WARNING: THIS SHOULD NEVER HAPPEN IF BUFFER_SIZE OF THE ALLOCATOR IS THE SAME AS THE DISPATCHER MANAGERS, as there is no way that there are more elements into a dispatcher manager than elements in the allocator
+                        //          if this class ever gets to accept a bigger BUFFER_SIZE for the allocator, this situation may happen (and the loops should be brought back from the "movable" channels). For the time being, it could be replaced by a panic!() instead, saying it is a bug.
+                        panic!("BUG! This should never happen! See the comment in the code -- Multi Channel's OgreArc/Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+                               channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
+                    },
+                }
+            }
+        }
     }
 
     #[inline(always)]
-    fn try_send_movable(&self, _item: ItemType) -> bool {
-        todo!("try_send_movable() seems not to make sense for this channel... if you have an argument, contact us");
+    fn try_send_movable(&self, item: ItemType) -> bool {
+        self.try_send(|slot| *slot = item)
     }
 }
 
@@ -201,7 +203,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl<'a, ItemType:          Send + Sync + Debug + 'static,
+impl<'a, ItemType:          Send + Sync + Debug,
          OgreAllocatorType: OgreAllocator<ItemType> + 'static + Sync + Send,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>

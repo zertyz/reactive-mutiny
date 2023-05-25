@@ -355,13 +355,14 @@ mod tests {
         two_producer(3);
         two_producer(4);
         four_producer(5);
-        // closing TWO (and, therefore, SIX) before all elements of FOUR are processed would cause the later consumer to try to publish to SIX (when it is already closed) --
-        // this is why both events should be closed atomically in this case -- both share the closeable resource SIX -- which happens to be another uni, but could be any other resource
+        tokio::time::sleep(Duration::from_millis(100)).await;     // flakiness protection: wait a tad before atomically closing `two` and `four` -- if not, `six` might be closed before the `six` event is sent, causing this test to fail.
         unis_close_async!(two_uni, four_uni);  // notice SIX is closed here as well
+                                               // closing TWO (and, therefore, SIX) before all elements of FOUR are processed would cause the later consumer to try to publish to SIX (when it is already closed) --
+                                               // this is why both events should be closed atomically in this case -- both share the closeable resource SIX -- which happens to be another uni, but could be any other resource
 
-        assert_eq!(two_fire_count.load(Relaxed), 4, "Wrong number of events processed for TWO");
+        assert_eq!(two_fire_count.load(Relaxed),  4, "Wrong number of events processed for TWO");
         assert_eq!(four_fire_count.load(Relaxed), 6, "Wrong number of events processed for FOUR");
-        assert_eq!(six_fire_count.load(Relaxed), 1, "Wrong number of events processed for SIX");
+        assert_eq!(six_fire_count.load(Relaxed),  1, "Wrong number of events processed for SIX");
 
     }
 

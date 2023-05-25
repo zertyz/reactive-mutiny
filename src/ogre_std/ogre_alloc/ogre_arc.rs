@@ -17,13 +17,13 @@ use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocat
 /// Wrapper type for data providing an atomic reference counter for dropping control, similar to `Arc`,
 /// but allowing a custom allocator to be used -- [OgreAllocator].
 /// providing reference counting similar to Arc
-pub struct OgreArc<DataType:          Debug + Send + Sync + 'static,
+pub struct OgreArc<DataType:          Debug + Send + Sync,
                    OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
     inner:    NonNull<InnerOgreArc<DataType, OgreAllocatorType>>,
 }
 
 
-impl<DataType:          Debug + Send + Sync + 'static,
+impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -188,11 +188,11 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-PartialEq<DataType>
+PartialEq<Self>
 for OgreArc<DataType, OgreAllocatorType>
 where DataType: PartialEq {
 
-    fn eq(&self, other: &DataType) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.deref().eq(other)
     }
 }

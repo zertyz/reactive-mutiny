@@ -12,7 +12,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use std::mem::MaybeUninit;
+use std::mem::{ManuallyDrop, MaybeUninit};
 use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
@@ -87,9 +87,11 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
-        let mut item = unsafe { MaybeUninit::uninit().assume_init() };
-        setter(&mut item);
-        self.try_send_movable(item)
+        // the following value-filling sequence avoids UB for droppable types & references (like `&str`)
+        let mut item = MaybeUninit::uninit();
+        let mut item_ref = unsafe { &mut *item.as_mut_ptr() };
+        setter(item_ref);
+        self.try_send_movable(unsafe { item.assume_init() })
     }
 
     #[inline(always)]

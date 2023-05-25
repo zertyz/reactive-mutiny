@@ -59,7 +59,7 @@ mod tests {
     use crate::uni::channels::FullDuplexChannel;
 
 
-    type MultiChannelType<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = channels::movable::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+    type MultiChannelType<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = channels::arc::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
 
 
     #[ctor::ctor]
@@ -741,7 +741,7 @@ mod tests {
 
         println!();
 
-        type MultiChannelType = channels::movable::crossbeam::Crossbeam<'static, u32, 8192, 1>;
+        type MultiChannelType = channels::arc::crossbeam::Crossbeam<'static, u32, 8192, 1>;
         type DerivedType      = Arc<u32>;
 
         let profiling_name = "metricfull_non_futures_non_fallible_multi:    ";

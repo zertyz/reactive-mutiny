@@ -47,6 +47,9 @@ pub type MultiArc<ItemType,
 // allocators
 pub type AllocatorAtomicArray  <InType, const BUFFER_SIZE: usize> = ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove        <u32, BUFFER_SIZE>, BUFFER_SIZE>;
 pub type AllocatorFullSyncArray<InType, const BUFFER_SIZE: usize> = ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::full_sync::full_sync_move::FullSyncMove<u32, BUFFER_SIZE>, BUFFER_SIZE>;
+// TODO: pub type AllocatorBox                                             = ogre_alloc::ogre_box_allocator::OgreBoxAllocator;
+//       (Simply uses the Rust's default allocator. Usually, it is slower, is subjected to false-sharing performance degradation and, when used for event payloads, several allocation/deallocations may scatter the free space a little bit,
+//        but it has the advantage of not requiring any pre-allocation. So, there are legitimate use cases for this one here. For more info, look at the benchmarks).
 
 // Uni channels
 pub type UniAtomicMoveChannel      <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::atomic::Atomic       <'static, InType, BUFFER_SIZE, MAX_STREAMS>;
@@ -58,35 +61,37 @@ pub type UniFullSyncZeroCopyChannel<InType, const BUFFER_SIZE: usize, const MAX_
 // Unis
 pub type UniMoveAtomic<InType,
                        const BUFFER_SIZE: usize,
-                       const MAX_STREAMS: usize,
+                       const MAX_STREAMS: usize = 1,
                        const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
     = uni::UniBuilder<InType, UniAtomicMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, InType>;
 pub type UniMoveCrossbeam<InType,
                           const BUFFER_SIZE: usize,
-                          const MAX_STREAMS: usize,
+                          const MAX_STREAMS: usize = 1,
                           const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
     = uni::UniBuilder<InType, UniCrossbeamMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, InType>;
 pub type UniMoveFullSync<InType,
                          const BUFFER_SIZE: usize,
-                         const MAX_STREAMS: usize,
+                         const MAX_STREAMS: usize = 1,
                          const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
     = uni::UniBuilder<InType, UniFullSyncMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, InType>;
 pub type UniZeroCopyAtomic<InType,
                      const BUFFER_SIZE: usize,
-                     const MAX_STREAMS: usize,
+                     const MAX_STREAMS: usize = 1,
                      const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
     = uni::UniBuilder<InType, UniAtomicZeroCopyChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, OgreUnique<InType, AllocatorAtomicArray<InType, BUFFER_SIZE>>>;
 pub type UniZeroCopyFullSync<InType,
                              const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize,
+                             const MAX_STREAMS: usize = 1,
                              const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
     = uni::UniBuilder<InType, UniFullSyncZeroCopyChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, OgreUnique<InType, AllocatorFullSyncArray<InType, BUFFER_SIZE>>>;
 
 // Multi channels
-pub type MultiAtomicArcChannel    <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::movable::atomic::Atomic      <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiCrossbeamArcChannel <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::movable::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiFullSyncArcChannel  <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::movable::full_sync::FullSync <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiAtomicOgreArcChannel<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::zero_copy::atomic::Atomic    <'static, ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiAtomicArcChannel      <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::arc::atomic::Atomic          <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiCrossbeamArcChannel   <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::arc::crossbeam::Crossbeam    <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiFullSyncArcChannel    <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::arc::full_sync::FullSync     <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiAtomicOgreArcChannel  <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::ogre_arc::atomic::Atomic     <'static, ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiFullSyncOgreArcChannel<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::ogre_arc::full_sync::FullSync<'static, ItemType, AllocatorFullSyncArray<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
+pub type MultiMmapLogChannel        <ItemType,                           const MAX_STREAMS: usize> = multi::channels::reference::mmap_log::MmapLog <'static, ItemType, MAX_STREAMS>;
 
 // Multis
 pub type MultiAtomicArc<ItemType,
@@ -121,6 +126,21 @@ pub type MultiAtomicOgreArc<ItemType,
                             MultiAtomicOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
                             INSTRUMENTS,
                             OgreArc<ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>>>;
+pub type MultiFullSyncOgreArc<ItemType,
+                              const BUFFER_SIZE: usize,
+                              const MAX_STREAMS: usize,
+                              const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+    = multi::Multi<'static, ItemType,
+                            MultiFullSyncOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                            INSTRUMENTS,
+                            OgreArc<ItemType, AllocatorFullSyncArray<ItemType, BUFFER_SIZE>>>;
+pub type MultiMmapLog<ItemType,
+                      const MAX_STREAMS: usize,
+                      const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+    = multi::Multi<'static, ItemType,
+                            MultiMmapLogChannel<ItemType, MAX_STREAMS>,
+                            INSTRUMENTS,
+                            &'static ItemType>;
 
 
 /// Source of events for [MutinyStream].

@@ -100,6 +100,7 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     /// in opposition to set it only once, in its resting place -- useful to send cloned items and other objects with a custom drop
     /// IMPLEMENTORS: #[inline(always)]
     /// TODO 2023-05-17: consider restricting this entry for types that require dropping, and the zero-copy versions for those who don't
+    #[must_use]
     fn try_send_movable(&self, item: ItemType) -> bool;
 
 }
@@ -123,7 +124,7 @@ pub trait FullDuplexChannel<'a, ItemType:        'a + Debug + Send + Sync,
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use crate::{ogre_std::ogre_alloc::{OgreAllocator, ogre_array_pool_allocator::OgreArrayPoolAllocator}, uni::channels::{movable, zero_copy}, UniAtomicZeroCopyChannel};
+    use crate::{ogre_std::ogre_alloc::{OgreAllocator, ogre_array_pool_allocator::OgreArrayPoolAllocator}, uni::channels::{movable, zero_copy}, UniAtomicZeroCopyChannel, UniFullSyncZeroCopyChannel};
     use std::{
         fmt::Debug,
         future::Future,
@@ -150,16 +151,19 @@ mod tests {
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
                 let (mut stream, _stream_id) = channel.create_stream();
+println!("about to fuck...");
                 let send_result = channel.try_send(|slot| *slot = "a");
+println!("not fucked???");
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
             }
         }
     }
-    doc_test!(movable_crossbeam_channel_doc_test, movable::crossbeam::Crossbeam<&str, 1024, 1>);
     doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
+    doc_test!(movable_crossbeam_channel_doc_test, movable::crossbeam::Crossbeam<&str, 1024, 1>);
     doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
     doc_test!(zero_copy_atomic_queue_doc_test,    UniAtomicZeroCopyChannel<&str, 1024, 2>);
+    doc_test!(zero_copy_full_sync_queue_doc_test, UniFullSyncZeroCopyChannel<&str, 1024, 2>);
 
 
     // *_dropping for known parallel stream implementors
@@ -217,10 +221,11 @@ mod tests {
             }
         }
     }
-    dropping!(movable_crossbeam_queue_dropping, movable::crossbeam::Crossbeam<&str, 1024, 2>);
-    dropping!(movable_atomic_queue_dropping,    movable::atomic::Atomic<&str, 1024, 2>);
-    dropping!(movable_full_sync_queue_dropping, movable::full_sync::FullSync<&str, 1024, 2>);
-    dropping!(zero_copy_atomic_queue_dropping,  UniAtomicZeroCopyChannel<&str, 1024, 2>);
+    dropping!(movable_atomic_queue_dropping,      movable::atomic::Atomic<&str, 1024, 2>);
+    dropping!(movable_crossbeam_queue_dropping,   movable::crossbeam::Crossbeam<&str, 1024, 2>);
+    dropping!(movable_full_sync_queue_dropping,   movable::full_sync::FullSync<&str, 1024, 2>);
+    dropping!(zero_copy_atomic_queue_dropping,    UniAtomicZeroCopyChannel<&str, 1024, 2>);
+    dropping!(zero_copy_full_sync_queue_dropping, UniFullSyncZeroCopyChannel<&str, 1024, 2>);
 
 
     // *_parallel_streams for known parallel stream implementors
@@ -270,10 +275,11 @@ mod tests {
             }
         }
     }
-    parallel_streams!(movable_crossbeam_parallel_streams, movable::crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(movable_atomic_parallel_streams,    movable::atomic::Atomic<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(movable_mutex_parallel_streams,     movable::full_sync::FullSync<u32, 1024, PARALLEL_STREAMS>);
-    parallel_streams!(zero_copy_atomic_parallel_streams,  UniAtomicZeroCopyChannel<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_atomic_parallel_streams,      movable::atomic::Atomic<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_crossbeam_parallel_streams,   movable::crossbeam::Crossbeam<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(movable_full_sync_parallel_streams,   movable::full_sync::FullSync<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(zero_copy_atomic_parallel_streams,    UniAtomicZeroCopyChannel<u32, 1024, PARALLEL_STREAMS>);
+    parallel_streams!(zero_copy_full_sync_parallel_streams, UniFullSyncZeroCopyChannel<u32, 1024, PARALLEL_STREAMS>);
 
 
     /// assures performance won't be degraded when we make changes
@@ -406,21 +412,25 @@ if counter == count {
 
         println!();
 
-        profile_same_task_same_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic    ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic    ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic    ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic     ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic     ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(movable::atomic::Atomic::<u32, BUFFER_SIZE, 1>::new(""), "Movable Atomic     ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync  ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync  ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync  ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam  ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam  ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(movable::crossbeam::Crossbeam::<u32, BUFFER_SIZE, 1>::new(""), "Movable Crossbeam ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync   ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync   ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(movable::full_sync::FullSync::<u32, BUFFER_SIZE, 1>::new(""), "Movable FullSync   ", FACTOR*BUFFER_SIZE as u32);
 
-        profile_same_task_same_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_same_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
-        profile_different_task_different_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic  ", FACTOR*BUFFER_SIZE as u32);
+        profile_same_task_same_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic   ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic   ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(UniAtomicZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy Atomic   ", FACTOR*BUFFER_SIZE as u32);
+
+        profile_same_task_same_thread_channel!(UniFullSyncZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy FullSync ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_same_thread_channel!(UniFullSyncZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy FullSync ", FACTOR*BUFFER_SIZE as u32);
+        profile_different_task_different_thread_channel!(UniFullSyncZeroCopyChannel::<u32, BUFFER_SIZE, 1>::new(""), "Zero-Copy FullSync ", FACTOR*BUFFER_SIZE as u32);
 
     }
 

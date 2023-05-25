@@ -25,7 +25,7 @@ use reactive_mutiny::{ogre_std::ogre_alloc::ogre_unique::OgreUnique, stream_exec
         ChannelProducer,
         FullDuplexChannel,
     },
-}, ChannelConsumer, Instruments, UniZeroCopyAtomic, UniZeroCopyFullSync, UniMoveAtomic, UniMoveCrossbeam, UniMoveFullSync, MultiAtomicArc, MultiCrossbeamArc, MultiFullSyncArc, MultiAtomicOgreArc};
+}, ChannelConsumer, Instruments, UniZeroCopyAtomic, UniZeroCopyFullSync, UniMoveAtomic, UniMoveCrossbeam, UniMoveFullSync, MultiAtomicArc, MultiCrossbeamArc, MultiFullSyncArc, MultiAtomicOgreArc, MultiFullSyncOgreArc, MultiMmapLog};
 use futures::{SinkExt, Stream, StreamExt};
 
 
@@ -64,7 +64,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
 
     let start = Instant::now();
     for e in 1..=ITERATIONS {
-        while !uni.try_send(|slot| * slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128, time: e as u64 }) {
+        while !uni.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128, time: e as u64 }) {
             std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
         }
     }
@@ -161,8 +161,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     multi_builder_benchmark("        ", "Atomic    ", LISTENERS as u32, MultiAtomicArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
     multi_builder_benchmark("        ", "Crossbeam ", LISTENERS as u32, MultiCrossbeamArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
     multi_builder_benchmark("        ", "FullSync  ", LISTENERS as u32, MultiFullSyncArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
-    println!("    Zero-Copy:");
+    println!("    OgreArc:");
     multi_builder_benchmark("        ", "Atomic    ", LISTENERS as u32, MultiAtomicOgreArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "FullSync  ", LISTENERS as u32, MultiFullSyncOgreArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
+    println!("    Reference:");
+    multi_builder_benchmark("        ", "MmapLog   ", LISTENERS as u32, MultiMmapLog::<ExchangeEvent, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
     println!();
 
     Ok(())

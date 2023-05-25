@@ -1,7 +1,8 @@
 //! Provides channels to be used in Unis
 
-pub mod movable;
-pub mod zero_copy;
+pub mod arc;
+pub mod ogre_arc;
+pub mod reference;
 
 use {
     super::{
@@ -34,7 +35,7 @@ use async_trait::async_trait;
 mod tests {
     use super::*;
     use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
-    use { movable, zero_copy };
+    use {arc, ogre_arc};
     use std::{
         sync::Arc,
         time::Duration,
@@ -43,6 +44,8 @@ mod tests {
         io::Write,
     };
     use futures::{stream,Stream,StreamExt};
+    use crate::{AllocatorAtomicArray, AllocatorFullSyncArray};
+    use crate::ogre_std::ogre_alloc;
 
 
     // *_doc_test for all known Multi Channel's
@@ -61,9 +64,12 @@ mod tests {
         }
     }
 
-    doc_test!(movable_atomic_queue_doc_test,      movable::atomic::Atomic<&str, 1024, 1>);
-    doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
-    doc_test!(movable_crossbeam_queue_doc_test,   movable::crossbeam::Crossbeam<&str, 1024, 1>);
+    doc_test!(arc_atomic_queue_doc_test,         arc::atomic::Atomic<&str, 1024, 1>);
+    doc_test!(arc_full_sync_queue_doc_test,      arc::full_sync::FullSync<&str, 1024, 1>);
+    doc_test!(arc_crossbeam_queue_doc_test,      arc::crossbeam::Crossbeam<&str, 1024, 1>);
+    doc_test!(ogre_arc_atomic_queue_doc_test,    ogre_arc::atomic::Atomic<&str, AllocatorAtomicArray<&str, 1024>, 1024, 1>);
+    doc_test!(ogre_arc_full_sync_queue_doc_test, ogre_arc::full_sync::FullSync<&str, AllocatorFullSyncArray<&str, 1024>, 1024, 1>);
+    doc_test!(reference_mmap_log_queue_doc_test, reference::mmap_log::MmapLog<&str, 1>);
 
 
     // *_stream_and_channel_dropping for all known Multi Channel's
@@ -122,9 +128,12 @@ mod tests {
         }
     }
 
-    stream_and_channel_dropping!(movable_atomic_queue_stream_and_channel_dropping,      movable::atomic::Atomic<&str>);
-    stream_and_channel_dropping!(movable_full_sync_queue_stream_and_channel_dropping,   movable::full_sync::FullSync<&str>);
-    stream_and_channel_dropping!(movable_crossbeam_stream_and_channel_dropping,         movable::crossbeam::Crossbeam<&str>);
+    stream_and_channel_dropping!(arc_atomic_queue_stream_and_channel_dropping,         arc::atomic::Atomic<&str>);
+    stream_and_channel_dropping!(arc_full_sync_queue_stream_and_channel_dropping,      arc::full_sync::FullSync<&str>);
+    stream_and_channel_dropping!(arc_crossbeam_stream_and_channel_dropping,            arc::crossbeam::Crossbeam<&str>);
+    stream_and_channel_dropping!(ogre_arc_atomic_queue_stream_and_channel_dropping,    ogre_arc::atomic::Atomic<&str, AllocatorAtomicArray<&str, 1024>>);
+    stream_and_channel_dropping!(ogre_arc_full_sync_queue_stream_and_channel_dropping, ogre_arc::full_sync::FullSync<&str, AllocatorFullSyncArray<&str, 1024>>);
+    stream_and_channel_dropping!(reference_mmap_log_stream_and_channel_dropping,       reference::mmap_log::MmapLog<&str>);
 
 
     // *_on_the_fly_streams for all known Multi Channel's
@@ -175,9 +184,12 @@ mod tests {
         }
     }
 
-    on_the_fly_streams!(movable_atomic_queue_on_the_fly_streams,      movable::atomic::Atomic<String>);
-    on_the_fly_streams!(movable_full_sync_queue_on_the_fly_streams,   movable::full_sync::FullSync<String>);
-    on_the_fly_streams!(movable_crossbeam_on_the_fly_streams,         movable::crossbeam::Crossbeam<String>);
+    on_the_fly_streams!(arc_atomic_queue_on_the_fly_streams,         arc::atomic::Atomic<String>);
+    on_the_fly_streams!(arc_full_sync_queue_on_the_fly_streams,      arc::full_sync::FullSync<String>);
+    on_the_fly_streams!(arc_crossbeam_on_the_fly_streams,            arc::crossbeam::Crossbeam<String>);
+    // on_the_fly_streams!(ogre_arc_atomic_queue_on_the_fly_streams,    ogre_arc::atomic::Atomic<String, AllocatorAtomicArray<String, 1024>>);
+    // on_the_fly_streams!(ogre_arc_full_sync_queue_on_the_fly_streams, ogre_arc::full_sync::FullSync<String, AllocatorFullSyncArray<String, 1024>>);
+    // on_the_fly_streams!(references_mmap_log_on_the_fly_streams,      reference::mmap_log::MmapLog<String>);
 
 
     // *_multiple_streams for all known Multi Channel's
@@ -228,9 +240,12 @@ mod tests {
         }
     }
 
-    multiple_streams!(movable_atomic_queue_multiple_streams,      movable::atomic::Atomic<u32, 128, PARALLEL_STREAMS>);
-    multiple_streams!(movable_full_sync_queue_multiple_streams,   movable::full_sync::FullSync<u32, 128, PARALLEL_STREAMS>);
-    multiple_streams!(movable_crossbeam_multiple_streams,         movable::crossbeam::Crossbeam<u32, 128, PARALLEL_STREAMS>);
+    multiple_streams!(arc_atomic_queue_multiple_streams,         arc::atomic::Atomic<u32, 128, PARALLEL_STREAMS>);
+    multiple_streams!(arc_full_sync_queue_multiple_streams,      arc::full_sync::FullSync<u32, 128, PARALLEL_STREAMS>);
+    multiple_streams!(arc_crossbeam_multiple_streams,            arc::crossbeam::Crossbeam<u32, 128, PARALLEL_STREAMS>);
+    multiple_streams!(ogre_arc_atomic_queue_multiple_streams,    ogre_arc::atomic::Atomic<u32, AllocatorAtomicArray<u32, 128>, 128, PARALLEL_STREAMS>);
+    multiple_streams!(ogre_arc_full_sync_queue_multiple_streams, ogre_arc::full_sync::FullSync<u32, AllocatorFullSyncArray<u32, 128>, 128, PARALLEL_STREAMS>);
+    //multiple_streams!(references_mmap_log_multiple_streams,      reference::mmap_log::MmapLog<u32, PARALLEL_STREAMS>);
 
 
     // *_end_streams for all known Multi Channel's
@@ -296,9 +311,12 @@ mod tests {
         }
     }
 
-    end_streams!(movable_atomic_queue_end_streams,      movable::atomic::Atomic<&str>);
-    end_streams!(movable_full_sync_queue_end_streams,   movable::full_sync::FullSync<&str>);
-    end_streams!(movable_crossbeam_end_streams,         movable::crossbeam::Crossbeam<&str>);
+    end_streams!(arc_atomic_queue_end_streams,         arc::atomic::Atomic<&str>);
+    end_streams!(arc_full_sync_queue_end_streams,      arc::full_sync::FullSync<&str>);
+    end_streams!(arc_crossbeam_end_streams,            arc::crossbeam::Crossbeam<&str>);
+    // end_streams!(ogre_arc_atomic_queue_end_streams,    ogre_arc::atomic::Atomic<&str, AllocatorAtomicArray<&str, 1024>>);
+    // end_streams!(ogre_arc_full_sync_queue_end_streams, ogre_arc::full_sync::FullSync<&str, AllocatorFullSyncArray<&str, 1024>>);
+    end_streams!(reference_mmap_log_end_streams,       reference::mmap_log::MmapLog<&str>);
 
 
     // *_payload_dropping for all known Multi Channel's
@@ -328,9 +346,11 @@ mod tests {
         }
     }
 
-    payload_dropping!(movable_atomic_queue_payload_dropping,      movable::atomic::Atomic<String>);
-    payload_dropping!(movable_full_sync_queue_payload_dropping,   movable::full_sync::FullSync<String>);
-    payload_dropping!(movable_crossbeam_payload_dropping,         movable::crossbeam::Crossbeam<String>);
+    payload_dropping!(arc_atomic_queue_payload_dropping,         arc::atomic::Atomic<String>);
+    payload_dropping!(arc_full_sync_queue_payload_dropping,      arc::full_sync::FullSync<String>);
+    payload_dropping!(arc_crossbeam_payload_dropping,            arc::crossbeam::Crossbeam<String>);
+    // payload_dropping!(ogre_arc_atomic_queue_payload_dropping,    ogre_arc::atomic::Atomic<String, AllocatorAtomicArray<String, 1024>>);
+    // payload_dropping!(ogre_arc_full_sync_queue_payload_dropping, ogre_arc::full_sync::FullSync<String, AllocatorFullSyncArray<String, 1024>>);
 
 
     /// small stress test with outputs
@@ -460,17 +480,25 @@ mod tests {
 
         println!();
 
-        profile_same_task_same_thread_channel!(movable::atomic::Atomic::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
-        profile_different_task_same_thread_channel!(movable::atomic::Atomic::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
-        profile_different_task_different_thread_channel!(movable::atomic::Atomic::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Movable Atomic    ", 16384*FACTOR);
+        profile_same_task_same_thread_channel!(arc::atomic::Atomic::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Arc Atomic       ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(arc::atomic::Atomic::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Arc Atomic       ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(arc::atomic::Atomic::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Arc Atomic       ", 16384*FACTOR);
 
-        profile_same_task_same_thread_channel!(movable::full_sync::FullSync::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Movable FullSync  ", 16384*FACTOR);
-        profile_different_task_same_thread_channel!(movable::full_sync::FullSync::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Movable FullSync  ", 16384*FACTOR);
-        profile_different_task_different_thread_channel!(movable::full_sync::FullSync::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Movable FullSync  ", 16384*FACTOR);
+        profile_same_task_same_thread_channel!(arc::full_sync::FullSync::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Arc FullSync     ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(arc::full_sync::FullSync::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Arc FullSync     ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(arc::full_sync::FullSync::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Arc FullSync     ", 16384*FACTOR);
 
-        profile_same_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Movable Crossbeam ", 16384*FACTOR);
-        profile_different_task_same_thread_channel!(movable::crossbeam::Crossbeam::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Movable Crossbeam ", 16384*FACTOR);
-        profile_different_task_different_thread_channel!(movable::crossbeam::Crossbeam::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Movable Crossbeam ", 16384*FACTOR);
+        profile_same_task_same_thread_channel!(arc::crossbeam::Crossbeam::<u32, 16384, 1>::new("profile_same_task_same_thread_channel"), "Arc Crossbeam    ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(arc::crossbeam::Crossbeam::<u32, 16384, 1>::new("profile_different_task_same_thread_channel"), "Arc Crossbeam    ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(arc::crossbeam::Crossbeam::<u32, 16384, 1>::new("profile_different_task_different_thread_channel"), "Arc Crossbeam    ", 16384*FACTOR);
+
+        profile_same_task_same_thread_channel!(ogre_arc::atomic::Atomic::<u32, AllocatorAtomicArray<u32, 16384>, 16384, 1>::new("profile_same_task_same_thread_channel"), "OgreArc Atomic   ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(ogre_arc::atomic::Atomic::<u32, AllocatorAtomicArray<u32, 16384>, 16384, 1>::new("profile_different_task_same_thread_channel"), "OgreArc Atomic   ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(ogre_arc::atomic::Atomic::<u32, AllocatorAtomicArray<u32, 16384>, 16384, 1>::new("profile_different_task_different_thread_channel"), "OgreArc Atomic   ", 16384*FACTOR);
+
+        profile_same_task_same_thread_channel!(ogre_arc::full_sync::FullSync::<u32, AllocatorFullSyncArray<u32, 16384>, 16384, 1>::new("profile_same_task_same_thread_channel"), "OgreArc FullSync ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(ogre_arc::full_sync::FullSync::<u32, AllocatorFullSyncArray<u32, 16384>, 16384, 1>::new("profile_different_task_same_thread_channel"), "OgreArc FullSync ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(ogre_arc::full_sync::FullSync::<u32, AllocatorFullSyncArray<u32, 16384>, 16384, 1>::new("profile_different_task_different_thread_channel"), "OgreArc FullSync ", 16384*FACTOR);
 
     }
 

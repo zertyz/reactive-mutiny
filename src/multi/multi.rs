@@ -93,6 +93,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Companion of [spawn_executor_ref()]
+    #[must_use]
     pub async fn spawn_executor<IntoString:             Into<String>,
                                 OutItemType:            Send + Debug,
                                 OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -116,6 +117,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Futures & Fallible.
+    #[must_use]
     pub async fn spawn_executor_ref<IntoString:             Into<String>,
                                     OutItemType:            Send + Debug,
                                     OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -148,6 +150,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Companion of [spawn_non_futures_non_fallible_executor_ref()]
+    #[must_use]
     pub async fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                          OutItemType:            Send + Debug,
                                                          OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
@@ -166,6 +169,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Non-Futures & Non-Fallible.
+    #[must_use]
     pub async fn spawn_non_futures_non_fallible_executor_ref<IntoString:             Into<String>,
                                                              OutItemType:            Send + Debug,
                                                              OutStreamType:          Stream<Item=OutItemType> + Send + 'static,

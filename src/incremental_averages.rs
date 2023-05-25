@@ -10,6 +10,7 @@ use std::{
         },
     },
     mem::ManuallyDrop,
+    fmt::{Debug, Formatter},
 };
 
 
@@ -122,8 +123,11 @@ impl AtomicIncrementalAverage64 {
     }
 }
 
-impl Drop for AtomicIncrementalAverage64 {
-    fn drop(&mut self) {}
+impl Debug for AtomicIncrementalAverage64 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (counter, average) = self.probe();
+        write!(f, "AtomicIncrementalAverage64 {{counter: {}, average: {:.5}}}", counter, average)
+    }
 }
 
 /// Unit tests the [stream_executors](self) module

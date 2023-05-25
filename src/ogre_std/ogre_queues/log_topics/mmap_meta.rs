@@ -109,8 +109,10 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
                 .map_err(|err| format!("Couldn't mmap the (already openned) file '{mmap_file_path}' in RW mode, for use as the backing storage of a `log_topic` buffer: {:?}", err))?
         };
         let mmap_contents: &mut MMapContents<SlotType> = unsafe { &mut *(mmap_handle.as_mut_ptr() as *mut MMapContents<SlotType>) };
-        unsafe { std::ptr::write_bytes::<MMapContents<SlotType>>(mmap_contents, 0, 1); }     // zero-out the header of the mmap file
-        mmap_contents.slice_length.store(max_slots as usize, Relaxed); // +1 because `MMapContents<SlotType>` contains 1 slot
+        unsafe { std::ptr::write_bytes::<MMapContents<SlotType>>(mmap_contents, 0, 1); }     // zero-out the header of the mmap file... test to confirm the ahead zeroing isn't really necessary
+        mmap_contents.slice_length.store(max_slots as usize, Relaxed);
+        mmap_contents.publisher_tail.store(0, Relaxed);
+        mmap_contents.consumer_tail.store(0, Relaxed);
         let buffer_slice_ptr = &mut mmap_contents.first_buffer_element as *mut SlotType;
         let slice_length = mmap_contents.slice_length.load(Relaxed);
         Ok(Arc::new(Self {
@@ -140,14 +142,7 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
 
     #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
-        let slot_ref = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
-        *slot_ref = item;
-        while self.mmap_contents.consumer_tail.compare_exchange_weak(tail, tail+1, Relaxed, Relaxed).is_err() {
-            std::hint::spin_loop();
-        }
-        NonZeroU32::new(1 + tail as u32)
+        self.publish(|slot| *slot = item)
     }
 
     fn leak_slot(&self) -> Option<(/*ref:*/ &'a mut SlotType, /*id: */u32)> {
@@ -170,12 +165,14 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
         todo!()
     }
 
+    #[inline(always)]
     fn available_elements_count(&self) -> usize {
-        todo!()
+        self.mmap_contents.publisher_tail.load(Relaxed)
     }
 
+    #[inline(always)]
     fn max_size(&self) -> usize {
-        todo!()
+        self.mmap_contents.slice_length.load(Relaxed)
     }
 
     fn debug_info(&self) -> String {
@@ -209,11 +206,12 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
             while self.head.compare_exchange_weak(head+1, head, Relaxed, Relaxed).is_err() {
                 std::hint::spin_loop();
             }
+            report_empty_fn();
             return None;
         }
-        let slot_ref = &mut mutable_self.buffer[head];
+        let slot_ref = unsafe { mutable_self.buffer.get_unchecked(head) };
+        report_len_after_dequeueing_fn((tail - head) as i32);
         Some(getter_fn(slot_ref))
-
     }
 
     fn consume_leaking(&'a self) -> Option<(/*ref:*/ &'a SlotType, /*id: */u32)> {
@@ -226,6 +224,11 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
 
     fn release_leaked_id(&'a self, slot_id: u32) {
         todo!()
+    }
+
+    #[inline(always)]
+    fn remaining_elements_count(&self) -> usize {
+        self.meta_mmap_log_topic.mmap_contents.consumer_tail.load(Relaxed) - self.head.load(Relaxed)
     }
 
     unsafe fn peek_remaining(&self) -> Vec<&SlotType> {

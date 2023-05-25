@@ -50,6 +50,7 @@ use minstant::Instant;
 
 
 /// See [Instruments]
+#[derive(Debug)]
 pub struct StreamExecutor<const INSTRUMENTS: usize> {
     executor_name:                 String,
     futures_timeout:               Duration,
