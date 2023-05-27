@@ -18,7 +18,7 @@ use crate::{
     uni::channels::{
         ChannelCommon,
         ChannelProducer,
-        FullDuplexChannel,
+        FullDuplexUniChannel,
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
@@ -34,6 +34,7 @@ use std::{
     marker::PhantomData,
 };
 use async_trait::async_trait;
+use crate::uni::channels::ChannelUni;
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -67,13 +68,6 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn create_stream(self: &Arc<Self>)
-                    -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
-                        where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
-    }
-
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
@@ -102,6 +96,22 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
+    }
+}
+
+
+impl<'a, ItemType:          Debug + Send + Sync,
+         OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelUni<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
+for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream(self: &Arc<Self>)
+                    -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
+        where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 }
 
@@ -193,7 +203,7 @@ impl <'a, ItemType:          'static + Debug + Send + Sync,
           OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
+FullDuplexUniChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}
 
 

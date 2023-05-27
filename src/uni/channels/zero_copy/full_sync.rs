@@ -31,7 +31,7 @@ use crate::ogre_std::ogre_queues::full_sync::full_sync_zero_copy::FullSyncZeroCo
 use crate::ogre_std::ogre_queues::meta_container::MetaContainer;
 use crate::ogre_std::ogre_queues::meta_publisher::MetaPublisher;
 use crate::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
-use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
+use crate::uni::channels::{ChannelCommon, ChannelProducer, ChannelUni, FullDuplexUniChannel};
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -66,13 +66,6 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn create_stream(self: &Arc<Self>)
-                    -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
-                       where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
-    }
-
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
@@ -101,6 +94,22 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
+    }
+}
+
+
+impl<'a, ItemType:          Debug + Send + Sync,
+         OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelUni<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
+for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream(self: &Arc<Self>)
+                    -> (MutinyStream<'a, ItemType, Self, OgreUnique<ItemType, OgreAllocatorType>>, u32)
+        where Self: ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>> {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 }
 
@@ -180,5 +189,5 @@ impl <'a, ItemType:          'a + Debug + Send + Sync,
           OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
+FullDuplexUniChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}

@@ -21,7 +21,7 @@ use minstant::Instant;
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
 pub struct Uni<'a, ItemType:          Send + Sync + Debug,
-                   UniChannelType:    FullDuplexChannel<'a, ItemType, DerivedItemType>,
+                   UniChannelType:    FullDuplexUniChannel<'a, ItemType, DerivedItemType>,
                    const INSTRUMENTS: usize,
                    DerivedItemType:   Debug = ItemType> {
     pub uni_channel:              Arc<UniChannelType>,
@@ -31,7 +31,7 @@ pub struct Uni<'a, ItemType:          Send + Sync + Debug,
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         UniChannelType:    FullDuplexChannel<'a, ItemType, DerivedItemType>,
+         UniChannelType:    FullDuplexUniChannel<'a, ItemType, DerivedItemType>,
          const INSTRUMENTS: usize,
          DerivedItemType:   Debug>
 Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
@@ -122,4 +122,4 @@ macro_rules! unis_close_async {
     }
 }
 pub use unis_close_async;
-use crate::uni::channels::FullDuplexChannel;
+use crate::uni::channels::FullDuplexUniChannel;

@@ -15,7 +15,7 @@ use crate::{
             OgreAllocator,
         },
     },
-    uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel},
+    uni::channels::{ChannelCommon, ChannelProducer, FullDuplexMultiChannel},
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
     ChannelConsumer,
@@ -36,8 +36,9 @@ use std::{
 };
 use async_trait::async_trait;
 use log::{warn};
-use crate::ogre_std::ogre_queues::log_topics::mmap_meta::MMapMetaSubscriber;
+use crate::ogre_std::ogre_queues::log_topics::mmap_meta::{MMapMetaSubscriber};
 use crate::ogre_std::ogre_queues::meta_publisher::MetaPublisher;
+use crate::uni::channels::ChannelMulti;
 
 
 /// ...
@@ -66,16 +67,8 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             log_queue:       log_queue.clone(),
-            subscribers:     [0; MAX_STREAMS].map(|_| log_queue.subscribe(true)),
+            subscribers:     [0; MAX_STREAMS].map(|_| log_queue.subscribe_to_new_events_only()),
         })
-    }
-
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) {
-        let ref_self: &Self = self;
-        let mutable_self = unsafe {&mut *((ref_self as *const Self) as *mut Self)};
-        let stream_id = self.streams_manager.create_stream_id();
-        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe(true);
-        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -110,6 +103,49 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
     #[inline(always)]
     fn buffer_size(&self) -> u32 {
         u32::MAX
+    }
+}
+
+
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const MAX_STREAMS: usize>
+ChannelMulti<'a, ItemType, &'static ItemType>
+for MmapLog<'a, ItemType, MAX_STREAMS> {
+
+    fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) where Self: ChannelConsumer<'a, &'static ItemType> {
+        let ref_self: &Self = self;
+        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let stream_id = self.streams_manager.create_stream_id();
+        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe_to_old_events_only();
+        (MutinyStream::new(stream_id, self), stream_id)
+    }
+
+    fn create_stream_for_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) {
+        let ref_self: &Self = self;
+        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let stream_id = self.streams_manager.create_stream_id();
+        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe_to_new_events_only();
+        (MutinyStream::new(stream_id, self), stream_id)
+    }
+
+    fn create_streams_for_old_and_new_events(self: &Arc<Self>) -> ((MutinyStream<'a, ItemType, Self, &'static ItemType>, u32), (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32)) where Self: ChannelConsumer<'a, &'static ItemType> {
+        let ref_self: &Self = self;
+        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let (stream_of_oldies, stream_of_newies) = self.log_queue.subscribe_to_separated_old_and_new_events();
+        let stream_of_oldies_id = self.streams_manager.create_stream_id();
+        let stream_of_newies_id = self.streams_manager.create_stream_id();
+        mutable_self.subscribers[stream_of_oldies_id as usize] = stream_of_oldies;
+        mutable_self.subscribers[stream_of_newies_id as usize] = stream_of_newies;
+        ( (MutinyStream::new(stream_of_oldies_id, self), stream_of_oldies_id),
+          (MutinyStream::new(stream_of_newies_id, self), stream_of_newies_id) )
+    }
+
+    fn create_stream_for_old_and_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) where Self: ChannelConsumer<'a, &'static ItemType> {
+        let ref_self: &Self = self;
+        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let stream_id = self.streams_manager.create_stream_id();
+        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe_to_joined_old_and_new_events();
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 }
 
@@ -197,5 +233,5 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
 
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, &'static ItemType>
+FullDuplexMultiChannel<'a, ItemType, &'static ItemType>
 for MmapLog<'a, ItemType, MAX_STREAMS> {}

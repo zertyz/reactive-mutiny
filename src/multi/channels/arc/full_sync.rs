@@ -27,7 +27,7 @@ use std::{
 use std::mem::MaybeUninit;
 use async_trait::async_trait;
 use log::{warn};
-use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
+use crate::uni::channels::{ChannelCommon, ChannelMulti, ChannelProducer, FullDuplexMultiChannel};
 
 
 /// This channel uses the queues [FullSyncMove] (the highest throughput among all in 'benches/'), which are the fastest for general purpose use and for most hardware but requires that elements are copied when dequeueing,
@@ -60,11 +60,6 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             streams_manager: StreamsManagerBase::new(streams_manager_name),
             channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMove::<Arc<ItemType>, BUFFER_SIZE>::new())),
         })
-    }
-
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -100,6 +95,32 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
     }
+}
+
+
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelMulti<'a, ItemType, Arc<ItemType>>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) where Self: ChannelConsumer<'a, Arc<ItemType>> {
+        panic!("multi::channels::arc::FullSync: this channel doesn't implement the `.create_stream_for_old_events()` method. Use `.create_stream_for_new_events()` instead")
+    }
+
+    fn create_stream_for_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
+    }
+
+    fn create_streams_for_old_and_new_events(self: &Arc<Self>) -> ((MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32), (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32)) where Self: ChannelConsumer<'a, Arc<ItemType>> {
+        panic!("multi::channels::arc::FullSync: this channel doesn't implement the `.create_streams_for_old_and_new_events()` method. Use `.create_stream_for_new_events()` instead")
+    }
+
+    fn create_stream_for_old_and_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) where Self: ChannelConsumer<'a, Arc<ItemType>> {
+        panic!("multi::channels::arc::FullSync: this channel doesn't implement the `.create_stream_for_old_and_new_events()` method. Use `.create_stream_for_new_events()` instead")
+    }
+
 }
 
 
@@ -200,5 +221,5 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, Arc<ItemType>>
+FullDuplexMultiChannel<'a, ItemType, Arc<ItemType>>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

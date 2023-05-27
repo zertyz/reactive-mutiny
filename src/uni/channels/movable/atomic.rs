@@ -28,7 +28,7 @@ use std::{
 };
 use std::num::NonZeroU32;
 use async_trait::async_trait;
-use crate::uni::channels::FullDuplexChannel;
+use crate::uni::channels::{ChannelUni, FullDuplexUniChannel};
 
 
 /// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
@@ -55,11 +55,6 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             streams_manager: StreamsManagerBase::new(name),
             channel:         Box::pin(AtomicMove::<ItemType, BUFFER_SIZE>::new()),
         })
-    }
-
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -90,6 +85,18 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
+    }
+}
+
+impl<'a, ItemType:          'a + Send + Sync + Debug,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelUni<'a, ItemType, ItemType>
+for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 }
 
@@ -166,5 +173,5 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, ItemType>
+FullDuplexUniChannel<'a, ItemType, ItemType>
 for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

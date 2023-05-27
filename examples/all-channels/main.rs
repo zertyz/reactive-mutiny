@@ -23,10 +23,11 @@ use reactive_mutiny::{ogre_std::ogre_alloc::ogre_unique::OgreUnique, stream_exec
     channels::{
         ChannelCommon,
         ChannelProducer,
-        FullDuplexChannel,
+        FullDuplexUniChannel,
     },
 }, ChannelConsumer, Instruments, UniZeroCopyAtomic, UniZeroCopyFullSync, UniMoveAtomic, UniMoveCrossbeam, UniMoveFullSync, MultiAtomicArc, MultiCrossbeamArc, MultiFullSyncArc, MultiAtomicOgreArc, MultiFullSyncOgreArc, MultiMmapLog};
 use futures::{SinkExt, Stream, StreamExt};
+use reactive_mutiny::uni::channels::FullDuplexMultiChannel;
 
 
 const BUFFER_SIZE: usize = 1<<12;
@@ -35,7 +36,7 @@ const INSTRUMENTS: usize = {Instruments::NoInstruments.into()};
 
 
 async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                               UniChannelType:      FullDuplexChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
+                               UniChannelType:      FullDuplexUniChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
                               (ident: &str,
                                name: &str,
                                uni_builder: reactive_mutiny::uni::UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
@@ -78,7 +79,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
 }
 
 async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                                 MultiChannelType: FullDuplexChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
+                                 MultiChannelType: FullDuplexMultiChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
                                 (ident:               &str,
                                  name:                &str,
                                  number_of_listeners: u32,

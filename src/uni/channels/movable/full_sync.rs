@@ -23,7 +23,7 @@ use std::{
 };
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
-use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
+use crate::uni::channels::{ChannelCommon, ChannelProducer, ChannelUni, FullDuplexUniChannel};
 
 
 /// This channel uses the fastest of the queues [FullSyncMove], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
@@ -58,11 +58,6 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
-    }
-
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
@@ -91,6 +86,18 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
+    }
+}
+
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelUni<'a, ItemType, ItemType>
+for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 }
 
@@ -154,5 +161,5 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, ItemType>
+FullDuplexUniChannel<'a, ItemType, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

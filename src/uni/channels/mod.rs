@@ -29,15 +29,6 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
 
-    /// Returns a `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
-    /// If called more than once, the behavior differs in regard to how the events will be routed,
-    /// depending on the implementor:
-    ///   - [Uni]s implement the "consumer" pattern: each `Stream` will receive a different element;
-    ///   - [Multi]s implement the "listener" pattern: each `Stream` will see all elements
-    /// Panics if called more times than allowed by [Uni]'s/[Multi]'s `MAX_STREAMS`
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
-                                          where Self: ChannelConsumer<'a, DerivedItemType>;
-
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
     async fn flush(&self, timeout: Duration) -> u32;
@@ -70,6 +61,61 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
     fn buffer_size(&self) -> u32;
 }
 
+/// Defines abstractions specific to [Uni] channels
+pub trait ChannelUni<'a, ItemType:        Debug + Send + Sync,
+                         DerivedItemType: Debug> {
+
+    /// Returns a `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
+    /// If called more than once, each `Stream` will receive a different element -- "consumer pattern".\
+    /// Currently `panic`s if called more times than allowed by [Uni]'s `MAX_STREAMS`
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                          where Self: ChannelConsumer<'a, DerivedItemType>;
+
+}
+
+/// Defines abstractions specific to [Uni] channels
+pub trait ChannelMulti<'a, ItemType:        Debug + Send + Sync,
+                           DerivedItemType: Debug> {
+
+    /// Implemented only for a few [Multi] channels, returns a `Stream` (and its `stream_id`) able to receive elements
+    /// that were sent through this channel *before the call to this method*.\
+    /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
+    /// based channels are able to see all past events.\
+    /// If called more than once, every stream will see all the past events available.\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                                         where Self: ChannelConsumer<'a, DerivedItemType>;
+
+    /// Returns a `Stream` (and its `stream_id`) able to receive elements sent through this channel *after the call to this method*.\
+    /// If called more than once, each `Stream` will see all new elements -- "listener pattern".\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_stream_for_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                                         where Self: ChannelConsumer<'a, DerivedItemType>;
+
+    /// Implemented only for a few [Multi] channels, returns two `Stream`s (and their `stream_id`s):
+    ///   - one for the past events (that, once exhausted, won't see any of the forthcoming events)
+    ///   - another for the forthcoming events.
+    /// The split is guaranteed not to miss any events: no events will be lost between the last of the "past" and
+    /// the first of the "forthcoming" events.\
+    /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
+    /// based channels are able to see all past events.\
+    /// If called more than once, every stream will see all the past events available, as well as all future events after this method call.\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_streams_for_old_and_new_events(self: &Arc<Self>) -> ((MutinyStream<'a, ItemType, Self, DerivedItemType>, u32),
+                                                                   (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32))
+                                                                  where Self: ChannelConsumer<'a, DerivedItemType>;
+
+    /// Implemented only for a few [Multi] channels, returns a single `Stream` (and its `stream_id`) able to receive elements
+    /// that were sent through this channel either *before and after the call to this method*.\
+    /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
+    /// based channels are able to see all past events.\
+    /// Notice that, with this method, there is no way of discriminating where the "old" events end and where the "new" events start.\
+    /// If called more than once, every stream will see all the past events available, as well as all future events after this method call.\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_stream_for_old_and_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                                                 where Self: ChannelConsumer<'a, DerivedItemType>;
+
+}
 /// Defines how to send events (to a [Uni] or [Multi]).
 pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
                               DerivedItemType: 'a + Debug> {
@@ -105,9 +151,21 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
 
 }
 
-/// A fully fledged channel, that has both the producer and consumer parts
-pub trait FullDuplexChannel<'a, ItemType:        'a + Debug + Send + Sync,
-                                DerivedItemType: 'a + Debug = ItemType>: ChannelCommon<'a, ItemType, DerivedItemType> + ChannelProducer<'a, ItemType, DerivedItemType> + ChannelConsumer<'a, DerivedItemType> {}
+/// Defines a fully fledged `Uni` channel, that has both the producer and consumer parts
+pub trait FullDuplexUniChannel<'a, ItemType:        'a + Debug + Send + Sync,
+                                   DerivedItemType: 'a + Debug = ItemType>:
+          ChannelCommon<'a, ItemType, DerivedItemType> +
+          ChannelUni<'a, ItemType, DerivedItemType> +
+          ChannelProducer<'a, ItemType, DerivedItemType> +
+          ChannelConsumer<'a, DerivedItemType> {}
+
+/// A fully fledged `Multi` channel, that has both the producer and consumer parts
+pub trait FullDuplexMultiChannel<'a, ItemType:        'a + Debug + Send + Sync,
+                                     DerivedItemType: 'a + Debug = ItemType>:
+          ChannelCommon<'a, ItemType, DerivedItemType> +
+          ChannelMulti<'a, ItemType, DerivedItemType> +
+          ChannelProducer<'a, ItemType, DerivedItemType> +
+          ChannelConsumer<'a, DerivedItemType> {}
 
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module

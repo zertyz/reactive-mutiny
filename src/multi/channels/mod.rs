@@ -34,7 +34,13 @@ use async_trait::async_trait;
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use crate::uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel};
+    use crate::{
+        AllocatorAtomicArray, AllocatorFullSyncArray,
+        ogre_std::ogre_alloc,
+        uni::channels::{
+            ChannelCommon, ChannelProducer, FullDuplexUniChannel, ChannelMulti,
+        }
+    };
     use {arc, ogre_arc};
     use std::{
         sync::Arc,
@@ -44,8 +50,7 @@ mod tests {
         io::Write,
     };
     use futures::{stream,Stream,StreamExt};
-    use crate::{AllocatorAtomicArray, AllocatorFullSyncArray};
-    use crate::ogre_std::ogre_alloc;
+    use crate::{ogre_std, uni};
 
 
     // *_doc_test for all known Multi Channel's
@@ -57,7 +62,7 @@ mod tests {
             #[cfg_attr(not(doc),tokio::test)]
             async fn $fn_name() {
                 let channel = <$multi_channel_type>::new("doc_test");
-                let (mut stream, _stream_id) = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream_for_new_events();
                 channel.try_send_movable("a");
                 println!("received: {}", stream.next().await.unwrap());
             }
@@ -84,9 +89,9 @@ mod tests {
                     print!("Dropping the channel before the stream consumes the element: ");
                     let channel = <$multi_channel_type>::new("stream_and_channel_dropping");
                     assert_eq!(Arc::strong_count(&channel), 1, "Sanity check on reference counting");
-                    let (mut stream_1, _stream_id) = channel.create_stream();
+                    let (mut stream_1, _stream_id) = channel.create_stream_for_new_events();
                     assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
-                    let (mut stream_2, _stream_id_2) = channel.create_stream();
+                    let (mut stream_2, _stream_id_2) = channel.create_stream_for_new_events();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating a stream should increase the ref count by 1");
                     channel.try_send_movable("a");
                     println!("received: stream_1: {}; stream_2: {}", stream_1.next().await.unwrap(), stream_2.next().await.unwrap());
@@ -99,11 +104,11 @@ mod tests {
                 {
                     print!("Dropping the stream before the channel produces something, then another stream is created to consume the element: ");
                     let channel = <$multi_channel_type>::new("stream_and_channel_dropping");
-                    let stream = channel.create_stream();
+                    let stream = channel.create_stream_for_new_events();
                     assert_eq!(Arc::strong_count(&channel), 2, "`channel` + `stream`: reference count should be 3");
                     drop(stream);
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
-                    let (mut stream, _stream_id) = channel.create_stream();
+                    let (mut stream, _stream_id) = channel.create_stream_for_new_events();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
                     channel.try_send_movable("a");
                     println!("received: {}", stream.next().await.unwrap());
@@ -149,20 +154,20 @@ mod tests {
 
                 println!("1) streams 1 & 2 about to receive a message");
                 let message = "to `stream1` and `stream2`".to_string();
-                let (stream1, _stream1_id) = channel.create_stream();
-                let (stream2, _stream2_id) = channel.create_stream();
+                let (stream1, _stream1_id) = channel.create_stream_for_new_events();
+                let (stream2, _stream2_id) = channel.create_stream_for_new_events();
                 channel.try_send_movable(message.clone());
                 assert_received(stream1, message.clone(), "`stream1` didn't receive the right message").await;
                 assert_received(stream2, message.clone(), "`stream2` didn't receive the right message").await;
 
                 println!("2) stream3 should timeout");
-                let (stream3, _stream3_id) = channel.create_stream();
+                let (stream3, _stream3_id) = channel.create_stream_for_new_events();
                 assert_no_message(stream3, "`stream3` simply should timeout (no message will ever be sent through it)").await;
 
                 println!("3) several creations and removals");
                 for i in 0..10240 {
                     let message = format!("gremling #{}", i);
-                    let (gremlin_stream, _gremlin_stream_id) = channel.create_stream();
+                    let (gremlin_stream, _gremlin_stream_id) = channel.create_stream_for_new_events();
                     channel.try_send_movable(message.clone());
                     assert_received(gremlin_stream, message, "`gremling_stream` didn't receive the right message").await;
                 }
@@ -210,7 +215,7 @@ mod tests {
                     .then(|_i| {
                         let channel = channel.clone();
                         async move {
-                            let (stream, _stream_id) = channel.create_stream();
+                            let (stream, _stream_id) = channel.create_stream_for_new_events();
                             stream
                         }
                     })
@@ -262,7 +267,7 @@ mod tests {
                 {
                     println!("Creating & ending a single stream: ");
                     let channel = <$multi_channel_type>::new("end_streams");
-                    let (mut stream, stream_id) = channel.create_stream();
+                    let (mut stream, stream_id) = channel.create_stream_for_new_events();
                     tokio::spawn(async move {
                         tokio::time::sleep(WAIT_TIME/2).await;
                         channel.gracefully_end_stream(stream_id, WAIT_TIME).await;
@@ -275,8 +280,8 @@ mod tests {
                 {
                     println!("Creating & ending two streams: ");
                     let channel = <$multi_channel_type>::new("end_streams");
-                    let (mut first, first_id) = channel.create_stream();
-                    let (mut second, second_id) = channel.create_stream();
+                    let (mut first, first_id) = channel.create_stream_for_new_events();
+                    let (mut second, second_id) = channel.create_stream_for_new_events();
                     let first_ended = Arc::new(AtomicBool::new(false));
                     let second_ended = Arc::new(AtomicBool::new(false));
                     {
@@ -329,8 +334,8 @@ mod tests {
             async fn $fn_name() {
                 const PAYLOAD_TEXT: &str = "A shareable playload";
                 let channel = <$multi_channel_type>::new("payload_dropping");
-                let (mut stream_1, _stream_id) = channel.create_stream();
-                let (mut stream_2, _stream_id) = channel.create_stream();
+                let (mut stream_1, _stream_id) = channel.create_stream_for_new_events();
+                let (mut stream_2, _stream_id) = channel.create_stream_for_new_events();
                 channel.try_send_movable(String::from(PAYLOAD_TEXT));
 
                 let payload_1 = stream_1.next().await.unwrap();
@@ -367,7 +372,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let (mut stream, _stream_id) = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream_for_new_events();
 
                 print!("{} (same task / same thread):           ", profiling_name);
                 std::io::stdout().flush().unwrap();
@@ -395,7 +400,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let (mut stream, _stream_id) = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream_for_new_events();
 
                 let sender_future = async {
                     let mut e = 0;
@@ -437,7 +442,7 @@ mod tests {
                 let channel = $channel;
                 let profiling_name = $profiling_name;
                 let count = $count;
-                let (mut stream, _stream_id) = channel.create_stream();
+                let (mut stream, _stream_id) = channel.create_stream_for_new_events();
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     let mut e = 0;
@@ -499,6 +504,10 @@ mod tests {
         profile_same_task_same_thread_channel!(ogre_arc::full_sync::FullSync::<u32, AllocatorFullSyncArray<u32, 16384>, 16384, 1>::new("profile_same_task_same_thread_channel"), "OgreArc FullSync ", 16384*FACTOR);
         profile_different_task_same_thread_channel!(ogre_arc::full_sync::FullSync::<u32, AllocatorFullSyncArray<u32, 16384>, 16384, 1>::new("profile_different_task_same_thread_channel"), "OgreArc FullSync ", 16384*FACTOR);
         profile_different_task_different_thread_channel!(ogre_arc::full_sync::FullSync::<u32, AllocatorFullSyncArray<u32, 16384>, 16384, 1>::new("profile_different_task_different_thread_channel"), "OgreArc FullSync ", 16384*FACTOR);
+
+        profile_same_task_same_thread_channel!(reference::mmap_log::MmapLog::<u32, 16384>::new("profile_same_task_same_thread_channel"), "Ref MmapLog      ", 16384*FACTOR);
+        profile_different_task_same_thread_channel!(reference::mmap_log::MmapLog::<u32, 16384>::new("profile_different_task_same_thread_channel"), "Ref MmapLog      ", 16384*FACTOR);
+        profile_different_task_different_thread_channel!(reference::mmap_log::MmapLog::<u32, 16384>::new("profile_different_task_different_thread_channel"), "Ref MmapLog      ", 16384*FACTOR);
 
     }
 

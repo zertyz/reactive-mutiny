@@ -48,7 +48,7 @@ mod tests {
     };
     use minstant::Instant;
     use crate::mutiny_stream::MutinyStream;
-    use crate::uni::channels::{ChannelProducer, FullDuplexChannel};
+    use crate::uni::channels::{ChannelProducer, FullDuplexUniChannel};
 
 
     /// The `UniBuilder` specialization used for the tests to follow
@@ -448,7 +448,7 @@ mod tests {
         const FACTOR: u32 = 40;
 
         /// measure how long it takes to stream a certain number of elements through the given `uni`
-        async fn profile_uni<'a, UniChannelType:    FullDuplexChannel<'a, u32, u32> + Sync + Send + 'a,
+        async fn profile_uni<'a, UniChannelType:    FullDuplexUniChannel<'a, u32, u32> + Sync + Send + 'a,
                                  const INSTRUMENTS: usize>
                             (uni:            Arc<Uni<'a, u32, UniChannelType, INSTRUMENTS>>,
                              profiling_name: &str,

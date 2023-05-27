@@ -16,7 +16,7 @@ use std::mem::{ManuallyDrop, MaybeUninit};
 use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
-use crate::uni::channels::FullDuplexChannel;
+use crate::uni::channels::{ChannelUni, FullDuplexUniChannel};
 
 
 pub struct Crossbeam<'a, ItemType,
@@ -41,11 +41,6 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             rx,
             streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name)),
         })
-    }
-
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -76,6 +71,18 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
+    }
+}
+
+impl<'a, ItemType: 'a + Send + Sync + Debug,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelUni<'a, ItemType, ItemType>
+for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, ItemType>, u32) {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
     }
 }
 
@@ -148,5 +155,5 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, ItemType>
+FullDuplexUniChannel<'a, ItemType, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

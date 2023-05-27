@@ -33,7 +33,7 @@ use tokio::{
 /// ```nocompile
 /// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
 pub struct Multi<'a, ItemType:          Send + Sync + Debug + 'a,
-                     MultiChannelType:  FullDuplexChannel<'a, ItemType, DerivedItemType>,
+                     MultiChannelType:  FullDuplexMultiChannel<'a, ItemType, DerivedItemType>,
                      const INSTRUMENTS: usize,
                      DerivedItemType:   Debug + 'a> {
     pub multi_name:     String,
@@ -43,7 +43,7 @@ pub struct Multi<'a, ItemType:          Send + Sync + Debug + 'a,
 }
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         MultiChannelType:  FullDuplexChannel<'a, ItemType, DerivedItemType>,
+         MultiChannelType:  FullDuplexMultiChannel<'a, ItemType, DerivedItemType>,
          const INSTRUMENTS: usize,
          DerivedItemType:   Debug + 'a>
 Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
@@ -136,7 +136,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                     -> Result</*&Self*/&Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.stream_name(), pipeline_name.into()), futures_timeout);
-        let (in_stream, in_stream_id) = self.channel.create_stream();
+        let (in_stream, in_stream_id) = self.channel.create_stream_for_new_events();
         self.add_executor(Arc::clone(&executor), in_stream_id).await?;
         let out_stream = pipeline_builder(in_stream);
         executor
@@ -184,7 +184,7 @@ Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                             -> Result</*&Self*/&Multi<'a, ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
-        let (in_stream, in_stream_id) = self.channel.create_stream();
+        let (in_stream, in_stream_id) = self.channel.create_stream_for_new_events();
         self.add_executor(Arc::clone(&executor), in_stream_id).await?;
         let out_stream = pipeline_builder(in_stream);
         executor
@@ -258,7 +258,7 @@ macro_rules! multis_close_async {
     }
 }
 pub use multis_close_async;
-use crate::uni::channels::FullDuplexChannel;
+use crate::uni::channels::FullDuplexMultiChannel;
 
 /// Keeps track of the `stream_executor` associated to each `stream_id`
 pub struct ExecutorInfo<const INSTRUMENTS: usize> {

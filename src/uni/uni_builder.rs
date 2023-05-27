@@ -20,11 +20,11 @@ use std::{
 };
 use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
-use crate::uni::channels::FullDuplexChannel;
+use crate::uni::channels::FullDuplexUniChannel;
 
 
 pub struct UniBuilder<InType:              'static + Debug + Sync + Send,
-                      UniChannelType:      FullDuplexChannel<'static, InType, DerivedItemType> + Sync + Send + 'static,
+                      UniChannelType:      FullDuplexUniChannel<'static, InType, DerivedItemType> + Sync + Send + 'static,
                       const INSTRUMENTS:   usize,
                       DerivedItemType:     'static + Debug + Sync + Send> {
 
@@ -38,7 +38,7 @@ pub struct UniBuilder<InType:              'static + Debug + Sync + Send,
 
 }
 impl<InType:              'static + Sync + Send + Debug,
-     UniChannelType:      FullDuplexChannel<'static, InType, DerivedItemType> + Sync + Send + 'static,
+     UniChannelType:      FullDuplexUniChannel<'static, InType, DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS:   usize,
      DerivedItemType:     'static + Debug + Sync + Send>
 UniBuilder<InType, UniChannelType, INSTRUMENTS, DerivedItemType> {

@@ -14,7 +14,7 @@ use crate::{
             OgreAllocator,
         },
     },
-    uni::channels::{ChannelCommon, ChannelProducer, FullDuplexChannel},
+    uni::channels::{ChannelCommon, ChannelProducer, FullDuplexMultiChannel},
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
     ChannelConsumer,
@@ -31,6 +31,7 @@ use std::{
 };
 use async_trait::async_trait;
 use log::{warn};
+use crate::uni::channels::ChannelMulti;
 
 
 /// ...
@@ -62,11 +63,6 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
             allocator:           OgreAllocatorType::new(),
             dispatcher_managers: [0; MAX_STREAMS].map(|_| FullSyncMove::<OgreArc<ItemType, OgreAllocatorType>, BUFFER_SIZE>::new()),
         })
-    }
-
-    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32) {
-        let stream_id = self.streams_manager.create_stream_id();
-        (MutinyStream::new(stream_id, self), stream_id)
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
@@ -102,6 +98,34 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     fn buffer_size(&self) -> u32 {
         BUFFER_SIZE as u32
     }
+}
+
+
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
+         const BUFFER_SIZE: usize,
+         const MAX_STREAMS: usize>
+ChannelMulti<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
+for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32) {
+        panic!("multi::channels::ogre_arc::FullSync: this channel doesn't implement the `.create_stream_for_old_events()` method. Use `.create_stream_for_new_events()` instead")
+    }
+
+    fn create_stream_for_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32) {
+        let stream_id = self.streams_manager.create_stream_id();
+        (MutinyStream::new(stream_id, self), stream_id)
+    }
+
+    fn create_streams_for_old_and_new_events(self: &Arc<Self>) -> ((MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32),
+                                                                   (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32)) {
+        panic!("multi::channels::ogre_arc::FullSync: this channel doesn't implement the `.create_streams_for_old_and_new_events()` method. Use `.create_stream_for_new_events()` instead")
+    }
+
+    fn create_stream_for_old_and_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32) {
+        panic!("multi::channels::ogre_arc::FullSync: this channel doesn't implement the `.create_stream_for_old_and_new_events()` method. Use `.create_stream_for_new_events()` instead")
+    }
+
 }
 
 
@@ -214,5 +238,5 @@ impl <'a, ItemType:          'a + Debug + Send + Sync,
           OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexChannel<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
+FullDuplexMultiChannel<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
 for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}

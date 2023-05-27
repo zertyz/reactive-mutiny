@@ -65,8 +65,35 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
         }
     }
 
-    pub fn subscribe(self: &Arc<Self>, replay_old_events: bool) -> MMapMetaSubscriber<'a, SlotType> {
-        let first_element_slot_id = if replay_old_events {0} else {self.mmap_contents.consumer_tail.load(Relaxed)};
+    /// Returns a single subscriber -- for past events only. Even if new events arrive, the subscriber won't see them
+    /// -- it is safe to assume that all old events were supplied when the first `None` is returned by the subscriber
+    pub fn subscribe_to_old_events_only(self: &Arc<Self>) -> MMapMetaSubscriber<'a, SlotType> {
+        todo!()
+    }
+
+    /// Returns a single subscriber -- for forthcoming events only
+    pub fn subscribe_to_new_events_only(self: &Arc<Self>) -> MMapMetaSubscriber<'a, SlotType> {
+        let first_element_slot_id = self.mmap_contents.consumer_tail.load(Relaxed);
+        MMapMetaSubscriber {
+            head:                AtomicUsize::new(first_element_slot_id),
+            buffer:              self.buffer_as_slice_mut(),
+            meta_mmap_log_topic: Arc::clone(&self),
+        }
+    }
+
+    /// Returns two subscribers:
+    ///   - one for the past events (that, once exhausted, won't see any of the forthcoming events)
+    ///   - another for the forthcoming events.
+    /// The split is guaranteed not to miss any events: no events will be lost between the last of the "past" and
+    /// the first of the "forthcoming" events
+    pub fn subscribe_to_separated_old_and_new_events(self: &Arc<Self>) -> (MMapMetaSubscriber<'a, SlotType>, MMapMetaSubscriber<'a, SlotType>) {
+        todo!()
+    }
+
+    /// Returns a single subscriber containing both old and new events -- notice that, with this method,
+    /// there is no way of discriminating where the "old" events end and where the "new" events start.
+    pub fn subscribe_to_joined_old_and_new_events(self: &Arc<Self>) -> MMapMetaSubscriber<'a, SlotType> {
+        let first_element_slot_id = 0;
         MMapMetaSubscriber {
             head:                AtomicUsize::new(first_element_slot_id),
             buffer:              self.buffer_as_slice_mut(),
@@ -271,7 +298,7 @@ mod tests {
         // dequeue
         //////////
 
-        let consumer_1 = meta_log_topic.subscribe(true);
+        let consumer_1 = meta_log_topic.subscribe_to_joined_old_and_new_events();
         // here is one of the essences of a log topic: references exists "forever", as it only grows (old elements are never freed)
         let observed_slot_1: &MyData = consumer_1.consume(|slot| unsafe { &*(slot as *const MyData) },
                                                           || false,
@@ -283,7 +310,7 @@ mod tests {
         assert_eq!(observed_slot_1.age, expected_age, "Age doesn't match");
 
         // the second essence of a log topic: new consumers might be created at any time and they will access all previous elements
-        let consumer_2 = meta_log_topic.subscribe(true);
+        let consumer_2 = meta_log_topic.subscribe_to_joined_old_and_new_events();
         let observed_slot_2: &MyData = consumer_2.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
@@ -291,7 +318,7 @@ mod tests {
         assert_eq!(observed_slot_2 as *const MyData, observed_slot_1 as *const MyData, "These references should point to the same address");
 
         // consumers may be scheduled not to replay old events
-        let consumer_3 = meta_log_topic.subscribe(false);
+        let consumer_3 = meta_log_topic.subscribe_to_new_events_only();
         let observed_slot_3 = consumer_3.consume(|slot| unsafe {&*(slot as *const MyData)},
                                              || false,
                                              |_| {});
@@ -343,7 +370,7 @@ mod tests {
 
         let meta_log_topic = MMapMeta::<MyData>::new("/tmp/indefinite_growth.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
-        let consumer = meta_log_topic.subscribe(true);
+        let consumer = meta_log_topic.subscribe_to_new_events_only();
 
         // enqueue
         //////////
@@ -383,7 +410,7 @@ mod tests {
 
         let meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)
             .expect("Instantiating the meta log topic");
-        let consumer = meta_log_topic.subscribe(true);
+        let consumer = meta_log_topic.subscribe_to_new_events_only();
         meta_log_topic.publish(|slot| *slot = EXPECTED_ELEMENT);
         let observed_element = consumer.consume(|slot| unsafe {&*(slot as *const u128)},
                                                 || false,

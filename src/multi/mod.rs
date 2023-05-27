@@ -56,7 +56,7 @@ mod tests {
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
     use tokio::sync::Mutex;
-    use crate::uni::channels::FullDuplexChannel;
+    use crate::uni::channels::FullDuplexMultiChannel;
 
 
     type MultiChannelType<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = channels::arc::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
@@ -715,7 +715,7 @@ mod tests {
         const FACTOR: u32 = 32;
 
         /// measure how long it takes to stream a certain number of elements through the given `multi`
-        async fn profile_multi<'a, MultiChannelType:  FullDuplexChannel<'a, u32, Arc<u32>> + Sync + Send + 'a,
+        async fn profile_multi<'a, MultiChannelType:  FullDuplexMultiChannel<'a, u32, Arc<u32>> + Sync + Send + 'a,
                                    const INSTRUMENTS: usize>
                               (multi:          &Multi<'a, u32, MultiChannelType, INSTRUMENTS, Arc<u32>>,
                                profiling_name: &str,
