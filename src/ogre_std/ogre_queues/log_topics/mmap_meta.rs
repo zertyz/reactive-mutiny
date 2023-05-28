@@ -67,14 +67,14 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
 
     /// Returns a single subscriber -- for past events only. Even if new events arrive, the subscriber won't see them
     /// -- it is safe to assume that all old events were supplied when the first `None` is returned by the subscriber
-    pub fn subscribe_to_old_events_only(self: &Arc<Self>) -> MMapMetaSubscriber<'a, SlotType> {
+    pub fn subscribe_to_old_events_only(self: &Arc<Self>) -> MMapMetaFixedSubscriber<'a, SlotType> {
         todo!()
     }
 
     /// Returns a single subscriber -- for forthcoming events only
-    pub fn subscribe_to_new_events_only(self: &Arc<Self>) -> MMapMetaSubscriber<'a, SlotType> {
+    pub fn subscribe_to_new_events_only(self: &Arc<Self>) -> MMapMetaDynamicSubscriber<'a, SlotType> {
         let first_element_slot_id = self.mmap_contents.consumer_tail.load(Relaxed);
-        MMapMetaSubscriber {
+        MMapMetaDynamicSubscriber {
             head:                AtomicUsize::new(first_element_slot_id),
             buffer:              self.buffer_as_slice_mut(),
             meta_mmap_log_topic: Arc::clone(&self),
@@ -86,15 +86,27 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
     ///   - another for the forthcoming events.
     /// The split is guaranteed not to miss any events: no events will be lost between the last of the "past" and
     /// the first of the "forthcoming" events
-    pub fn subscribe_to_separated_old_and_new_events(self: &Arc<Self>) -> (MMapMetaSubscriber<'a, SlotType>, MMapMetaSubscriber<'a, SlotType>) {
-        todo!()
+    pub fn subscribe_to_separated_old_and_new_events(self: &Arc<Self>) -> (MMapMetaFixedSubscriber<'a, SlotType>, MMapMetaDynamicSubscriber<'a, SlotType>) {
+        let tail = self.mmap_contents.consumer_tail.load(Relaxed);
+        (
+            MMapMetaFixedSubscriber {
+                head:       AtomicUsize::new(0),
+                buffer:     self.buffer_as_slice_mut(),
+                fixed_tail: tail,
+            },
+            MMapMetaDynamicSubscriber {
+                head:                AtomicUsize::new(tail),
+                buffer:              self.buffer_as_slice_mut(),
+                meta_mmap_log_topic: Arc::clone(&self),
+            },
+        )
     }
 
     /// Returns a single subscriber containing both old and new events -- notice that, with this method,
     /// there is no way of discriminating where the "old" events end and where the "new" events start.
-    pub fn subscribe_to_joined_old_and_new_events(self: &Arc<Self>) -> MMapMetaSubscriber<'a, SlotType> {
+    pub fn subscribe_to_joined_old_and_new_events(self: &Arc<Self>) -> MMapMetaDynamicSubscriber<'a, SlotType> {
         let first_element_slot_id = 0;
-        MMapMetaSubscriber {
+        MMapMetaDynamicSubscriber {
             head:                AtomicUsize::new(first_element_slot_id),
             buffer:              self.buffer_as_slice_mut(),
             meta_mmap_log_topic: Arc::clone(&self),
@@ -207,13 +219,35 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
     }
 }
 
-pub struct MMapMetaSubscriber<'a, SlotType: 'a> {
+/// Enclosing type for subscribers of old and new events
+pub enum MMapMetaSubscriber<'a, SlotType: 'a + Debug> {
+    /// See [MMapMetaDynamicSubscriber<>]
+    Dynamic (MMapMetaDynamicSubscriber<'a, SlotType>),
+    /// See [MMapMetaFixedSubscriber<>]
+    Fixed   (MMapMetaFixedSubscriber<'a, SlotType>),
+}
+
+impl<'a, SlotType: 'a + Debug> MMapMetaSubscriber<'a, SlotType> {
+
+    #[inline(always)]
+    pub fn remaining_elements_count(&self) -> usize {
+        match self {
+            Self::Dynamic(subscriber) => subscriber.remaining_elements_count(),
+            Self::Fixed(subscriber) => subscriber.remaining_elements_count(),
+        }
+    }
+
+}
+
+/// A subscriber that follows a "dynamic" tail, updated elsewhere
+/// -- used on followers of "new" events, as opposed to [MMapMetaFixedSubscriber], which yields "old" events only
+pub struct MMapMetaDynamicSubscriber<'a, SlotType: 'a> {
     head:                AtomicUsize,
     buffer:              &'a mut [SlotType],
     meta_mmap_log_topic: Arc<MMapMeta<'a, SlotType>>,
 }
 
-impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscriber<'a, SlotType> {
+impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaDynamicSubscriber<'a, SlotType> {
 
     fn consume<GetterReturnType: 'a,
                GetterFn:                   FnOnce(&'a SlotType) -> GetterReturnType,
@@ -256,6 +290,63 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaSubscrib
     #[inline(always)]
     fn remaining_elements_count(&self) -> usize {
         self.meta_mmap_log_topic.mmap_contents.consumer_tail.load(Relaxed) - self.head.load(Relaxed)
+    }
+
+    unsafe fn peek_remaining(&self) -> Vec<&SlotType> {
+        todo!()
+    }
+}
+
+/// A subscriber that follows a "fixed" tail
+/// -- used on followers of "old" events, as opposed to [MMapMetaDynamicSubscriber], which may yield "new" events as well
+pub struct MMapMetaFixedSubscriber<'a, SlotType: 'a> {
+    head:       AtomicUsize,
+    buffer:     &'a mut [SlotType],
+    fixed_tail: usize,
+}
+
+impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaFixedSubscriber<'a, SlotType> {
+
+    fn consume<GetterReturnType: 'a,
+               GetterFn:                   FnOnce(&'a SlotType) -> GetterReturnType,
+               ReportEmptyFn:              Fn() -> bool,
+               ReportLenAfterDequeueingFn: FnOnce(i32)>
+              (&self,
+               getter_fn:                      GetterFn,
+               report_empty_fn:                ReportEmptyFn,
+               report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
+              -> Option<GetterReturnType> {
+
+        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let head = self.head.fetch_add(1, Relaxed);
+        // check if there is an element available
+        if head >= self.fixed_tail {
+            while self.head.compare_exchange_weak(head+1, head, Relaxed, Relaxed).is_err() {
+                std::hint::spin_loop();
+            }
+            report_empty_fn();
+            return None;
+        }
+        let slot_ref = unsafe { mutable_self.buffer.get_unchecked(head) };
+        report_len_after_dequeueing_fn((self.fixed_tail - head) as i32);
+        Some(getter_fn(slot_ref))
+    }
+
+    fn consume_leaking(&'a self) -> Option<(/*ref:*/ &'a SlotType, /*id: */u32)> {
+        todo!()
+    }
+
+    fn release_leaked_ref(&'a self, slot: &'a SlotType) {
+        todo!()
+    }
+
+    fn release_leaked_id(&'a self, slot_id: u32) {
+        todo!()
+    }
+
+    #[inline(always)]
+    fn remaining_elements_count(&self) -> usize {
+        self.fixed_tail - self.head.load(Relaxed)
     }
 
     unsafe fn peek_remaining(&self) -> Vec<&SlotType> {

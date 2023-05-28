@@ -282,7 +282,7 @@ impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
                          (self:                  Arc<Self>,
                           concurrency_limit:     u32,
                           on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
-                          stream_ended_callback: impl Fn(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                          stream_ended_callback: impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
                           stream:                impl Stream<Item=FutureItemType> + 'static + Send) {
         let cloned_self = Arc::clone(&self);
         let on_err_callback = Arc::new(on_err_callback);

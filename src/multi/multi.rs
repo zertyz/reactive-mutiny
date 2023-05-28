@@ -110,7 +110,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                 pipeline_name:             IntoString,
                                 pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
                                 on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                               -> ErrVoidAsyncType   + Send + Sync + 'static,
-                                on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                       -> CloseVoidAsyncType + Send + Sync + 'static)
+                                on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                -> Result<(), Box<dyn std::error::Error>> {
 
@@ -134,33 +134,31 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                        ErrVoidAsyncType:       Future<Output=()> + Send + 'static,
                                        CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
-                                      (self:                      Arc<Self>,
+                                      (self:                      &Arc<Self>,
                                        concurrency_limit:         u32,
                                        sequential_transition:     bool,
                                        futures_timeout:           Duration,
                                        oldies_pipeline_name:      IntoString,
                                        oldies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OldiesOutStreamType,
-                                       oldies_on_close_callback:  impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                       -> CloseVoidAsyncType + Send + Sync + 'static,
+                                       oldies_on_close_callback:  impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType + Send + Sync + 'static,
                                        newies_pipeline_name:      IntoString,
                                        newies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> NewiesOutStreamType + Send + Sync + 'static,
-                                       newies_on_close_callback:  impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                       -> CloseVoidAsyncType  + Send + Sync + 'static,
+                                       newies_on_close_callback:  impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType  + Send + Sync + 'static,
                                        on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                               -> ErrVoidAsyncType + Send + Sync + 'static)
 
                                       -> Result<(), Box<dyn std::error::Error>> {
 
         let ((oldies_in_stream, oldies_in_stream_id),
-            (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
+             (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
 
         let cloned_self = Arc::clone(&self);
         let oldies_pipeline_name = oldies_pipeline_name.into();
         let newies_pipeline_name = Arc::new(newies_pipeline_name.into());
         let on_err_callback_ref1 = Arc::new(on_err_callback);
         let on_err_callback_ref2 = Arc::clone(&on_err_callback_ref1);
-        let oldies_on_close_callback = Arc::new(oldies_on_close_callback);
-        let newies_on_close_callback = Arc::new(newies_on_close_callback);
-        let newies_out_stream = Arc::new(newies_pipeline_builder(newies_in_stream));
-
         let oldies_out_stream = oldies_pipeline_builder(oldies_in_stream);
+        let mut newies_out_stream = newies_pipeline_builder(newies_in_stream);
+
         match sequential_transition {
             true => {
                 self.spawn_executor_from_stream(concurrency_limit, futures_timeout, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
@@ -168,31 +166,27 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                 move |executor| {
                                                     let cloned_self = Arc::clone(&cloned_self);
                                                     let on_err_callback_ref2 = Arc::clone(&on_err_callback_ref2);
-                                                    let oldies_on_close_callback = Arc::clone(&oldies_on_close_callback);
-                                                    let newies_on_close_callback = Arc::clone(&newies_on_close_callback);
                                                     let newies_pipeline_name = Arc::clone(&newies_pipeline_name);
-                                                    let newies_out_stream = Arc::clone(&newies_out_stream);
                                                     async move {
-                                                        let newies_out_stream = Arc::try_unwrap(newies_out_stream).unwrap_or_else(|_| panic!("BUG in the Arc handling logic"));
                                                         cloned_self.spawn_executor_from_stream(concurrency_limit, futures_timeout, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
                                                                                               move |err| on_err_callback_ref2(err),
                                                                                               move |executor| newies_on_close_callback(executor)).await
-                                                            .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies` executor: {:?}", err))
+                                                            .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies`/sequential executor: {:?}", err))
                                                             .expect("CANNOT SPAWN NEWIES EXECUTOR AFTER OLDIES HAD COMPLETE");
-                                                        oldies_on_close_callback(executor);
+                                                        oldies_on_close_callback(executor).await;
                                                     }
-                                                } ).await?;
+                                                } ).await
+                    .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `oldies`/sequential executor: {:?}", err))?;
             },
             false => {
-                let newies_out_stream = Arc::try_unwrap(newies_out_stream).unwrap_or_else(|_| panic!("BUG in the Arc handling logic"));
                 self.spawn_executor_from_stream(concurrency_limit, futures_timeout, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
                                                 move |err| on_err_callback_ref1(err),
-                                                move |executor| oldies_on_close_callback(executor)).await?;
+                                                move |executor| oldies_on_close_callback(executor)).await
+                    .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `oldies` executor: {:?}", err))?;
                 self.spawn_executor_from_stream(concurrency_limit, futures_timeout, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
                                                 move |err| on_err_callback_ref2(err),
                                                 move |executor| newies_on_close_callback(executor)).await
-                    .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies` executor: {:?}", err))
-                    .expect("CANNOT SPAWN NEWIES EXECUTOR (IN PARALLEL WITH THE OLDIES)");
+                    .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies` executor: {:?}", err))?;
             },
         }
         Ok(())
@@ -214,7 +208,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                         stream_id:                 u32,
                                         pipelined_stream:          OutStreamType,
                                         on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
-                                        on_close_callback:         impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)         -> CloseVoidAsyncType + Send + Sync + 'static)
+                                        on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)         -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                        -> Result<(), Box<dyn std::error::Error>> {
 
@@ -230,50 +224,113 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         Ok(())
     }
 
-    /// Companion of [spawn_non_futures_non_fallible_executor_ref()]
+    /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
+    /// which generates events that are Non-Futures & Non-Fallible.
     #[must_use]
-    pub async fn spawn_non_futures_non_fallible_oldies_executor<IntoString:             Into<String>,
+    pub async fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                          OutItemType:            Send + Debug,
                                                          OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
                                                          CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
-                                                        (self,
+                                                        (&self,
                                                          concurrency_limit:        u32,
                                                          pipeline_name:            IntoString,
                                                          pipeline_builder:         impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
-                                                         on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                       -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                         on_close_callback:        impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                                        -> Result</*Self*/Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType>, Box<dyn std::error::Error>> {
+                                                        -> Result<(), Box<dyn std::error::Error>> {
 
-        self.spawn_non_futures_non_fallible_executor_ref(concurrency_limit, pipeline_name, pipeline_builder, on_close_callback).await?;
-        Ok(self)
+        let (in_stream, in_stream_id) = self.channel.create_stream_for_new_events();
+        let out_stream = pipeline_builder(in_stream);
+        self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, pipeline_name, in_stream_id, out_stream, on_close_callback).await
     }
 
-    /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
-    /// which generates events that are Non-Futures & Non-Fallible.
+    /// For channels that allow it (like [channels::reference::mmap_log::MmapLog]), spawns two listeners for events sent to this `Multi`:
+    ///   1) One for past events -- to be processed by the stream returned by `oldies_pipeline_builder()`;
+    ///   2) Another one for subsequent events -- to be processed by the stream returned by `newies_pipeline_builder()`.
+    /// By using this method, it is assumed that both pipeline builders returns non-Futures & non-Fallible events. If this is not so, see [spawn_oldies_executor].\
+    /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
+    /// may be processed simultaneously (in an inevitable out-of-order fashion).
     #[must_use]
-    pub async fn spawn_non_futures_non_fallible_executor_ref<IntoString:             Into<String>,
-                                                             OutItemType:            Send + Debug,
-                                                             OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
-                                                             CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+    pub async fn spawn_non_futures_non_fallible_oldies_executor<IntoString:             Into<String>,
+                                                                OutItemType:            Send + Debug,
+                                                                OldiesOutStreamType:    Stream<Item=OutItemType> + Sync + Send + 'static,
+                                                                NewiesOutStreamType:    Stream<Item=OutItemType> + Sync + Send + 'static,
+                                                                CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
 
-                                                            (&self,
-                                                             concurrency_limit:        u32,
-                                                             pipeline_name:            IntoString,
-                                                             pipeline_builder:         impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
-                                                             on_close_callback:        impl Fn(Arc<StreamExecutor<INSTRUMENTS>>)                                       -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                               (self:                     &Arc<Self>,
+                                                                concurrency_limit:        u32,
+                                                                sequential_transition:    bool,
+                                                                oldies_pipeline_name:     IntoString,
+                                                                oldies_pipeline_builder:  impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OldiesOutStreamType,
+                                                                oldies_on_close_callback: impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType + Send + Sync + 'static,
+                                                                newies_pipeline_name:     IntoString,
+                                                                newies_pipeline_builder:  impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> NewiesOutStreamType,
+                                                                newies_on_close_callback: impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                   -> CloseVoidAsyncType + Send + Sync + 'static)
 
-                                                            -> Result<(), Box<dyn std::error::Error>> {
+                                                               -> Result<(), Box<dyn std::error::Error>> {
+
+        let ((oldies_in_stream, oldies_in_stream_id),
+             (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
+
+        let cloned_self = Arc::clone(&self);
+        let oldies_pipeline_name = oldies_pipeline_name.into();
+        let newies_pipeline_name = Arc::new(newies_pipeline_name.into());
+        let oldies_out_stream = oldies_pipeline_builder(oldies_in_stream);
+        let newies_out_stream = newies_pipeline_builder(newies_in_stream);
+
+        match sequential_transition {
+            true => {
+                self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
+                                                                         move |executor| {
+                                                                             let cloned_self = Arc::clone(&cloned_self);
+                                                                             let newies_pipeline_name = Arc::clone(&newies_pipeline_name);
+                                                                             async move {
+                                                                                 cloned_self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
+                                                                                                                                                move |executor| newies_on_close_callback(executor)).await
+                                                                                     .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `newies` executor: {:?}", err))
+                                                                                     .expect("CANNOT SPAWN NEWIES EXECUTOR AFTER OLDIES HAD COMPLETE");
+                                                                                 oldies_on_close_callback(executor).await;
+                                                                             }
+                                                                         }).await
+                    .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `oldies`/sequential executor: {:?}", err))?;
+
+            },
+            false => {
+                self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
+                                                          move |executor| oldies_on_close_callback(executor)).await
+                    .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `oldies` executor: {:?}", err))?;
+                self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
+                                                                         move |executor| newies_on_close_callback(executor)).await
+                    .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `newies` executor: {:?}", err))?;
+            },
+        }
+        Ok(())
+    }
+
+    /// Internal method with common code for [spawn_non_futures_non_fallible_executor()] & [spawn_non_futures_non_fallible_oldies_executor()].
+    #[must_use]
+    async fn spawn_non_futures_non_fallible_executor_from_stream<IntoString:             Into<String>,
+                                                                 OutItemType:            Send + Debug,
+                                                                 OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
+                                                                 CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                                                                (&self,
+                                                                 concurrency_limit:         u32,
+                                                                 pipeline_name:             IntoString,
+                                                                 stream_id:                 u32,
+                                                                 pipelined_stream:          OutStreamType,
+                                                                 on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static)
+
+                                                                -> Result<(), Box<dyn std::error::Error>> {
 
         let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
-        let (in_stream, in_stream_id) = self.channel.create_stream_for_new_events();
-        self.add_executor(Arc::clone(&executor), in_stream_id).await?;
-        let out_stream = pipeline_builder(in_stream);
+        self.add_executor(Arc::clone(&executor), stream_id).await?;
         executor
             .spawn_non_futures_non_fallible_executor(
                 concurrency_limit,
                 move |executor| on_close_callback(executor),
-                out_stream
+                pipelined_stream
             );
         Ok(())
     }

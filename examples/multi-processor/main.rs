@@ -73,7 +73,7 @@ impl DecisionMaker {
                               listener_name:    IntoString,
                               pipeline_builder: impl FnOnce(MultiStreamType) -> OutStreamType)
                              -> Result<(), Box<dyn std::error::Error>> {
-        self.orders_event_handler.spawn_non_futures_non_fallible_executor_ref(1, format!("`OrderEvent`s listener '{}'", listener_name.into()), pipeline_builder, |_| async {}).await
+        self.orders_event_handler.spawn_non_futures_non_fallible_executor(1, format!("`OrderEvent`s listener '{}'", listener_name.into()), pipeline_builder, |_| async {}).await
             .map_err(|err| Box::from(format!("Error adding an `OrderEvent`s listener to the `DecisionMaker`: {:?}", err)))
             .map(|_| ())
     }

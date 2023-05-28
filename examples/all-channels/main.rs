@@ -98,7 +98,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
     for listener_number in 0..number_of_listeners {
         let listener_name = format!("#{}: {} for multi {}", listener_number, name, multi.multi_name);
         multi
-            .spawn_non_futures_non_fallible_executor_ref(1, listener_name, |stream| {
+            .spawn_non_futures_non_fallible_executor(1, listener_name, |stream| {
                 let listener_id = listeners_count.fetch_add(1, Relaxed);
                 let counter: &u64 = counters.get(8 * listener_id as usize).unwrap();
                 let mut counter = unsafe {&mut *((counter as *const u64) as *mut u64)};

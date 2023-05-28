@@ -48,34 +48,47 @@ async fn unis_of_arcs() {
 /// Ensures we are able to replay past events using the [reactive_mutiny::multi::channels::reference::mmap_log::MmapLog] channel
 #[cfg_attr(not(doc),tokio::test)]
 async fn replayable_events() -> Result<(), Box<dyn std::error::Error>> {
-    let multi = Arc::new(MultiMmapLog::<u32, 2>::new("replayable_events_integration_test"));
+    let multi = Arc::new(MultiMmapLog::<u32, 16>::new("replayable_events_integration_test"));
     let _ = multi.try_send_movable(123);
     let _ = multi.try_send_movable(321);
     let _ = multi.try_send_movable(444);
 
     // first listener -- will receive all elements. No big deal: `Uni`s does that.
-    let sum = Arc::new(AtomicU32::new(0));
-    let sum_ref = Arc::clone(&sum);
-    multi.spawn_non_futures_non_fallible_executor_ref(1, "first listener",
-                                                      move |payloads| payloads.map(move | payload| sum_ref.fetch_add(*payload, Relaxed)),
-                                                      move |_| future::ready(())).await?;
-    //assert_eq!(sum.load(Relaxed), 888, "Wrong payloads received by the first listener");
+    let first_sum = Arc::new(AtomicU32::new(0));
+    let first_sum_ref1 = Arc::clone(&first_sum);
+    let first_sum_ref2 = Arc::clone(&first_sum);
+    multi.spawn_non_futures_non_fallible_oldies_executor(1, false,
+                                                         "first listener (oldies)",
+                                                         move |payloads| payloads.map(move | payload: &u32| first_sum_ref1.fetch_add(*payload, Relaxed)),
+                                                         move |_| future::ready(()),
+                                                         "first listener (newies)",
+                                                         move |payloads| payloads.map(move | payload: &u32| first_sum_ref2.fetch_add(*payload, Relaxed)),
+                                                         move |_| future::ready(())).await?;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(first_sum.load(Relaxed), 888, "Wrong payloads received by the first listener");
 
     // second listener -- will receive all elements as well. Now, this, only this channel may do!
     // ... and, by doing it twice, it is proven it may do it as many times as requested
     // (notice the special executor requests only old events)
-    let sum = Arc::new(AtomicU32::new(0));
-    let sum_ref1 = Arc::clone(&sum);
-    let sum_ref2 = Arc::clone(&sum);
-    multi.spawn_oldies_executor(1, false, Duration::from_secs(5),
+    let second_sum = Arc::new(AtomicU32::new(0));
+    let second_sum_ref1 = Arc::clone(&second_sum);
+    let second_sum_ref2 = Arc::clone(&second_sum);
+    multi.spawn_oldies_executor(1, true, Duration::from_secs(5),
                                 "second listener (oldies)",
-                                move |payloads| payloads.map(move | payload: &u32| future::ready(Ok(sum_ref1.fetch_add(*payload, Relaxed)))),
+                                move |payloads| payloads.map(move | payload: &u32| future::ready(Ok(second_sum_ref1.fetch_add(*payload, Relaxed)))),
                                 move |_| future::ready(()),
                                 "second listener (newies)",
-                                move |payloads| payloads.map(move | payload: &u32| future::ready(Ok(sum_ref2.fetch_add(*payload, Relaxed)))),
+                                move |payloads| payloads.map(move | payload: &u32| future::ready(Ok(second_sum_ref2.fetch_add(*payload, Relaxed)))),
                                 move |_| future::ready(()),
                                 |_| async {}).await?;
-    assert_eq!(sum.load(Relaxed), 888, "Wrong payloads received by the second listener");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(second_sum.load(Relaxed), 888, "Wrong payloads received by the second listener");
+
+    // a new event, to shake the sums up to 999
+    let _ = multi.try_send_movable(111);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(first_sum.load(Relaxed), 999, "First listener failed to process a new event");
+    assert_eq!(second_sum.load(Relaxed), 999, "Second listener failed to process a new event");
 
     Ok(())
 }

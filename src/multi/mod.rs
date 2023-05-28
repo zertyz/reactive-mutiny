@@ -80,9 +80,9 @@ mod tests {
             stream.inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
         }
         let multi: Multi<String, MultiChannelType<String, 1024, 4>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new("doc_test() event");
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "local screen", local_on_event, |_| async {}).await?;
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "zeta receiver", zeta_on_event, |_| async {}).await?;
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "earth snapper", earth_on_event, |_| async {}).await?;
+        multi.spawn_non_futures_non_fallible_executor(1, "local screen", local_on_event, |_| async {}).await?;
+        multi.spawn_non_futures_non_fallible_executor(1, "zeta receiver", zeta_on_event, |_| async {}).await?;
+        multi.spawn_non_futures_non_fallible_executor(1, "earth snapper", earth_on_event, |_| async {}).await?;
         let producer = |item: &str| multi.try_send_movable(item.to_string());
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
@@ -102,14 +102,14 @@ mod tests {
 
         let multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("Simple Event");
             // #1 -- event pipeline
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #1",
+        multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #1",
                                                       |stream| {
                                                           let observed_sum = Arc::clone(&observed_sum_1);
                                                           stream.map(move |number: Arc<u32>| observed_sum.fetch_add(*number, Relaxed))
                                                       },
                                                       |_| async {}).await?;
             // #2 -- event pipeline
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #2",
+        multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #2",
                                                       |stream| {
                                                            let observed_sum = Arc::clone(&observed_sum_2);
                                                            stream.map(move |number| observed_sum.fetch_add(*number, Relaxed))
@@ -141,17 +141,17 @@ mod tests {
         let multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("Event with come and go pipelines");
 
         // correct creating & cancelling executors
-        multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_1, |s| s, |_| async {}).await
+        multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_1, |s| s, |_| async {}).await
             .expect("Single instance of PIPELINE_1 should have been created");
-        multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_2, |s| s, |_| async {}).await
+        multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_2, |s| s, |_| async {}).await
             .expect("Single instance of PIPELINE_2 should have been created");
         assert!(multi.flush_and_cancel_executor(PIPELINE_1, TIMEOUT).await, "'{}' was spawned, therefore it should have been cancelled", PIPELINE_1);
         assert!(multi.flush_and_cancel_executor(PIPELINE_2, TIMEOUT).await, "'{}' was spawned, therefore it should have been cancelled", PIPELINE_2);
 
         // attempt to double create -- which is an error condition
-        multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_1, |s| s, |_| async {}).await
+        multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_1, |s| s, |_| async {}).await
             .expect("Single instance of PIPELINE_1 should have been created");
-        let result = multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_1, |s| s, |_| async {}).await;
+        let result = multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_1, |s| s, |_| async {}).await;
         assert!(result.is_err(), "Second attempt to insert PIPELINE_1 should have failed");
 
             // attempt to double cancel
@@ -164,9 +164,9 @@ mod tests {
         // stress test
         // (maybe this may be improved by detecting any memory leaks)
         for _ in 0..128 {
-            multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_1, |s| s, |_| async {}).await
+            multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_1, |s| s, |_| async {}).await
                 .expect("Single instance of PIPELINE_1 should have been created");
-            multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_2, |s| s, |_| async {}).await
+            multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_2, |s| s, |_| async {}).await
                 .expect("Single instance of PIPELINE_2 should have been created");
             assert!(multi.flush_and_cancel_executor(PIPELINE_1, TIMEOUT).await, "'{}' was spawned, therefore it should have been cancelled", PIPELINE_1);
             assert!(multi.flush_and_cancel_executor(PIPELINE_2, TIMEOUT).await, "'{}' was spawned, therefore it should have been cancelled", PIPELINE_2);
@@ -175,9 +175,9 @@ mod tests {
         // finally, produce an event to check that all is fine
         let last_message = Arc::new(Mutex::new(0u32));
         let last_message_ref = Arc::clone(&last_message);
-        multi.spawn_non_futures_non_fallible_executor_ref(1, PIPELINE_2,
-                                                          |s| s.inspect(move |n| *last_message_ref.try_lock().unwrap() = *(n as &u32)),
-                                                          |_| async {} ).await
+        multi.spawn_non_futures_non_fallible_executor(1, PIPELINE_2,
+                                                      |s| s.inspect(move |n| *last_message_ref.try_lock().unwrap() = *(n as &u32)),
+                                                      |_| async {} ).await
             .expect("Single instance of PIPELINE_2 should have been created");
 
         multi.send(|slot| *slot = 97);
@@ -283,7 +283,7 @@ mod tests {
         let event_name = "non_future/non_fallible event";
         let multi: Multi<String, MultiChannelType<String, 256, N_PIPELINES>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new(event_name);
         for i in 0..N_PIPELINES {
-            multi.spawn_non_futures_non_fallible_executor_ref(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
+            multi.spawn_non_futures_non_fallible_executor(1, format!("Pipeline #{} for {}", i, event_name), |stream| stream, |_| async {}).await?;
         }
         let producer = |item: &str| multi.try_send_movable(item.to_string());
         producer("'only count successes' payload");
@@ -367,8 +367,8 @@ mod tests {
             })
         };
         let six_multi = Multi::<bool, MultiChannelType<bool, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<bool>>::new("SIX");
-        six_multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #1", on_six_event, |_| async {}).await?;
-        six_multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #2", on_six_event, |_| async {}).await?;
+        six_multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_six_event, |_| async {}).await?;
+        six_multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_six_event, |_| async {}).await?;
         let six_multi = Arc::new(six_multi);
         // assures we'll close SIX only once
         let can_six_be_closed = Arc::new(AtomicBool::new(true));
@@ -420,8 +420,8 @@ mod tests {
             }
         };
         let two_multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("TWO");
-        two_multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #1", on_two_event, on_two_close_builder()).await?;
-        two_multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #2", on_two_event, on_two_close_builder()).await?;
+        two_multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_two_event, on_two_close_builder()).await?;
+        two_multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_two_event, on_two_close_builder()).await?;
         let two_multi = Arc::new(two_multi);
         let two_producer = |item| two_multi.send(|slot| *slot = item);
 
@@ -462,8 +462,8 @@ mod tests {
             }
         };
         let four_multi: Multi<u32, MultiChannelType<u32, 1024, 2>, {Instruments::LogsWithMetrics.into()}, Arc<u32>> = Multi::new("FOUR");
-        four_multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #1", on_four_event, on_four_close_builder()).await?;
-        four_multi.spawn_non_futures_non_fallible_executor_ref(1, "Pipeline #2", on_four_event, on_four_close_builder()).await?;
+        four_multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #1", on_four_event, on_four_close_builder()).await?;
+        four_multi.spawn_non_futures_non_fallible_executor(1, "Pipeline #2", on_four_event, on_four_close_builder()).await?;
         let four_multi = Arc::new(four_multi);
         let four_producer = |item| four_multi.send(|slot| *slot = item);
 
@@ -591,7 +591,7 @@ mod tests {
         let bloated_last_elapsed_nanos = Arc::new(AtomicU64::new(0));
 
         let simple_multi: Multi<SystemTime, MultiChannelType<SystemTime, 1024, 1>, {Instruments::LogsWithMetrics.into()}, Arc<SystemTime>> = Multi::new("SIMPLE");
-        simple_multi.spawn_non_futures_non_fallible_executor_ref(1, "solo pipeline",
+        simple_multi.spawn_non_futures_non_fallible_executor(1, "solo pipeline",
                                                              |stream| {
                                                                  let simple_count = Arc::clone(&simple_count);
                                                                  let simple_last_elapsed_nanos = Arc::clone(&simple_last_elapsed_nanos);
@@ -615,8 +615,8 @@ mod tests {
 
         let bloated_multi: Multi<SystemTime, MultiChannelType<SystemTime, 16, BLOATED_PIPELINES_COUNT>, {Instruments::LogsWithMetrics.into()}, Arc<SystemTime>> = Multi::new("BLOATED");
         for i in 0..BLOATED_PIPELINES_COUNT {
-            bloated_multi.spawn_non_futures_non_fallible_executor_ref(1, format!("#{i})"),
-                                                                      |stream| {
+            bloated_multi.spawn_non_futures_non_fallible_executor(1, format!("#{i})"),
+                                                                  |stream| {
                                                                           let bloated_count = Arc::clone(&bloated_count);
                                                                           let bloated_last_elapsed_nanos = Arc::clone(&bloated_last_elapsed_nanos);
                                                                           stream.map(move |start| {
@@ -624,7 +624,7 @@ mod tests {
                                                                               bloated_count.fetch_add(1, Relaxed)
                                                                           })
                                                                       },
-                                                                      |_| async {}).await?;
+                                                                  |_| async {}).await?;
         }
         let bloated_producer = |item| bloated_multi.send(|slot| *slot = item);
 
@@ -672,7 +672,7 @@ mod tests {
         let second_multi_msgs_ref = Arc::clone(&second_multi_msgs);
 
         let second_multi: Multi<String, MultiChannelType<String, 1024, 4>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new("second chained multi, receiving the Arc-wrapped event -- with no copying (and no additional Arc cloning)");
-        second_multi.spawn_non_futures_non_fallible_executor_ref(1, "second executor", move |stream| {
+        second_multi.spawn_non_futures_non_fallible_executor(1, "second executor", move |stream| {
                 stream.map(move |message| {
                     println!("`second_multi` received '{:?}'", message);
                     second_multi_msgs_ref
@@ -683,7 +683,7 @@ mod tests {
         let second_multi = Arc::new(second_multi);
         let second_multi_ref = Arc::clone(&second_multi);
         let first_multi: Multi<String, MultiChannelType<String, 1024, 4>, {Instruments::LogsWithMetrics.into()}, Arc<String>> = Multi::new("first chained multi, receiving the original events");
-        first_multi.spawn_non_futures_non_fallible_executor_ref(1, "first executor", move |stream| {
+        first_multi.spawn_non_futures_non_fallible_executor(1, "first executor", move |stream| {
                 stream.map(move |message: Arc<String>| {
                     println!("`first_multi` received '{:?}'", message);
                     second_multi_ref.send_derived(&message);
@@ -746,17 +746,17 @@ mod tests {
 
         let profiling_name = "metricfull_non_futures_non_fallible_multi:    ";
         let multi: Multi<u32, MultiChannelType, {Instruments::MetricsWithoutLogs.into()}, DerivedType> = Multi::new(profiling_name.trim());
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "", |stream| stream, |_| async {}).await?;
+        multi.spawn_non_futures_non_fallible_executor(1, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_multi:    ";
         let multi: Multi<u32, MultiChannelType, {Instruments::NoInstruments.into()}, Arc<u32>> = Multi::new(profiling_name.trim());
-        multi.spawn_non_futures_non_fallible_executor_ref(1, "", |stream| stream, |_| async {}).await?;
+        multi.spawn_non_futures_non_fallible_executor(1, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_multi:";
         let multi: Multi<u32, MultiChannelType, {Instruments::NoInstruments.into()}, Arc<u32>> = Multi::new(profiling_name.trim());
-        multi.spawn_non_futures_non_fallible_executor_ref(12, "", |stream| stream, |_| async {}).await?;
+        multi.spawn_non_futures_non_fallible_executor(12, "", |stream| stream, |_| async {}).await?;
         profile_multi(&multi, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_multi:            ";

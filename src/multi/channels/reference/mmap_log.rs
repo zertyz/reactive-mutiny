@@ -36,7 +36,7 @@ use std::{
 };
 use async_trait::async_trait;
 use log::{warn};
-use crate::ogre_std::ogre_queues::log_topics::mmap_meta::{MMapMetaSubscriber};
+use crate::ogre_std::ogre_queues::log_topics::mmap_meta::{MMapMetaDynamicSubscriber, MMapMetaSubscriber};
 use crate::ogre_std::ogre_queues::meta_publisher::MetaPublisher;
 use crate::uni::channels::ChannelMulti;
 
@@ -67,7 +67,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             log_queue:       log_queue.clone(),
-            subscribers:     [0; MAX_STREAMS].map(|_| log_queue.subscribe_to_new_events_only()),
+            subscribers:     [0; MAX_STREAMS].map(|_| MMapMetaSubscriber::Dynamic(log_queue.subscribe_to_new_events_only())),    // TODO 2023-05-28: Option<> to avoid unnecessary setting the values here?
         })
     }
 
@@ -116,7 +116,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
         let ref_self: &Self = self;
         let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
         let stream_id = self.streams_manager.create_stream_id();
-        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe_to_old_events_only();
+        mutable_self.subscribers[stream_id as usize] = MMapMetaSubscriber::Fixed(self.log_queue.subscribe_to_old_events_only());
         (MutinyStream::new(stream_id, self), stream_id)
     }
 
@@ -124,7 +124,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
         let ref_self: &Self = self;
         let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
         let stream_id = self.streams_manager.create_stream_id();
-        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe_to_new_events_only();
+        mutable_self.subscribers[stream_id as usize] = MMapMetaSubscriber::Dynamic(self.log_queue.subscribe_to_new_events_only());
         (MutinyStream::new(stream_id, self), stream_id)
     }
 
@@ -134,8 +134,8 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
         let (stream_of_oldies, stream_of_newies) = self.log_queue.subscribe_to_separated_old_and_new_events();
         let stream_of_oldies_id = self.streams_manager.create_stream_id();
         let stream_of_newies_id = self.streams_manager.create_stream_id();
-        mutable_self.subscribers[stream_of_oldies_id as usize] = stream_of_oldies;
-        mutable_self.subscribers[stream_of_newies_id as usize] = stream_of_newies;
+        mutable_self.subscribers[stream_of_oldies_id as usize] = MMapMetaSubscriber::Fixed(stream_of_oldies);
+        mutable_self.subscribers[stream_of_newies_id as usize] = MMapMetaSubscriber::Dynamic(stream_of_newies);
         ( (MutinyStream::new(stream_of_oldies_id, self), stream_of_oldies_id),
           (MutinyStream::new(stream_of_newies_id, self), stream_of_newies_id) )
     }
@@ -144,7 +144,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
         let ref_self: &Self = self;
         let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
         let stream_id = self.streams_manager.create_stream_id();
-        mutable_self.subscribers[stream_id as usize] = self.log_queue.subscribe_to_joined_old_and_new_events();
+        mutable_self.subscribers[stream_id as usize] = MMapMetaSubscriber::Dynamic(self.log_queue.subscribe_to_joined_old_and_new_events());
         (MutinyStream::new(stream_id, self), stream_id)
     }
 }
@@ -199,9 +199,27 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
     #[inline(always)]
     fn consume(&self, stream_id: u32) -> Option<&'static ItemType> {
         let subscriber = unsafe { self.subscribers.get_unchecked(stream_id as usize) };
-        subscriber.consume(|slot| unsafe {&*(slot as *const ItemType)},
-                           || false,
-                           |_len_after| {})
+        match subscriber {
+
+            // dynamic subscriber -- for new events (may include old events as well -- in a continuous stream): yields events until interrupted
+            MMapMetaSubscriber::Dynamic(subscriber) => {
+                subscriber.consume(|slot| unsafe {&*(slot as *const ItemType)},
+                                   || false,
+                                   |_len_after| {})
+            },
+
+            // fixed subscriber -- for old-only events: once the first empty event is consumed, it is over (interrupts itself automatically)
+            MMapMetaSubscriber::Fixed(subscriber) => {
+                subscriber.consume(|slot| unsafe {&*(slot as *const ItemType)},
+                                   || {
+                                       self.streams_manager.cancel_stream(stream_id);
+                                       false
+                                   },
+                                   |_len_after| {})
+            },
+
+        }
+
     }
 
     #[inline(always)]

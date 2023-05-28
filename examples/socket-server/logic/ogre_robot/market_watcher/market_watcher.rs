@@ -87,9 +87,9 @@ impl MarketWatcher {
         subscribers
             .entry(symbol.into())
             .or_insert_with(|| Multi::new(format!("MarketData multi for symbol '{}'", symbol.into())))
-            .spawn_non_futures_non_fallible_executor_ref(1, subscriber_name,
-                                                         pipeline_builder,
-                                                        |_| async {}).await
+            .spawn_non_futures_non_fallible_executor(1, subscriber_name,
+                                                     pipeline_builder,
+                                                     |_| async {}).await
             .expect(&format!("MarketWatcher: subscribe(symbol: '{}'): unexpected `spawn_non_futures_non_fallible_executor()` error", symbol.into()));
     }
 
