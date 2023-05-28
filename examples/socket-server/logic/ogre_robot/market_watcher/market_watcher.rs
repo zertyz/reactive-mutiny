@@ -59,10 +59,10 @@ impl MarketWatcher {
             subscribers: RwLock::new(HashMap::new()),
         });
         let returned_instance = Arc::clone(&instance);
-        events.market_data.spawn_executor_ref(CONCURRENCY, TIMEOUT, "OgreRobot's MarketWatcher",
-                                              |stream| instance.event_processor(stream),
-                                              |err| async {},
-                                              |_| async {
+        events.market_data.spawn_executor(CONCURRENCY, TIMEOUT, "OgreRobot's MarketWatcher",
+                                          |stream| instance.event_processor(stream),
+                                          |err| async {},
+                                          |_| async {
 
                                               }).await
             .expect("MarketWatcher: new(): unexpected `spawn_executor()` error");

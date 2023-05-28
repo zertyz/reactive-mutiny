@@ -98,49 +98,49 @@ pub type MultiAtomicArc<ItemType,
                         const BUFFER_SIZE: usize,
                         const MAX_STREAMS: usize,
                         const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<'static, ItemType,
-                            MultiAtomicArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                            INSTRUMENTS,
-                            Arc<ItemType>>;
+    = multi::Multi<ItemType,
+                   MultiAtomicArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                   INSTRUMENTS,
+                   Arc<ItemType>>;
 pub type MultiCrossbeamArc<ItemType,
                            const BUFFER_SIZE: usize,
                            const MAX_STREAMS: usize,
                            const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<'static, ItemType,
-                            MultiCrossbeamArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                            INSTRUMENTS,
-                            Arc<ItemType>>;
+    = multi::Multi<ItemType,
+                   MultiCrossbeamArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                   INSTRUMENTS,
+                   Arc<ItemType>>;
 pub type MultiFullSyncArc<ItemType,
                            const BUFFER_SIZE: usize,
                            const MAX_STREAMS: usize,
                            const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<'static, ItemType,
-                            MultiFullSyncArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                            INSTRUMENTS,
-                            Arc<ItemType>>;
+    = multi::Multi<ItemType,
+                   MultiFullSyncArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                   INSTRUMENTS,
+                   Arc<ItemType>>;
 pub type MultiAtomicOgreArc<ItemType,
                             const BUFFER_SIZE: usize,
                             const MAX_STREAMS: usize,
                             const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<'static, ItemType,
-                            MultiAtomicOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                            INSTRUMENTS,
-                            OgreArc<ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>>>;
+    = multi::Multi<ItemType,
+                   MultiAtomicOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                   INSTRUMENTS,
+                   OgreArc<ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>>>;
 pub type MultiFullSyncOgreArc<ItemType,
                               const BUFFER_SIZE: usize,
                               const MAX_STREAMS: usize,
                               const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<'static, ItemType,
-                            MultiFullSyncOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                            INSTRUMENTS,
-                            OgreArc<ItemType, AllocatorFullSyncArray<ItemType, BUFFER_SIZE>>>;
+    = multi::Multi<ItemType,
+                   MultiFullSyncOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
+                   INSTRUMENTS,
+                   OgreArc<ItemType, AllocatorFullSyncArray<ItemType, BUFFER_SIZE>>>;
 pub type MultiMmapLog<ItemType,
                       const MAX_STREAMS: usize,
                       const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<'static, ItemType,
-                            MultiMmapLogChannel<ItemType, MAX_STREAMS>,
-                            INSTRUMENTS,
-                            &'static ItemType>;
+    = multi::Multi<ItemType,
+                   MultiMmapLogChannel<ItemType, MAX_STREAMS>,
+                   INSTRUMENTS,
+                   &'static ItemType>;
 
 
 /// Source of events for [MutinyStream].

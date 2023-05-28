@@ -83,7 +83,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
                                 (ident:               &str,
                                  name:                &str,
                                  number_of_listeners: u32,
-                                 multi:               reactive_mutiny::multi::Multi<'static, ExchangeEvent, MultiChannelType, INSTRUMENTS, DerivedEventType>)
+                                 multi:               reactive_mutiny::multi::Multi<ExchangeEvent, MultiChannelType, INSTRUMENTS, DerivedEventType>)
                                 -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(not(debug_assertions))]
