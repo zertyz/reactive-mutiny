@@ -20,6 +20,7 @@
 #[path = "../common/mod.rs"] mod common;
 
 use common::*;
+use reactive_mutiny::prelude::advanced::*;
 use std::{
     sync::{
         Arc,
@@ -30,7 +31,6 @@ use std::{
     fmt::Debug,
     future,
 };
-use reactive_mutiny::{Instruments, multi::Multi, stream_executor::StreamExecutor, mutiny_stream::MutinyStream, MultiArc, MultiCrossbeamArcChannel};
 use futures::{SinkExt, Stream, stream, StreamExt, TryStreamExt};
 
 /// Represents a Market Order to be sent to the Exchange
@@ -50,12 +50,12 @@ const BUFFER_SIZE: usize = 1024;
 const MAX_STREAMS: usize = 16;
 
 /// Stream type for our listeners
-type MultiStreamType = MutinyStream<'static, OrderEvent, MultiCrossbeamArcChannel<OrderEvent, BUFFER_SIZE, MAX_STREAMS>, Arc<OrderEvent>>;
+type MultiStreamType = MutinyStream<'static, OrderEvent, ChannelMultiArcAtomic<OrderEvent, BUFFER_SIZE, MAX_STREAMS>, Arc<OrderEvent>>;
 
 /// The processor of [AnalysisEvent]s, generating [Order] events for our [Multi]
 struct DecisionMaker {
     /// the handler for our [Multi] events
-    orders_event_handler: MultiArc<OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
+    orders_event_handler: MultiAtomicArc<OrderEvent, BUFFER_SIZE, MAX_STREAMS>,
 }
 
 impl DecisionMaker {

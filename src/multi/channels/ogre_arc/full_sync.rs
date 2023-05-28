@@ -14,10 +14,9 @@ use crate::{
             OgreAllocator,
         },
     },
-    uni::channels::{ChannelCommon, ChannelProducer, FullDuplexMultiChannel},
+    types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
-    ChannelConsumer,
 };
 use std::{
     time::Duration,
@@ -31,7 +30,6 @@ use std::{
 };
 use async_trait::async_trait;
 use log::{warn};
-use crate::uni::channels::ChannelMulti;
 
 
 /// ...

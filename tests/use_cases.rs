@@ -11,7 +11,7 @@ use std::sync::{
     },
 };
 use std::time::Duration;
-use reactive_mutiny::{self, MultiMmapLog, UniMoveFullSync};
+use reactive_mutiny::prelude::advanced::{MultiMmapLog, UniMoveFullSync};
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
 use reactive_mutiny::uni::Uni;

@@ -15,8 +15,9 @@ use crate::{
             meta_subscriber::MetaSubscriber,
         },
     },
-    uni::channels::{
+    types::{
         ChannelCommon,
+        ChannelUni,
         ChannelProducer,
         FullDuplexUniChannel,
     },
@@ -34,7 +35,6 @@ use std::{
     marker::PhantomData,
 };
 use async_trait::async_trait;
-use crate::uni::channels::ChannelUni;
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -213,11 +213,11 @@ mod tests {
 
     use super::*;
     use crate::{
+        prelude::advanced::ChannelUniZeroCopyAtomic,
         ogre_std::{
             ogre_alloc,
             ogre_queues,
         },
-        types::UniAtomicZeroCopyChannel,
     };
 
 
@@ -235,6 +235,6 @@ mod tests {
                                         ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>,
                                         BUFFER_SIZE,
                                         MAX_STREAMS>::new("can I instantiate this?");
-        let channel2 = UniAtomicZeroCopyChannel::<&str, 1024, 2>::new("That should be the same channel, but with a ref type instead");
+        let channel2 = ChannelUniZeroCopyAtomic::<&str, 1024, 2>::new("That should be the same channel, but with a ref type instead");
     }
 }

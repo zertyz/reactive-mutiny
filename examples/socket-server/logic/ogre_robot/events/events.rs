@@ -13,18 +13,13 @@ use std::{
     fmt::Debug,
     sync::Arc,
 };
-use reactive_mutiny::{multi::{
-    Multi,
-}, uni::channels::{
-    ChannelCommon,
-    ChannelProducer,
-}, multis_close_async, MultiArc};
+use reactive_mutiny::prelude::advanced as reactive_mutiny;
+use self::reactive_mutiny::ChannelCommon;
 use log::warn;
-use reactive_mutiny::mutiny_stream::MutinyStream;
 
 
 /// Default Mutiny type for "per client" events
-type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = MultiArc<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type PerClientMulti<ItemType, const MAX_STREAMS: usize = 16> = reactive_mutiny::MultiArc<ItemType, 4096, MAX_STREAMS, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 
@@ -56,21 +51,21 @@ impl Events {
 
     pub fn new() -> Self {
         Self {
-            identified_client_connected: Multi::new("Identified client just connected"),
-            client_disconnected:         Multi::new("Client (was) disconnected"),
+            identified_client_connected: reactive_mutiny::Multi::new("Identified client just connected"),
+            client_disconnected:         reactive_mutiny::Multi::new("Client (was) disconnected"),
 
-            market_data:                 Multi::new("Client shared some Market Data"),
+            market_data:                 reactive_mutiny::Multi::new("Client shared some Market Data"),
 
-            decision_maker_order:        Multi::new("Scheduled Order (by the DecisionMaker, to be approved by the RiskManager)"),
+            decision_maker_order:        reactive_mutiny::Multi::new("Scheduled Order (by the DecisionMaker, to be approved by the RiskManager)"),
 
-            risk_manager_intervention:   Multi::new("Risk Manager intervention"),
-            risk_managed_order:          Multi::new("Risk Managed Order (audited and ready to be executed)"),
+            risk_manager_intervention:   reactive_mutiny::Multi::new("Risk Manager intervention"),
+            risk_managed_order:          reactive_mutiny::Multi::new("Risk Managed Order (audited and ready to be executed)"),
         }
     }
 
     pub async fn shutdown(&self) {
         // make sure all events are here
-        multis_close_async!(std::time::Duration::from_secs(5),
+        reactive_mutiny::multis_close_async!(std::time::Duration::from_secs(5),
             self.identified_client_connected,
             self.identified_client_connected,
             self.client_disconnected,

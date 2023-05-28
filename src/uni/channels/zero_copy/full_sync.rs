@@ -3,13 +3,24 @@
 use crate::{
     ogre_std::{
         ogre_queues::{
-            full_sync::full_sync_move::FullSyncMove,
-            meta_publisher::MovePublisher,
-            meta_subscriber::MoveSubscriber,
-            meta_container::MoveContainer,
+            full_sync::full_sync_zero_copy::FullSyncZeroCopy,
+            meta_publisher::{MovePublisher,MetaPublisher},
+            meta_subscriber::{MoveSubscriber,MetaSubscriber},
+            meta_container::{MoveContainer,MetaContainer},
         },
+        ogre_alloc::{
+            ogre_unique::OgreUnique,
+            OgreAllocator,
+        }
     },
-    ChannelConsumer,
+    streams_manager::StreamsManagerBase,
+    types::{
+        ChannelCommon,
+        ChannelUni,
+        ChannelProducer,
+        ChannelConsumer,
+        FullDuplexUniChannel,
+    },
     mutiny_stream::MutinyStream,
 };
 use std::{
@@ -22,16 +33,7 @@ use std::{
     ops::Deref
 };
 use std::marker::PhantomData;
-use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
-use crate::ogre_std::ogre_alloc::ogre_unique::OgreUnique;
-use crate::ogre_std::ogre_alloc::OgreAllocator;
-use crate::ogre_std::ogre_queues::atomic::atomic_zero_copy::AtomicZeroCopy;
-use crate::ogre_std::ogre_queues::full_sync::full_sync_zero_copy::FullSyncZeroCopy;
-use crate::ogre_std::ogre_queues::meta_container::MetaContainer;
-use crate::ogre_std::ogre_queues::meta_publisher::MetaPublisher;
-use crate::ogre_std::ogre_queues::meta_subscriber::MetaSubscriber;
-use crate::uni::channels::{ChannelCommon, ChannelProducer, ChannelUni, FullDuplexUniChannel};
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy

@@ -11,7 +11,7 @@ use crate::{
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
-    ChannelConsumer,
+    types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
 };
 use std::{
     time::Duration,
@@ -21,12 +21,11 @@ use std::{
     pin::Pin,
     fmt::Debug,
     task::{Waker},
+    mem::MaybeUninit,
+    num::NonZeroU32,
 };
-use std::mem::MaybeUninit;
-use std::num::NonZeroU32;
-use log::{warn};
 use async_trait::async_trait;
-use crate::uni::channels::{ChannelCommon, ChannelMulti, ChannelProducer, FullDuplexMultiChannel};
+use log::{warn};
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and

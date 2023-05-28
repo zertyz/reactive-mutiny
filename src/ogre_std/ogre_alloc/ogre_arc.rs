@@ -255,9 +255,11 @@ for InnerOgreArc<DataType, OgreAllocatorType> {
 mod tests {
     //! Unit tests for [ogre_arc](super) module
 
-    use crate::AllocatorAtomicArray;
-    use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
     use super::*;
+    use crate::{
+        prelude::advanced::AllocatorAtomicArray,
+        ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
+    };
 
 
     #[cfg_attr(not(doc),test)]

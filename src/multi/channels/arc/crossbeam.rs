@@ -3,19 +3,18 @@
 use crate::{
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
-    ChannelConsumer,
+    types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
 };
 use std::{
     fmt::Debug,
     sync::Arc,
     time::Duration,
+    mem::MaybeUninit,
+    task::Waker,
 };
-use std::mem::MaybeUninit;
-use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
 use log::warn;
-use crate::uni::channels::{ChannelCommon, ChannelMulti, ChannelProducer, FullDuplexMultiChannel};
 
 
 pub struct Crossbeam<'a, ItemType:          Send + Sync + Debug,

@@ -32,23 +32,25 @@ pub mod channels;
 #[cfg(any(test,doc))]
 mod tests {
     use super::*;
-    use crate::{instruments::Instruments, ChannelConsumer, uni::channels::{ChannelCommon}};
+    use crate::{
+        prelude::MutinyStream,
+        instruments::Instruments,
+        types::{ChannelCommon, ChannelConsumer, ChannelProducer, FullDuplexUniChannel},
+    };
     use std::{
         sync::{
             Arc,
             atomic::{AtomicBool, AtomicU32, Ordering::Relaxed},
         },
         time::Duration,
-        future::Future
+        future::Future,
+        fmt::Debug,
+        io::Write,
     };
-    use std::fmt::Debug;
-    use std::io::Write;
     use futures::{
         stream::{self, Stream, StreamExt}
     };
     use minstant::Instant;
-    use crate::mutiny_stream::MutinyStream;
-    use crate::uni::channels::{ChannelProducer, FullDuplexUniChannel};
 
 
     /// The `UniBuilder` specialization used for the tests to follow

@@ -10,9 +10,11 @@ use crate::{
             meta_container::MoveContainer,
         },
     },
-    uni::channels::{
+    types::{
         ChannelCommon,
+        ChannelUni,
         ChannelProducer,
+        FullDuplexUniChannel,
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
@@ -25,10 +27,9 @@ use std::{
     sync::Arc,
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
+    num::NonZeroU32,
 };
-use std::num::NonZeroU32;
 use async_trait::async_trait;
-use crate::uni::channels::{ChannelUni, FullDuplexUniChannel};
 
 
 /// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel

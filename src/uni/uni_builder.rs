@@ -6,21 +6,21 @@ use super::{
         instruments::Instruments,
         stream_executor::StreamExecutor,
         mutiny_stream::MutinyStream,
-        types::ChannelConsumer,
+        types::{ChannelCommon, ChannelProducer, ChannelConsumer, FullDuplexUniChannel},
     },
     uni::Uni,
-    channels::{ChannelProducer, ChannelCommon},
 };
 use std::{
     fmt::Debug,
     future::Future,
     marker::PhantomData,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::Ordering::Relaxed,
+    },
     time::Duration,
 };
-use std::sync::atomic::Ordering::Relaxed;
 use futures::Stream;
-use crate::uni::channels::FullDuplexUniChannel;
 
 
 pub struct UniBuilder<InType:              'static + Debug + Sync + Send,

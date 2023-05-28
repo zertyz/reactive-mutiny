@@ -6,25 +6,37 @@
 //!
 //!
 
-use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8};
-use std::sync::atomic::Ordering::Relaxed;
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkGroup};
-use criterion::measurement::WallTime;
-use ogre_std::ogre_queues::{
-    full_sync::full_sync_move::FullSyncMove,
-    atomic::atomic_move::AtomicMove,
+use std::{
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicBool,
+            AtomicU32,
+            AtomicU8,
+            Ordering::Relaxed,
+        },
+    }
 };
-use reactive_mutiny::{uni, multi, ogre_std, AllocatorFullSyncArray};
+use reactive_mutiny::{
+    uni,
+    multi,
+    ogre_std::{
+        ogre_queues::{
+            full_sync::full_sync_move::FullSyncMove,
+            atomic::atomic_move::AtomicMove,
+        },
+    },
+    prelude::advanced::*,
+};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+    BenchmarkGroup,
+    measurement::WallTime,
+};
 use futures::{Stream, stream};
-use reactive_mutiny::ogre_std::ogre_alloc::ogre_arc::OgreArc;
-use reactive_mutiny::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
-use reactive_mutiny::ogre_std::ogre_alloc::ogre_unique::OgreUnique;
-use reactive_mutiny::ogre_std::ogre_alloc::OgreAllocator;
-use reactive_mutiny::ogre_std::ogre_queues::meta_publisher::{MetaPublisher, MovePublisher};
-use reactive_mutiny::ogre_std::ogre_queues::meta_container::{MetaContainer, MoveContainer};
-use reactive_mutiny::ogre_std::ogre_queues::meta_subscriber::{MetaSubscriber, MoveSubscriber};
 
 
 // The size of 1 diminishes the effects of CPU caches. On these tests, we simply alloc/dealloc, so

@@ -12,15 +12,14 @@
 #[path = "../common/mod.rs"] mod common;
 
 use common::*;
-use reactive_mutiny::{
-    UniMove,
-    Instruments,
-    uni::{Uni},
+use reactive_mutiny::prelude::*;
+use std::{
+    future, sync::{
+        Arc,
+        atomic::AtomicU32,
+    },
+    time::Duration,
 };
-use std::{future, sync::{
-    Arc,
-    atomic::AtomicU32,
-}, time::Duration};
 use futures::{SinkExt, Stream, StreamExt};
 
 

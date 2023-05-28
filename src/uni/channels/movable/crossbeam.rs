@@ -1,9 +1,11 @@
 use crate::{
-    ChannelConsumer,
     streams_manager::StreamsManagerBase,
-    uni::channels::{
+    types::{
         ChannelCommon,
+        ChannelUni,
+        ChannelConsumer,
         ChannelProducer,
+        FullDuplexUniChannel,
     },
     mutiny_stream::MutinyStream,
 };
@@ -11,12 +13,11 @@ use std::{
     fmt::Debug,
     sync::Arc,
     time::Duration,
+    mem::{ManuallyDrop, MaybeUninit},
+    task::Waker,
 };
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::task::Waker;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
-use crate::uni::channels::{ChannelUni, FullDuplexUniChannel};
 
 
 pub struct Crossbeam<'a, ItemType,

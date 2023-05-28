@@ -5,9 +5,8 @@ use super::{
         stream_executor::StreamExecutor,
         instruments::Instruments,
         mutiny_stream::MutinyStream,
-        types::ChannelConsumer,
+        types::{ChannelCommon, ChannelProducer, ChannelConsumer, FullDuplexUniChannel},
     },
-    channels::{self, ChannelCommon, ChannelProducer},
 };
 use std::{
     fmt::Debug,
@@ -122,4 +121,3 @@ macro_rules! unis_close_async {
     }
 }
 pub use unis_close_async;
-use crate::uni::channels::FullDuplexUniChannel;

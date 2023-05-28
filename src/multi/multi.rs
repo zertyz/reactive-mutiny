@@ -1,22 +1,19 @@
 //! See [super]
 
-pub use crate::uni::channels::{
-    ChannelCommon,
-    ChannelProducer,
-};
 use super::super::{
     instruments::Instruments,
     multi::channels,
     stream_executor::StreamExecutor,
     mutiny_stream::MutinyStream,
+    types::{ChannelProducer, FullDuplexMultiChannel},
 };
 use std::{
     sync::Arc,
     fmt::Debug,
     time::Duration,
     future::Future,
+    marker::PhantomData,
 };
-use std::marker::PhantomData;
 use indexmap::IndexMap;
 use futures::{Stream};
 use tokio::{
@@ -397,7 +394,7 @@ macro_rules! multis_close_async {
     }
 }
 pub use multis_close_async;
-use crate::uni::channels::FullDuplexMultiChannel;
+pub use crate::types::ChannelCommon;
 
 /// Keeps track of the `stream_executor` associated to each `stream_id`
 pub struct ExecutorInfo<const INSTRUMENTS: usize> {

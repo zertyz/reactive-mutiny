@@ -10,10 +10,10 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use reactive_mutiny::{MultiArc, multi::Multi, MultiCrossbeamArc, MultiCrossbeamArcChannel, uni::channels::ChannelProducer};
+use reactive_mutiny::prelude::advanced as reactive_mutiny;
+use self::reactive_mutiny::ChannelProducer;
 use futures::{Stream, StreamExt, TryStreamExt};
 use tokio::sync::RwLock;
-use reactive_mutiny::mutiny_stream::MutinyStream;
 
 
 /// maximum acceptable subscribers for each symbol:
@@ -38,14 +38,14 @@ const BUFFER: usize = 32;
 
 /// what Ogre Robot's event dispatcher gives us
 type DispatcherPayloadType = (AccountToken, MarketData);
-type DispatcherStreamType = MutinyStream<'static, DispatcherPayloadType, MultiCrossbeamArcChannel<DispatcherPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL>, Arc<DispatcherPayloadType>>;
+type DispatcherStreamType  = reactive_mutiny::MutinyStream<'static, DispatcherPayloadType, reactive_mutiny::ChannelMultiArcAtomic<DispatcherPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL>, Arc<DispatcherPayloadType>>;
 
 /// what we give to subscribers
 type SubscriberPayloadType = (AccountToken, MarketData);
 
 
 /// Default Mutiny type for "per client" events
-type SubscribersMulti = MultiArc<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
+type SubscribersMulti = reactive_mutiny::MultiAtomicArc<SubscriberPayloadType, BUFFER, MAX_SUBSCRIBERS_PER_SYMBOL, {reactive_mutiny::Instruments::LogsWithExpensiveMetrics.into()}>;
 
 
 pub struct MarketWatcher {
@@ -86,7 +86,7 @@ impl MarketWatcher {
         let mut subscribers = self.subscribers.write().await;
         subscribers
             .entry(symbol.into())
-            .or_insert_with(|| Multi::new(format!("MarketData multi for symbol '{}'", symbol.into())))
+            .or_insert_with(|| reactive_mutiny::Multi::new(format!("MarketData multi for symbol '{}'", symbol.into())))
             .spawn_non_futures_non_fallible_executor(1, subscriber_name,
                                                      pipeline_builder,
                                                      |_| async {}).await

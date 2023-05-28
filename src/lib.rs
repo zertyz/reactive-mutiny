@@ -4,12 +4,10 @@ pub mod uni;
 pub mod multi;
 pub mod stream_executor;
 pub mod mutiny_stream;
+pub mod prelude;
+pub mod types;
 
 mod instruments;
-pub use instruments::Instruments;
-
-mod types;
-pub use types::*;
 
 mod incremental_averages;
 mod streams_manager;

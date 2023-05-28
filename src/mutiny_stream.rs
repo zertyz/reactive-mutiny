@@ -1,7 +1,7 @@
 //! Resting place for [MutinyStream]
 
 use crate::{
-    ChannelConsumer,
+    types::ChannelConsumer,
     ogre_std::ogre_alloc::{
         OgreAllocator,
         ogre_arc::OgreArc,

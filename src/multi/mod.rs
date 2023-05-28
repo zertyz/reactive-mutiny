@@ -39,9 +39,10 @@ mod tests {
     use super::super::{
         instruments::Instruments,
         mutiny_stream::MutinyStream,
+        types::FullDuplexMultiChannel,
     };
-    use std::future::Future;
     use std::{
+        future::Future,
         sync::{
             Arc,
             atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed},
@@ -49,14 +50,13 @@ mod tests {
         time::{
             Duration,
             SystemTime,
-        }
+        },
+        io::Write,
+        pin::Pin,
     };
-    use std::io::Write;
-    use std::pin::Pin;
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;
     use tokio::sync::Mutex;
-    use crate::uni::channels::FullDuplexMultiChannel;
 
 
     type MultiChannelType<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = channels::arc::crossbeam::Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;

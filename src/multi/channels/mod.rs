@@ -35,9 +35,10 @@ use async_trait::async_trait;
 mod tests {
     use super::*;
     use crate::{
-        AllocatorAtomicArray, AllocatorFullSyncArray,
-        ogre_std::ogre_alloc,
-        uni::channels::{
+        prelude::advanced::{AllocatorAtomicArray, AllocatorFullSyncArray},
+        ogre_std::{self, ogre_alloc},
+        uni,
+        types::{
             ChannelCommon, ChannelProducer, FullDuplexUniChannel, ChannelMulti,
         }
     };
@@ -50,7 +51,6 @@ mod tests {
         io::Write,
     };
     use futures::{stream,Stream,StreamExt};
-    use crate::{ogre_std, uni};
 
 
     // *_doc_test for all known Multi Channel's

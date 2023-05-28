@@ -13,7 +13,7 @@ use crate::{
     },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
-    ChannelConsumer,
+    types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
 };
 use std::{
     time::Duration,
@@ -23,11 +23,10 @@ use std::{
     pin::Pin,
     fmt::Debug,
     task::{Waker},
+    mem::MaybeUninit,
 };
-use std::mem::MaybeUninit;
 use async_trait::async_trait;
 use log::{warn};
-use crate::uni::channels::{ChannelCommon, ChannelMulti, ChannelProducer, FullDuplexMultiChannel};
 
 
 /// This channel uses the queues [FullSyncMove] (the highest throughput among all in 'benches/'), which are the fastest for general purpose use and for most hardware but requires that elements are copied when dequeueing,

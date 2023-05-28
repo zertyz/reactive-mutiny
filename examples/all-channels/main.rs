@@ -18,16 +18,8 @@ use std::{
     },
     time::Instant,
 };
-use reactive_mutiny::{ogre_std::ogre_alloc::ogre_unique::OgreUnique, stream_executor::StreamExecutor, uni::{
-    Uni,
-    channels::{
-        ChannelCommon,
-        ChannelProducer,
-        FullDuplexUniChannel,
-    },
-}, ChannelConsumer, Instruments, UniZeroCopyAtomic, UniZeroCopyFullSync, UniMoveAtomic, UniMoveCrossbeam, UniMoveFullSync, MultiAtomicArc, MultiCrossbeamArc, MultiFullSyncArc, MultiAtomicOgreArc, MultiFullSyncOgreArc, MultiMmapLog};
+use reactive_mutiny::prelude::advanced::*;
 use futures::{SinkExt, Stream, StreamExt};
-use reactive_mutiny::uni::channels::FullDuplexMultiChannel;
 
 
 const BUFFER_SIZE: usize = 1<<12;

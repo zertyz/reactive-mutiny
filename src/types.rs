@@ -1,147 +1,164 @@
 //! Common types across this module
 
+pub use crate::{
+    instruments::Instruments,
+};
 use crate::{
-    Instruments,
     stream_executor::StreamExecutor,
+    mutiny_stream::MutinyStream,
     multi,
     uni,
-    ogre_std::{ogre_queues, ogre_alloc},
+    ogre_std::{
+        ogre_queues,
+        ogre_alloc::{
+            self,
+            ogre_arc::OgreArc,
+            ogre_unique::OgreUnique,
+        },
+    },
 };
 use std::{
+    time::Duration,
     task::{Waker},
     fmt::Debug,
 };
 use std::future::Future;
 use std::sync::Arc;
-use crate::ogre_std::ogre_alloc::ogre_arc::OgreArc;
-use crate::ogre_std::ogre_alloc::ogre_unique::OgreUnique;
+use async_trait::async_trait;
 
 
-/// Default 'UniBuilder' for "zero-copying" data that will be shared around
-pub type UniZeroCopy<InType,
-                     const BUFFER_SIZE: usize,
-                     const MAX_STREAMS: usize,
-                     const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = UniZeroCopyAtomic<InType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
+/// Defines common abstractions on how [Uni]s receives produced events and delivers them to `Stream`s.\
+/// Implementors should also implement one of [ChannelProducer] or [UniZeroCopyChannel].
+/// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
+#[async_trait]
+pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
+                            DerivedItemType: Debug> {
 
-/// Default `UniBuilder` for "moving" data around
-pub type UniMove<InType,
-                 const BUFFER_SIZE: usize,
-                 const MAX_STREAMS: usize,
-                 const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = uni::UniBuilder<InType,
-                      UniFullSyncMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>,
-                      INSTRUMENTS,
-                      InType>;
+    /// Creates a new instance of this channel, to be referred to (in logs) as `name`
+    fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
 
-/// Default `Multi`, for ease of use
-pub type MultiArc<ItemType,
-                  const BUFFER_SIZE: usize,
-                  const MAX_STREAMS: usize,
-                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> = MultiCrossbeamArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
+    /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
+    /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
+    async fn flush(&self, timeout: Duration) -> u32;
 
-// For advanced usages:
-//////////////////////
-// (see `all-channels` example)
+    /// Flushes & signals that the given `stream_id` should cease its activities when there are no more elements left
+    /// to process, waiting for the operation to complete for up to `timeout`.\
+    /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
+    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
 
-// allocators
-pub type AllocatorAtomicArray  <InType, const BUFFER_SIZE: usize> = ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove        <u32, BUFFER_SIZE>, BUFFER_SIZE>;
-pub type AllocatorFullSyncArray<InType, const BUFFER_SIZE: usize> = ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::full_sync::full_sync_move::FullSyncMove<u32, BUFFER_SIZE>, BUFFER_SIZE>;
-// TODO: pub type AllocatorBox                                             = ogre_alloc::ogre_box_allocator::OgreBoxAllocator;
-//       (Simply uses the Rust's default allocator. Usually, it is slower, is subjected to false-sharing performance degradation and, when used for event payloads, several allocation/deallocations may scatter the free space a little bit,
-//        but it has the advantage of not requiring any pre-allocation. So, there are legitimate use cases for this one here. For more info, look at the benchmarks).
+    /// Flushes & signals that all streams should cease their activities when there are no more elements left
+    /// to process, waiting for the operation to complete for up to `timeout`.\
+    /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
+    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32;
 
-// Uni channels
-pub type UniAtomicMoveChannel      <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::atomic::Atomic       <'static, InType, BUFFER_SIZE, MAX_STREAMS>;
-pub type UniCrossbeamMoveChannel   <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::crossbeam::Crossbeam <'static, InType, BUFFER_SIZE, MAX_STREAMS>;
-pub type UniFullSyncMoveChannel    <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::movable::full_sync::FullSync  <'static, InType, BUFFER_SIZE, MAX_STREAMS>;
-pub type UniAtomicZeroCopyChannel  <InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::zero_copy::atomic::Atomic     <'static, InType, AllocatorAtomicArray  <InType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
-pub type UniFullSyncZeroCopyChannel<InType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = uni::channels::zero_copy::full_sync::FullSync<'static, InType, AllocatorFullSyncArray<InType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
+    /// Sends a signal to all streams, urging them to cease their operations.\
+    /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
+    /// nor cares if there are remaining elements to be processed.
+    fn cancel_all_streams(&self);
 
-// Unis
-pub type UniMoveAtomic<InType,
-                       const BUFFER_SIZE: usize,
-                       const MAX_STREAMS: usize = 1,
-                       const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = uni::UniBuilder<InType, UniAtomicMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, InType>;
-pub type UniMoveCrossbeam<InType,
-                          const BUFFER_SIZE: usize,
-                          const MAX_STREAMS: usize = 1,
-                          const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = uni::UniBuilder<InType, UniCrossbeamMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, InType>;
-pub type UniMoveFullSync<InType,
-                         const BUFFER_SIZE: usize,
-                         const MAX_STREAMS: usize = 1,
-                         const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = uni::UniBuilder<InType, UniFullSyncMoveChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, InType>;
-pub type UniZeroCopyAtomic<InType,
-                     const BUFFER_SIZE: usize,
-                     const MAX_STREAMS: usize = 1,
-                     const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = uni::UniBuilder<InType, UniAtomicZeroCopyChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, OgreUnique<InType, AllocatorAtomicArray<InType, BUFFER_SIZE>>>;
-pub type UniZeroCopyFullSync<InType,
-                             const BUFFER_SIZE: usize,
-                             const MAX_STREAMS: usize = 1,
-                             const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = uni::UniBuilder<InType, UniFullSyncZeroCopyChannel<InType, BUFFER_SIZE, MAX_STREAMS>, INSTRUMENTS, OgreUnique<InType, AllocatorFullSyncArray<InType, BUFFER_SIZE>>>;
+    /// Informs the caller how many active streams are currently managed by this channel
+    /// IMPLEMENTORS: #[inline(always)]
+    fn running_streams_count(&self) -> u32;
 
-// Multi channels
-pub type MultiAtomicArcChannel      <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::arc::atomic::Atomic          <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiCrossbeamArcChannel   <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::arc::crossbeam::Crossbeam    <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiFullSyncArcChannel    <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::arc::full_sync::FullSync     <'static, ItemType, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiAtomicOgreArcChannel  <ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::ogre_arc::atomic::Atomic     <'static, ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiFullSyncOgreArcChannel<ItemType, const BUFFER_SIZE: usize, const MAX_STREAMS: usize> = multi::channels::ogre_arc::full_sync::FullSync<'static, ItemType, AllocatorFullSyncArray<ItemType, BUFFER_SIZE>, BUFFER_SIZE, MAX_STREAMS>;
-pub type MultiMmapLogChannel        <ItemType,                           const MAX_STREAMS: usize> = multi::channels::reference::mmap_log::MmapLog <'static, ItemType, MAX_STREAMS>;
+    /// Tells how many events are waiting to be taken out of this channel.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn pending_items_count(&self) -> u32;
 
-// Multis
-pub type MultiAtomicArc<ItemType,
-                        const BUFFER_SIZE: usize,
-                        const MAX_STREAMS: usize,
-                        const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<ItemType,
-                   MultiAtomicArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                   INSTRUMENTS,
-                   Arc<ItemType>>;
-pub type MultiCrossbeamArc<ItemType,
-                           const BUFFER_SIZE: usize,
-                           const MAX_STREAMS: usize,
-                           const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<ItemType,
-                   MultiCrossbeamArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                   INSTRUMENTS,
-                   Arc<ItemType>>;
-pub type MultiFullSyncArc<ItemType,
-                           const BUFFER_SIZE: usize,
-                           const MAX_STREAMS: usize,
-                           const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<ItemType,
-                   MultiFullSyncArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                   INSTRUMENTS,
-                   Arc<ItemType>>;
-pub type MultiAtomicOgreArc<ItemType,
-                            const BUFFER_SIZE: usize,
-                            const MAX_STREAMS: usize,
-                            const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<ItemType,
-                   MultiAtomicOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                   INSTRUMENTS,
-                   OgreArc<ItemType, AllocatorAtomicArray<ItemType, BUFFER_SIZE>>>;
-pub type MultiFullSyncOgreArc<ItemType,
-                              const BUFFER_SIZE: usize,
-                              const MAX_STREAMS: usize,
-                              const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<ItemType,
-                   MultiFullSyncOgreArcChannel<ItemType, BUFFER_SIZE, MAX_STREAMS>,
-                   INSTRUMENTS,
-                   OgreArc<ItemType, AllocatorFullSyncArray<ItemType, BUFFER_SIZE>>>;
-pub type MultiMmapLog<ItemType,
-                      const MAX_STREAMS: usize,
-                      const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-    = multi::Multi<ItemType,
-                   MultiMmapLogChannel<ItemType, MAX_STREAMS>,
-                   INSTRUMENTS,
-                   &'static ItemType>;
+    /// Tells how many events may be produced ahead of the consumers.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn buffer_size(&self) -> u32;
+}
 
+/// Defines abstractions specific to [Uni] channels
+pub trait ChannelUni<'a, ItemType:        Debug + Send + Sync,
+                         DerivedItemType: Debug> {
+
+    /// Returns a `Stream` (and its `stream_id`) able to receive elements sent through this channel.\
+    /// If called more than once, each `Stream` will receive a different element -- "consumer pattern".\
+    /// Currently `panic`s if called more times than allowed by [Uni]'s `MAX_STREAMS`
+    fn create_stream(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                          where Self: ChannelConsumer<'a, DerivedItemType>;
+
+}
+
+/// Defines abstractions specific to [Uni] channels
+pub trait ChannelMulti<'a, ItemType:        Debug + Send + Sync,
+                           DerivedItemType: Debug> {
+
+    /// Implemented only for a few [Multi] channels, returns a `Stream` (and its `stream_id`) able to receive elements
+    /// that were sent through this channel *before the call to this method*.\
+    /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
+    /// based channels are able to see all past events.\
+    /// If called more than once, every stream will see all the past events available.\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                                         where Self: ChannelConsumer<'a, DerivedItemType>;
+
+    /// Returns a `Stream` (and its `stream_id`) able to receive elements sent through this channel *after the call to this method*.\
+    /// If called more than once, each `Stream` will see all new elements -- "listener pattern".\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_stream_for_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                                         where Self: ChannelConsumer<'a, DerivedItemType>;
+
+    /// Implemented only for a few [Multi] channels, returns two `Stream`s (and their `stream_id`s):
+    ///   - one for the past events (that, once exhausted, won't see any of the forthcoming events)
+    ///   - another for the forthcoming events.
+    /// The split is guaranteed not to miss any events: no events will be lost between the last of the "past" and
+    /// the first of the "forthcoming" events.\
+    /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
+    /// based channels are able to see all past events.\
+    /// If called more than once, every stream will see all the past events available, as well as all future events after this method call.\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_streams_for_old_and_new_events(self: &Arc<Self>) -> ((MutinyStream<'a, ItemType, Self, DerivedItemType>, u32),
+                                                                   (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32))
+                                                                  where Self: ChannelConsumer<'a, DerivedItemType>;
+
+    /// Implemented only for a few [Multi] channels, returns a single `Stream` (and its `stream_id`) able to receive elements
+    /// that were sent through this channel either *before and after the call to this method*.\
+    /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
+    /// based channels are able to see all past events.\
+    /// Notice that, with this method, there is no way of discriminating where the "old" events end and where the "new" events start.\
+    /// If called more than once, every stream will see all the past events available, as well as all future events after this method call.\
+    /// Currently `panic`s if called more times than allowed by [Multi]'s `MAX_STREAMS`
+    fn create_stream_for_old_and_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, DerivedItemType>, u32)
+                                                                 where Self: ChannelConsumer<'a, DerivedItemType>;
+
+}
+
+/// Defines how to send events (to a [Uni] or [Multi]).
+pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
+                              DerivedItemType: 'a + Debug> {
+
+    /// Calls `setter`, passing a slot so the payload may be filled, then sends the event through this channel asynchronously.\
+    /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.\
+    /// IMPLEMENTORS: #[inline(always)]
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool;
+
+    /// Sends an event through this channel, after calling `setter` to fill the payload.\
+    /// If the channel is full, this function may wait until sending it is possible.\
+    /// IMPLEMENTORS: #[inline(always]
+    #[inline(always)]
+    fn send<F: FnOnce(&mut ItemType)>(&self, _setter: F) {
+        todo!("`ChannelProducer.send()` is not available for channels where it can't be implemented as zero-copy (including this one)")
+    }
+
+    /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
+    /// -- for instance: the Stream consumes Arc<String> (the derived item type) and the channel is for Strings. With this method one may send an Arc directly.\
+    /// The default implementation, though, is made for types that don't have a derived item type.\
+    /// IMPLEMENTORS: #[inline(always)]
+    #[inline(always)]
+    fn send_derived(&self, _derived_item: &DerivedItemType) {
+        todo!("`ChannelProducer.send_derived()` is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
+    }
+
+    /// Similar to [try_send()], but accepts the penalty that the compiler may impose of copying / moving the data around,
+    /// in opposition to set it only once, in its resting place -- useful to send cloned items and other objects with a custom drop
+    /// IMPLEMENTORS: #[inline(always)]
+    /// TODO 2023-05-17: consider restricting this entry for types that require dropping, and the zero-copy versions for those who don't
+    #[must_use]
+    fn try_send_movable(&self, item: ItemType) -> bool;
+
+}
 
 /// Source of events for [MutinyStream].
 pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {
@@ -163,3 +180,19 @@ pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {
     fn drop_resources(&self, stream_id: u32);
 }
 
+
+/// Defines a fully fledged `Uni` channel, that has both the producer and consumer parts
+pub trait FullDuplexUniChannel<'a, ItemType:        'a + Debug + Send + Sync,
+                                   DerivedItemType: 'a + Debug = ItemType>:
+          ChannelCommon<'a, ItemType, DerivedItemType> +
+          ChannelUni<'a, ItemType, DerivedItemType> +
+          ChannelProducer<'a, ItemType, DerivedItemType> +
+          ChannelConsumer<'a, DerivedItemType> {}
+
+/// A fully fledged `Multi` channel, that has both the producer and consumer parts
+pub trait FullDuplexMultiChannel<'a, ItemType:        'a + Debug + Send + Sync,
+                                     DerivedItemType: 'a + Debug = ItemType>:
+          ChannelCommon<'a, ItemType, DerivedItemType> +
+          ChannelMulti<'a, ItemType, DerivedItemType> +
+          ChannelProducer<'a, ItemType, DerivedItemType> +
+          ChannelConsumer<'a, DerivedItemType> {}

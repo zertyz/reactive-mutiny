@@ -9,7 +9,13 @@ use crate::{
             meta_container::MoveContainer,
         },
     },
-    ChannelConsumer,
+    types::{
+        ChannelCommon,
+        ChannelProducer,
+        ChannelUni,
+        ChannelConsumer,
+        FullDuplexUniChannel,
+    },
     mutiny_stream::MutinyStream,
 };
 use std::{
@@ -23,7 +29,6 @@ use std::{
 };
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
-use crate::uni::channels::{ChannelCommon, ChannelProducer, ChannelUni, FullDuplexUniChannel};
 
 
 /// This channel uses the fastest of the queues [FullSyncMove], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
