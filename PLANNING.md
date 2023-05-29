@@ -12,6 +12,7 @@ This file contains the backlog & implementation plans for all foreseable feature
 # TODO
 
   r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
+  b8) 2023-05-30: No function should panic! for non-bug scenarios: `Result<>`s should be returned instead
   r2) 2023-05-30: Complete the socket-server example with fully working server and client sides (with benchmraks)
     r2.1) Simplify / redocument the existing code based on the latest improvements of the reactive-mutiny library
     r2.2) Complete the messaging model, with a minimum working implementation for the server & client sides

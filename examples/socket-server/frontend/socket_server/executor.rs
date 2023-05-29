@@ -6,8 +6,8 @@
 
 use super::{
     types::*,
-    tokio_message_io::SocketEvent,
-    protocol::{ClientMessages, ServerMessages},
+    connection::SocketEvent,
+    protocol_model::{ClientMessages, ServerMessages},
 };
 use std::{
     sync::Arc,
@@ -17,7 +17,7 @@ use std::future::Future;
 use futures::{stream, Stream, StreamExt, SinkExt};
 use log::{debug, warn};
 use tokio::sync::mpsc::error::TrySendError;
-use crate::frontend::socket_server::tokio_message_io::Peer;
+use crate::frontend::socket_server::connection::Peer;
 use crate::logic::ogre_robot::types::DisconnectionReason;
 
 

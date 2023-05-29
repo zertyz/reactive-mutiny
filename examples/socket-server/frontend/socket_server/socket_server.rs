@@ -1,12 +1,12 @@
-//! Tokio-based socket server
+//! Server-side handler the `reactive-sockets`'s connection
 
 
 use crate::config::config::{Config, SocketServerConfig};
 use super::{
     types::*,
-    protocol::{self, ServerMessages, ClientMessages},
+    protocol_model::{self, ServerMessages, ClientMessages},
 };
-use crate::frontend::socket_server::tokio_message_io::{Peer, SocketEvent};
+use crate::frontend::socket_server::connection::{Peer, SocketEvent};
 use std::{
     sync::Arc,
     net::{ToSocketAddrs,SocketAddr},
@@ -16,7 +16,7 @@ use futures::future::BoxFuture;
 use futures::{Stream, stream, StreamExt};
 use log::{trace, debug, info, warn, error};
 
-use crate::frontend::socket_server::tokio_message_io;
+use crate::frontend::socket_server::connection;
 use crate::logic::ogre_robot::types::DisconnectionReason;
 
 
@@ -83,10 +83,10 @@ impl SocketServer<'static> {
             Box::pin(async move {
                 tokio::spawn(async move {
                     //run(handler, listener.unwrap(), addr, request_processor_stream_producer, request_processor_stream_closer)
-                    tokio_message_io::server_network_loop_for_text_protocol(&interface,
-                                                                            port,
-                                                                            shutdown_receiver,
-                                                                            move |network_event| {
+                    connection::server_network_loop_for_text_protocol(&interface,
+                                                                      port,
+                                                                      shutdown_receiver,
+                                                                      move |network_event| {
                                                                      request_processor_stream_producer(network_event);
                                                                      async move {}
                                                                  }).await;

@@ -1,4 +1,4 @@
-//! Dispatches Ogre Robot's events to its internal components & subscribed friends
+//! Dispatches Ogre Robot's server events (straight from the client/server dialogues) to the internal components & subscribed fellows
 
 
 use crate::logic::ogre_robot::{
@@ -41,6 +41,9 @@ pub struct Dispatcher {
 
 }
 
+/// The functions defined here supports events from the [protocol_model] and [protocol_server_logic] and shares them,
+/// via [reactive_mutiny], to all interested subscribers.\
+/// Docs on each function has been omitted: you should check on the mentioned sources.
 impl Dispatcher {
 
     pub fn new(events: Arc<Events>) -> Self {
@@ -60,7 +63,7 @@ impl Dispatcher {
             ClientIdentification::FullAdvisor      { version, symbol, account_token } => register_advisor(&self.full_advisors,    symbol, account_token).await,
             ClientIdentification::WatcherAdvisor   { version, symbol, account_token } => register_advisor(&self.watcher_advisors, symbol, account_token).await,
         } {
-            self.events.identified_client_connected.channel.send(|slot| *slot = account_token);
+            self.events.identified_client_connected.send(|slot| *slot = account_token);
             true
         } else {
             false
@@ -73,7 +76,7 @@ impl Dispatcher {
             ClientIdentification::FullAdvisor      { version, symbol, account_token } => unregister_advisor(&self.full_advisors, symbol,    account_token).await,
             ClientIdentification::WatcherAdvisor   { version, symbol, account_token } => unregister_advisor(&self.watcher_advisors, symbol, account_token).await,
         } {
-            self.events.client_disconnected.channel.send(|slot| *slot = (account_token, disconnection_reason));
+            self.events.client_disconnected.send(|slot| *slot = (account_token, disconnection_reason));
             true
         } else {
             false
@@ -86,7 +89,7 @@ impl Dispatcher {
             ClientIdentification::FullAdvisor      { version, symbol, account_token } => account_token,
             ClientIdentification::WatcherAdvisor   { version, symbol, account_token } => account_token,
         };
-        self.events.market_data.channel.send(|slot| *slot = (account_token.clone(), market_data));
+        self.events.market_data.send(|slot| *slot = (account_token.clone(), market_data));
     }
 
     async fn register_market_data_provider<IntoSymbol:       Into<Symbol>,

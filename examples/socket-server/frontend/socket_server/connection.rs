@@ -8,7 +8,7 @@
 
 use crate::{
     frontend::socket_server::{
-        protocol::{ClientMessages, ServerMessages},
+        protocol_model::{ClientMessages, ServerMessages},
         serde::{SocketServerDeserializer, SocketServerSerializer},
     },
     logic::ogre_robot::types::DisconnectionReason,

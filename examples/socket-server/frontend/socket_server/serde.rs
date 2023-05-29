@@ -2,8 +2,8 @@
 
 
 use crate::frontend::socket_server::{
-    protocol::*,
-    tokio_message_io::Peer,
+    protocol_model::*,
+    connection::Peer,
 };
 use std::{
     sync::Arc,

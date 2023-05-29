@@ -30,9 +30,9 @@
 
 use super::{
     types::*,
-    protocol::*,
+    protocol_model::*,
     socket_server::{SocketServer},
-    tokio_message_io::{SocketEvent, Peer, PeerId},
+    connection::{SocketEvent, Peer, PeerId},
 };
 use crate::{
     Runtime,
@@ -56,7 +56,7 @@ use log::{trace, warn};
 
 /// customize this to hold the states you want for each client
 #[derive(Debug)]
-struct ClientStates {
+struct ClientState {
     identification: TimeTrackedInfo<ClientIdentification>,
     /// used to send async messages to the client
     peer: Arc<Peer<ServerMessages, DisconnectionReason>>,
@@ -74,7 +74,7 @@ fn processor(dispatcher:      Arc<Dispatcher>,
              -> impl Stream<Item = Result<(Arc<Peer<ServerMessages, DisconnectionReason>>, ServerMessages),
                                           (Arc<Peer<ServerMessages, DisconnectionReason>>, Box<dyn std::error::Error + Sync + Send>)>> {
 
-    let client_states: Arc<RwLock<HashMap<PeerId, ClientStates>>> = Arc::new(RwLock::new(HashMap::new()));
+    let client_states: Arc<RwLock<HashMap<PeerId, ClientState>>> = Arc::new(RwLock::new(HashMap::new()));
 
     stream
         .map(move |socket_event: SocketEvent<ClientMessages, ServerMessages, DisconnectionReason>| {
@@ -148,7 +148,7 @@ fn processor(dispatcher:      Arc<Dispatcher>,
                     SocketEvent::Connected { peer } => {
                         client_states.write().await
                             .insert(peer.peer_id,
-                                    ClientStates { identification:             TimeTrackedInfo::Unset,
+                                    ClientState { identification:             TimeTrackedInfo::Unset,
                                         peer:                       Arc::clone(&peer),
                                         estimated_clock_skew_nanos: None });
                         Ok(Some((peer, ServerMessages::Welcome/*(runtime.)*/)))

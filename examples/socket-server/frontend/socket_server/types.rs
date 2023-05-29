@@ -1,4 +1,4 @@
-use super::protocol::{ClientMessages, ServerMessages};
+use super::protocol_model::{ClientMessages, ServerMessages};
 use std::future::Future;
 use futures::Stream;
 

@@ -127,7 +127,7 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     /// IMPLEMENTORS: #[inline(always]
     #[inline(always)]
     fn send<F: FnOnce(&mut ItemType)>(&self, _setter: F) {
-        todo!("`ChannelProducer.send()` is not available for channels where it can't be implemented as zero-copy (including this one)")
+        todo!("The default `ChannelProducer.send()` was not re-implemented, meaning it is not available for this channel -- it is not available where it cannot be implemented as zero-copy")
     }
 
     /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
@@ -136,7 +136,7 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     /// IMPLEMENTORS: #[inline(always)]
     #[inline(always)]
     fn send_derived(&self, _derived_item: &DerivedItemType) {
-        todo!("`ChannelProducer.send_derived()` is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
+        todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
 
     /// Similar to [try_send()], but accepts the penalty that the compiler may impose of copying / moving the data around,

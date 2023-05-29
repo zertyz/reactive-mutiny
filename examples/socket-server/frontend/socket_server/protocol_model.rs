@@ -10,7 +10,7 @@ use futures::future::BoxFuture;
 use serde::{Serialize, Deserialize};
 use crate::frontend::socket_server::serde::{ron_deserializer, ron_serializer, SocketServerDeserializer, SocketServerSerializer};
 use crate::frontend::socket_server::SocketServer;
-use crate::frontend::socket_server::tokio_message_io::Peer;
+use crate::frontend::socket_server::connection::Peer;
 
 
 /// Messages coming from the clients, suitable to be deserialized by this server
@@ -226,7 +226,7 @@ pub enum ClientOrderCancellationReasons {
     BrokerInitiated { message: String },
 }
 
-/// Allows [super::tokio_message_io::text_protocol_network_loop()] to send [ServerMessages] (to a client) using `RON` textual messages
+/// Allows [super::connection::text_protocol_network_loop()] to send [ServerMessages] (to a client) using `RON` textual messages
 impl SocketServerSerializer<ServerMessages, DisconnectionReason> for ServerMessages {
     fn ss_serialize(message: &ServerMessages) -> String {
         ron_serializer(message)
@@ -243,7 +243,7 @@ impl SocketServerSerializer<ServerMessages, DisconnectionReason> for ServerMessa
     }
 }
 
-/// Allows [super::tokio_message_io::text_protocol_network_loop()] to receive [ClientMessage] (from a client) in the `RON` textual format
+/// Allows [super::connection::text_protocol_network_loop()] to receive [ClientMessage] (from a client) in the `RON` textual format
 impl SocketServerDeserializer<ClientMessages> for ClientMessages {
     fn ss_deserialize(message: &[u8]) -> Result<ClientMessages, Box<dyn std::error::Error + Sync + Send>> {
         ron_deserializer(message)
@@ -251,7 +251,7 @@ impl SocketServerDeserializer<ClientMessages> for ClientMessages {
 }
 
 
-/// Allows [super::tokio_message_io::text_protocol_network_loop()] to send [ClientMessages] (to a server) using `RON` textual messages
+/// Allows [super::connection::text_protocol_network_loop()] to send [ClientMessages] (to a server) using `RON` textual messages
 /// (used to allow testing our Socket Server, but implemented here for symmetry)
 impl SocketServerSerializer<ClientMessages, String> for ClientMessages {
     fn ss_serialize(message: &ClientMessages) -> String {
@@ -269,7 +269,7 @@ impl SocketServerSerializer<ClientMessages, String> for ClientMessages {
     }
 }
 
-/// Allows [super::tokio_message_io::text_protocol_network_loop()] to receive [ClientMessage] (from a client) in the `RON` textual format
+/// Allows [super::connection::text_protocol_network_loop()] to receive [ClientMessage] (from a client) in the `RON` textual format
 /// (used to allow testing our Socket Server, but implemented here for symmetry)
 impl SocketServerDeserializer<ServerMessages> for ServerMessages {
     fn ss_deserialize(message: &[u8]) -> Result<ServerMessages, Box<dyn std::error::Error + Sync + Send>> {

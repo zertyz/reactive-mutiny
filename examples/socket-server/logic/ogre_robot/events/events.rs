@@ -7,7 +7,7 @@ use crate::{
         decision_maker,
         market_watcher,
     },
-    frontend::socket_server::protocol::{ClientMessages, ServerMessages},
+    frontend::socket_server::protocol_model::{ClientMessages, ServerMessages},
 };
 use std::{
     fmt::Debug,
