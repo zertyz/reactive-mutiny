@@ -4,27 +4,25 @@
 
 use common::{ExchangeEvent};
 use std::{
-    future, sync::{
-        Arc,
-        atomic::AtomicU32,
-    },
     time::Duration,
     io::Write,
     fmt::Debug,
-    future::Future,
     ops::Deref,
-    sync::atomic::{
-        AtomicU64, Ordering::Relaxed,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicU64, Ordering::Relaxed,
+        }
     },
     time::Instant,
 };
 use reactive_mutiny::prelude::advanced::*;
-use futures::{SinkExt, Stream, StreamExt};
+use futures::{StreamExt};
 
 
 const BUFFER_SIZE: usize = 1<<12;
 const MAX_STREAMS: usize = 1;
-const INSTRUMENTS: usize = {Instruments::NoInstruments.into()};
+const INSTRUMENTS: usize = Instruments::NoInstruments.into();
 
 
 async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
@@ -38,7 +36,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
     #[cfg(debug_assertions)]
     const ITERATIONS: u32 = 1<<20;
 
-    let mut sum = Arc::new(AtomicU64::new(0));
+    let sum = Arc::new(AtomicU64::new(0));
 
     let uni = uni_builder
         .spawn_non_futures_non_fallible_executor(name, |stream| {
@@ -61,7 +59,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
             std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
         }
     }
-    uni.close(Duration::from_secs(5)).await;
+    debug_assert!(uni.close(Duration::from_secs(5)).await, "Uni wasn't properly closed");
     let elapsed = start.elapsed();
     let observed = sum.load(Relaxed);
     let expected = (1 + ITERATIONS) as u64 * (ITERATIONS / 2) as u64;
@@ -85,7 +83,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
 
     let mut counters: Vec<u64> = Vec::with_capacity(8 * number_of_listeners as usize);  // we will use counters spaced by 64 bytes, to avoid false sharing of CPU caches
     (0..(8 * number_of_listeners)).for_each(|_| counters.push(0));
-    let mut listeners_count = AtomicU64::new(0);
+    let listeners_count = AtomicU64::new(0);
 
     for listener_number in 0..number_of_listeners {
         let listener_name = format!("#{}: {} for multi {}", listener_number, name, multi.multi_name);
@@ -93,9 +91,8 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
             .spawn_non_futures_non_fallible_executor(1, listener_name, |stream| {
                 let listener_id = listeners_count.fetch_add(1, Relaxed);
                 let counter: &u64 = counters.get(8 * listener_id as usize).unwrap();
-                let mut counter = unsafe {&mut *((counter as *const u64) as *mut u64)};
+                let counter = unsafe {&mut *((counter as *const u64) as *mut u64)};
                 stream.map(move |exchange_event| {
-                    static a: u32 = 0;
                     let val = match *exchange_event {
                         ExchangeEvent::TradeEvent { quantity, .. } => quantity,
                         _ => 0,

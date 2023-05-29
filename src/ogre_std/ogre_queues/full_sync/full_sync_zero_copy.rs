@@ -7,16 +7,16 @@ use crate::ogre_std::{
         meta_subscriber::{MetaSubscriber,MoveSubscriber},
         meta_container::{MetaContainer, MoveContainer},
     },
-    ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
-    ogre_sync,
+    ogre_alloc::{
+        OgreAllocator,
+    },
 };
-use std::{fmt::Debug, mem::{ManuallyDrop, MaybeUninit}, sync::atomic::{
-    AtomicBool,
-    Ordering::Relaxed,
-}, num::NonZeroU32, ptr};
-use std::marker::PhantomData;
-use std::sync::Arc;
-use crate::ogre_std::ogre_alloc::OgreAllocator;
+use std::{
+    num::NonZeroU32,
+    marker::PhantomData,
+    sync::Arc,
+    fmt::Debug,
+};
 
 
 /// Basis for multiple producer / multiple consumer queues using a quick-and-dirty (but fast)
@@ -195,6 +195,6 @@ FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 mod tests {
     //! Unit tests for [full_sync_zero_copy](super) module
 
-    use super::*;
+    //use super::*;
 
 }

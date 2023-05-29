@@ -6,7 +6,7 @@ use super::{
         instruments::Instruments,
         stream_executor::StreamExecutor,
         mutiny_stream::MutinyStream,
-        types::{ChannelCommon, ChannelProducer, ChannelConsumer, FullDuplexUniChannel},
+        types::{FullDuplexUniChannel},
     },
     uni::Uni,
 };

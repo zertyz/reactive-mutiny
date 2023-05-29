@@ -1,16 +1,15 @@
 //! Resting place for [OgreUnique<>]
 
-use super::types::OgreAllocator;
-use std::{sync::{
-    Arc,
-    atomic::AtomicU32,
-}, ops::{Deref, DerefMut}, ptr};
-use std::fmt::{Debug, Display, Formatter};
-use std::marker::{PhantomData};
-use std::ptr::NonNull;
-use std::sync::atomic;
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use crate::ogre_std::ogre_alloc::ogre_arc::OgreArc;
+use crate::{
+    ogre_std::ogre_alloc::{
+        ogre_arc::OgreArc,
+        OgreAllocator,
+    },
+};
+use std::{
+    ops::{Deref, DerefMut},
+    fmt::{Debug, Display, Formatter},
+};
 
 
 /// Wrapper type for data that requires a custom Drop to be called (through an [OgreAllocator]).
@@ -164,7 +163,6 @@ mod tests {
     use super::*;
     use crate::{
         prelude::advanced::AllocatorAtomicArray,
-        ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
     };
 
 

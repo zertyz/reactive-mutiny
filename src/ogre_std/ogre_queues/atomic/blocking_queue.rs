@@ -16,7 +16,6 @@ use std::{
     sync::atomic::{AtomicU64,Ordering::Relaxed},
     time::Duration,
 };
-use std::num::NonZeroU32;
 use parking_lot::{
     RawMutex,
     lock_api::{

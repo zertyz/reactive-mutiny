@@ -9,13 +9,14 @@ use crate::ogre_std::{
     },
     ogre_alloc::{
         OgreAllocator,
-        ogre_array_pool_allocator::OgreArrayPoolAllocator,
     },
-    ogre_sync,
 };
-use std::{fmt::Debug, sync::atomic::{AtomicU32, Ordering::{Acquire, Relaxed, Release}}, mem::{ManuallyDrop, MaybeUninit}, num::NonZeroU32, ptr};
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{
+    fmt::Debug,
+    num::NonZeroU32,
+    marker::PhantomData,
+    sync::Arc,
+};
 
 
 /// Basis for multiple producer / multiple consumer queues using atomics for synchronization,
@@ -191,6 +192,6 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 mod tests {
     //! Unit tests for [atomic_zero_copy](super) module
 
-    use super::*;
+    //use super::*;
 
 }

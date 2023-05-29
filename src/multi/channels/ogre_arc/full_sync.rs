@@ -10,7 +10,6 @@ use crate::{
         },
         ogre_alloc::{
             ogre_arc::OgreArc,
-            ogre_array_pool_allocator::OgreArrayPoolAllocator,
             OgreAllocator,
         },
     },
@@ -23,13 +22,10 @@ use std::{
     sync::{
         Arc,
     },
-    pin::Pin,
     fmt::Debug,
     task::{Waker},
-    num::NonZeroU32,
 };
 use async_trait::async_trait;
-use log::{warn};
 
 
 /// ...

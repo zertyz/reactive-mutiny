@@ -2,19 +2,20 @@
 //! we care about, but are rather extensive, complicated or simply don't have enough didactics to be
 //! part of the "examples" set.
 
-use std::future;
-use std::sync::{
-    Arc,
-    atomic::{
-        AtomicU32,
-        Ordering::Relaxed,
-    },
+use std::{
+    future,
+    time::Duration,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicU32,
+            Ordering::Relaxed,
+        },
+    }
 };
-use std::time::Duration;
 use reactive_mutiny::prelude::advanced::{MultiMmapLog, UniMoveFullSync};
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
-use reactive_mutiny::uni::Uni;
 
 
 #[ctor::ctor]

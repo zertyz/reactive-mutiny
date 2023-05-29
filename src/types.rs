@@ -4,25 +4,13 @@ pub use crate::{
     instruments::Instruments,
 };
 use crate::{
-    stream_executor::StreamExecutor,
     mutiny_stream::MutinyStream,
-    multi,
-    uni,
-    ogre_std::{
-        ogre_queues,
-        ogre_alloc::{
-            self,
-            ogre_arc::OgreArc,
-            ogre_unique::OgreUnique,
-        },
-    },
 };
 use std::{
     time::Duration,
     task::{Waker},
     fmt::Debug,
 };
-use std::future::Future;
 use std::sync::Arc;
 use async_trait::async_trait;
 

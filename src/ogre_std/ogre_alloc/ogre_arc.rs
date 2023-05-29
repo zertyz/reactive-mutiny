@@ -1,17 +1,19 @@
 //! Resting place for [OgreArc<>]
 
 use super::types::OgreAllocator;
-use std::{sync::{
-    Arc,
-    atomic::AtomicU32,
-}, ops::{Deref, DerefMut}, ptr};
-use std::ffi::c_void;
-use std::fmt::{Debug, Display, Formatter};
-use std::marker::{PhantomData};
-use std::ptr::NonNull;
-use std::sync::atomic;
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
+use std::{
+    sync::{
+        atomic::{
+            self,
+            AtomicU32,
+            Ordering::{Acquire, Relaxed, Release},
+        },
+    },
+    ops::{Deref, DerefMut},
+    fmt::{Debug, Display, Formatter},
+    marker::{PhantomData},
+    ptr::NonNull,
+};
 
 
 /// Wrapper type for data providing an atomic reference counter for dropping control, similar to `Arc`,
@@ -258,7 +260,6 @@ mod tests {
     use super::*;
     use crate::{
         prelude::advanced::AllocatorAtomicArray,
-        ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
     };
 
 

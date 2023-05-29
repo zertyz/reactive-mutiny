@@ -5,7 +5,15 @@ use super::super::{
     meta_subscriber::MoveSubscriber,
     meta_container::MoveContainer,
 };
-use std::{fmt::Debug, sync::atomic::{AtomicU32, Ordering::{Acquire, Relaxed, Release}}, mem::MaybeUninit, ptr};
+use std::{
+    fmt::Debug,
+    sync::atomic::{
+        AtomicU32,
+        Ordering::{Relaxed, Release},
+    },
+    mem::MaybeUninit,
+    ptr,
+};
 use std::mem::ManuallyDrop;
 use std::num::NonZeroU32;
 use std::pin::Pin;
@@ -41,7 +49,7 @@ MoveContainer<SlotType> for
 AtomicMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
-        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;
+        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // ignore the compiler warning regarding this 'path statement having no effect' -- it does: assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
         // }
@@ -324,9 +332,6 @@ mod tests {
 
     use super::*;
     use crate::ogre_std::test_commons::{self, ContainerKind,Blocking};
-    use std::sync::{
-        atomic::AtomicU32,
-    };
 
 
     #[cfg_attr(not(doc),test)]

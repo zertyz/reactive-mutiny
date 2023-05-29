@@ -22,7 +22,6 @@ use std::{
     fmt::Debug,
     task::{Waker},
     mem::MaybeUninit,
-    num::NonZeroU32,
 };
 use async_trait::async_trait;
 use log::{warn};
@@ -136,7 +135,8 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
         let mut item = unsafe { MaybeUninit::uninit().assume_init() };
         setter(&mut item);
-        self.try_send_movable(item);
+        let arc_item = Arc::new(item);
+        self.send_derived(&arc_item);
     }
 
     #[inline(always)]

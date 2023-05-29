@@ -1,17 +1,17 @@
 //! Resting place for [OgreArrayPoolAllocator]
 
-use std::fmt::{Debug, Formatter};
 use crate::{
-    ogre_std::ogre_queues::{
-        meta_container::MoveContainer,
-        meta_publisher::MovePublisher,
-        meta_subscriber::MoveSubscriber,
-        full_sync::full_sync_move::FullSyncMove,
+    ogre_std::{
+        ogre_queues::{
+            meta_container::MoveContainer,
+        },
+        ogre_alloc::types::OgreAllocator,
     },
 };
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::pin::Pin;
-use crate::ogre_std::ogre_alloc::types::OgreAllocator;
+use std::{
+    fmt::{Debug, Formatter},
+    mem::{MaybeUninit},
+};
 
 
 pub struct OgreArrayPoolAllocator<DataType:        Send + Sync,

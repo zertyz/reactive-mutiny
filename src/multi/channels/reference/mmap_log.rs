@@ -5,15 +5,9 @@ use crate::{
         ogre_queues::{
             meta_topic::MetaTopic,
             log_topics::mmap_meta::MMapMeta,
-            meta_publisher::{MovePublisher,MetaPublisher},
-            meta_subscriber::{MoveSubscriber, MetaSubscriber},
-            meta_container::MoveContainer,
-            log_topics::mmap_meta::{MMapMetaDynamicSubscriber, MMapMetaSubscriber},
-        },
-        ogre_alloc::{
-            ogre_arc::OgreArc,
-            ogre_array_pool_allocator::OgreArrayPoolAllocator,
-            OgreAllocator,
+            meta_publisher::{MetaPublisher},
+            meta_subscriber::{MetaSubscriber},
+            log_topics::mmap_meta::{MMapMetaSubscriber},
         },
     },
     types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
@@ -24,18 +18,11 @@ use std::{
     time::Duration,
     sync::{
         Arc,
-        atomic::{
-            AtomicUsize,
-            Ordering::Relaxed,
-        }
     },
-    pin::Pin,
     fmt::Debug,
     task::{Waker},
-    num::NonZeroU32,
 };
 use async_trait::async_trait;
-use log::{warn};
 
 
 /// ...
@@ -154,7 +141,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
     #[inline(always)]
     fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
-        if let Some(tail) = self.log_queue.publish(setter) {
+        if let Some(_tail) = self.log_queue.publish(setter) {
             let running_streams_count = self.streams_manager.running_streams_count();
             let used_streams = self.streams_manager.used_streams();
             for i in 0..running_streams_count {

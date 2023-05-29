@@ -2,6 +2,7 @@
 
 use super::super::super::{
     instruments::Instruments,
+    ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
     ogre_queues::{
         OgreQueue,
         full_sync::full_sync_zero_copy::FullSyncZeroCopy,
@@ -13,12 +14,9 @@ use super::super::super::{
 use std::{
     fmt::Debug,
     sync::atomic::{AtomicU64,Ordering::Relaxed},
-    mem::{MaybeUninit, ManuallyDrop},
-    ops::Deref,
+    mem::{MaybeUninit},
 };
-use std::num::NonZeroU32;
 use log::trace;
-use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
 
 /// Multiple producer / multiple consumer queues using full synchronization & async functions
@@ -61,7 +59,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
             trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
         }
         match self.base_queue.publish(|slot| *slot = element) {
-            Some(len_after) => {
+            Some(_len_after) => {
                 if Instruments::from(INSTRUMENTS).metrics() {
                     self.enqueue_count.fetch_add(1, Relaxed);
                 }

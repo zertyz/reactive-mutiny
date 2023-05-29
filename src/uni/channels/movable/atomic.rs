@@ -25,9 +25,6 @@ use std::{
     fmt::Debug,
     task::{Waker},
     sync::Arc,
-    mem::{ManuallyDrop, MaybeUninit},
-    ops::Deref,
-    num::NonZeroU32,
 };
 use async_trait::async_trait;
 

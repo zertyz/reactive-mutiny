@@ -24,8 +24,6 @@ use std::{
     fmt::Debug,
     task::{Waker},
     sync::Arc,
-    mem::{ManuallyDrop, MaybeUninit},
-    ops::Deref
 };
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;

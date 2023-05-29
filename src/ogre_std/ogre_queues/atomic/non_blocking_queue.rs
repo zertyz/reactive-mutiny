@@ -9,11 +9,14 @@ use super::super::super::{
         meta_subscriber::MetaSubscriber,
         meta_container::MetaContainer,
     },
+    ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
     instruments::Instruments,
 };
-use std::{fmt::Debug, ptr, sync::atomic::{AtomicU64, Ordering::Relaxed}};
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicU64, Ordering::Relaxed},
+};
 use log::trace;
-use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
 
 
 /// Multiple producer / multiple consumer lock-free & non-blocking queue
@@ -83,7 +86,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
     #[inline(always)]
     fn enqueue(&self, element: SlotType) -> bool {
         match self.base_queue.publish(|slot| *slot = element) {
-            Some( len_after ) => {
+            Some( _len_after ) => {
                 if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
                 }

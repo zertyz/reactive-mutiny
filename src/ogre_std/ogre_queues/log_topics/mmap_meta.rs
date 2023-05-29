@@ -5,19 +5,22 @@ use super::super::{
     meta_subscriber::MetaSubscriber,
     meta_topic::MetaTopic,
 };
-use std::{fs::{OpenOptions, File}, sync::{
-    Arc,
-    atomic::{
-        AtomicUsize,
-        Ordering::Relaxed,
-    }
-}, fmt::Debug, ptr};
-use std::num::NonZeroU32;
+use std::{
+    fs::{OpenOptions, File},
+    sync::{
+        Arc,
+        atomic::{
+            AtomicUsize,
+            Ordering::Relaxed,
+        }
+    },
+    fmt::Debug,
+    num::NonZeroU32,
+};
 use memmap::{
     MmapOptions,
     MmapMut,
 };
-use parking_lot::RwLock;
 
 /// Basis for multiple producer / multiple consumer `log_topics`, using an m-mapped file as the backing storage --
 /// which always grows and have the ability to create consumers able to replay all elements ever created whenever a new subscriber is instantiated.
@@ -188,19 +191,19 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
         todo!()
     }
 
-    fn publish_leaked_ref(&'a self, slot: &'a SlotType) -> Option<NonZeroU32> {
+    fn publish_leaked_ref(&'a self, _slot: &'a SlotType) -> Option<NonZeroU32> {
         todo!()
     }
 
-    fn publish_leaked_id(&'a self, slot_id: u32) -> Option<NonZeroU32> {
+    fn publish_leaked_id(&'a self, _slot_id: u32) -> Option<NonZeroU32> {
         todo!()
     }
 
-    fn unleak_slot_ref(&'a self, slot: &'a mut SlotType) {
+    fn unleak_slot_ref(&'a self, _slot: &'a mut SlotType) {
         todo!()
     }
 
-    fn unleak_slot_id(&'a self, slot_id: u32) {
+    fn unleak_slot_id(&'a self, _slot_id: u32) {
         todo!()
     }
 
@@ -279,11 +282,11 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaDynamicS
         todo!()
     }
 
-    fn release_leaked_ref(&'a self, slot: &'a SlotType) {
+    fn release_leaked_ref(&'a self, _slot: &'a SlotType) {
         todo!()
     }
 
-    fn release_leaked_id(&'a self, slot_id: u32) {
+    fn release_leaked_id(&'a self, _slot_id: u32) {
         todo!()
     }
 
@@ -336,11 +339,11 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaFixedSub
         todo!()
     }
 
-    fn release_leaked_ref(&'a self, slot: &'a SlotType) {
+    fn release_leaked_ref(&'a self, _slot: &'a SlotType) {
         todo!()
     }
 
-    fn release_leaked_id(&'a self, slot_id: u32) {
+    fn release_leaked_id(&'a self, _slot_id: u32) {
         todo!()
     }
 

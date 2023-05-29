@@ -3,19 +3,6 @@
 pub mod movable;
 pub mod zero_copy;
 
-use {
-    super::{
-        super::{
-            types::ChannelConsumer,
-            mutiny_stream::MutinyStream,
-        },
-    },
-};
-use std::{
-    sync::Arc,
-    fmt::Debug,
-};
-
 
 /// Tests & enforces the requisites & expose good practices & exercises the API of of the [uni/channels](self) module
 /// WARNING: unusual test module ahead -- macros are used to implement test functions.\
@@ -30,13 +17,9 @@ use std::{
 ///     type UniChannelType<ItemType, BUFFER_SIZE> = mutex_mpmc_queue::OgreMPMCQueue<ItemType, BUFFER_SIZE>
 #[cfg(any(test,doc))]
 mod tests {
-    use super::*;
+    //use super::*;
     use crate::{
-        ogre_std::ogre_alloc::{
-            OgreAllocator,
-            ogre_array_pool_allocator::OgreArrayPoolAllocator,
-        },
-        uni::channels::{movable, zero_copy},
+        uni::channels::{movable},
         prelude::advanced::{
             ChannelCommon,
             ChannelUni,

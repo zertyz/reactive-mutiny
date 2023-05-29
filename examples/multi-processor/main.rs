@@ -24,14 +24,11 @@ use reactive_mutiny::prelude::advanced::*;
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicU32},
-        mpsc::RecvTimeoutError::Timeout,
     },
     time::Duration,
     fmt::Debug,
-    future,
 };
-use futures::{SinkExt, Stream, stream, StreamExt, TryStreamExt};
+use futures::{Stream, stream, StreamExt};
 
 /// Represents a Market Order to be sent to the Exchange
 #[derive(Debug)]

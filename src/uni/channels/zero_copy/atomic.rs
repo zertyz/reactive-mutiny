@@ -5,7 +5,6 @@ use crate::{
     ogre_std::{
         ogre_alloc::{
             OgreAllocator,
-            ogre_array_pool_allocator::OgreArrayPoolAllocator,
             ogre_unique::OgreUnique,
         },
         ogre_queues::{
@@ -26,12 +25,9 @@ use crate::{
 };
 use std::{
     time::Duration,
-    pin::Pin,
     fmt::Debug,
     task::{Waker},
     sync::Arc,
-    mem::{ManuallyDrop, MaybeUninit},
-    ops::Deref,
     marker::PhantomData,
 };
 use async_trait::async_trait;
@@ -215,7 +211,7 @@ mod tests {
     use crate::{
         prelude::advanced::ChannelUniZeroCopyAtomic,
         ogre_std::{
-            ogre_alloc,
+            ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator,
             ogre_queues,
         },
     };
@@ -231,10 +227,11 @@ mod tests {
         type InType = i32;
         const BUFFER_SIZE: usize = 1024;
         const MAX_STREAMS: usize = 1;
-        let channel = Atomic::<'static, InType,
-                                        ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>,
+        let _channel = Atomic::<'static, InType,
+                                        OgreArrayPoolAllocator<InType, ogre_queues::atomic::atomic_move::AtomicMove<u32, BUFFER_SIZE>, BUFFER_SIZE>,
                                         BUFFER_SIZE,
                                         MAX_STREAMS>::new("can I instantiate this?");
-        let channel2 = ChannelUniZeroCopyAtomic::<&str, 1024, 2>::new("That should be the same channel, but with a ref type instead");
+        let _channel2 = ChannelUniZeroCopyAtomic::<&str, 1024, 2>::new("That should be the same channel, but with a ref type instead");
+        // all done... this controversial test was used just to guide the refactoring... maybe it can be stripped out in the near future...
     }
 }

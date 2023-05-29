@@ -52,7 +52,6 @@ mod tests {
             SystemTime,
         },
         io::Write,
-        pin::Pin,
     };
     use futures::{stream::{self, Stream, StreamExt}};
     use minstant::Instant;

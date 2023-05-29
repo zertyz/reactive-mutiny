@@ -15,7 +15,6 @@ pub use crate::{
     }
 };
 use crate::{
-    stream_executor::StreamExecutor,
     multi,
     uni,
     ogre_std::{

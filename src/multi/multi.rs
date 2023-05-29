@@ -1,11 +1,9 @@
 //! See [super]
 
 use super::super::{
-    instruments::Instruments,
-    multi::channels,
     stream_executor::StreamExecutor,
     mutiny_stream::MutinyStream,
-    types::{ChannelProducer, FullDuplexMultiChannel},
+    types::{FullDuplexMultiChannel},
 };
 use std::{
     sync::Arc,
@@ -154,7 +152,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         let on_err_callback_ref1 = Arc::new(on_err_callback);
         let on_err_callback_ref2 = Arc::clone(&on_err_callback_ref1);
         let oldies_out_stream = oldies_pipeline_builder(oldies_in_stream);
-        let mut newies_out_stream = newies_pipeline_builder(newies_in_stream);
+        let newies_out_stream = newies_pipeline_builder(newies_in_stream);
 
         match sequential_transition {
             true => {

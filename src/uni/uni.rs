@@ -3,9 +3,8 @@
 use super::{
     super::{
         stream_executor::StreamExecutor,
-        instruments::Instruments,
         mutiny_stream::MutinyStream,
-        types::{ChannelCommon, ChannelProducer, ChannelConsumer, FullDuplexUniChannel},
+        types::{FullDuplexUniChannel},
     },
 };
 use std::{

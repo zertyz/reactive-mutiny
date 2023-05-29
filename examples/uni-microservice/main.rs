@@ -14,13 +14,10 @@
 use common::*;
 use reactive_mutiny::prelude::*;
 use std::{
-    future, sync::{
-        Arc,
-        atomic::AtomicU32,
-    },
     time::Duration,
+    future,
 };
-use futures::{SinkExt, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 
 
 /// Simple reactive logic, holding a state.\
@@ -115,7 +112,7 @@ async fn main() {
     queue_a_send(ExchangeEvent::TradeEvent { unitary_value: 9.12, quantity: 100, time: 80 });     // delta: -0.01
 
     // when the app is to shutdown, kills the executor & closes the channel:
-    queue_a_events_handle.close(Duration::from_secs(10)).await;
+    let _ = queue_a_events_handle.close(Duration::from_secs(10)).await;
 }
 
 /// If the queue is to receive JSON textual data (and send JSONs as well), this method may be used:
@@ -127,8 +124,8 @@ async fn main() {
 ///                                                      .inspect(|outgoing_json_event| queue_b_send_json(outgoing_json_event)) );
 fn _json_process(json_exchange_events_stream: impl Stream<Item=String>) -> impl Stream<Item=String> {
     process(json_exchange_events_stream
-                .map(|json_event| deserialize(json_event)) )
-        .map(|output_binary_event| serialize(output_binary_event))
+                .map(|json_event| _deserialize(json_event)) )
+        .map(|output_binary_event| _serialize(output_binary_event))
 }
 
 // mocks
@@ -137,9 +134,9 @@ fn _json_process(json_exchange_events_stream: impl Stream<Item=String>) -> impl 
 fn queue_b_send(analysis_event: &AnalysisEvent) {
     println!("Queue B: sending {:?}", analysis_event);
 }
-fn deserialize(_json: String) -> ExchangeEvent {
+fn _deserialize(_json: String) -> ExchangeEvent {
     ExchangeEvent::Ignored
 }
-fn serialize(_value: AnalysisEvent) -> String {
+fn _serialize(_value: AnalysisEvent) -> String {
     format!("Serialized Json Message")
 }

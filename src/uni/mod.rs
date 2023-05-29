@@ -35,7 +35,7 @@ mod tests {
     use crate::{
         prelude::MutinyStream,
         instruments::Instruments,
-        types::{ChannelCommon, ChannelConsumer, ChannelProducer, FullDuplexUniChannel},
+        types::{ChannelCommon, FullDuplexUniChannel},
     };
     use std::{
         sync::{
@@ -44,7 +44,6 @@ mod tests {
         },
         time::Duration,
         future::Future,
-        fmt::Debug,
         io::Write,
     };
     use futures::{
@@ -84,7 +83,7 @@ mod tests {
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
-        uni.close(Duration::from_secs(10)).await;
+        assert!(uni.close(Duration::from_secs(10)).await, "Uni wasn't properly closed");
     }
 
     /// guarantees that one of the simplest possible testable 'uni' pipelines will get executed all the way through
@@ -114,7 +113,7 @@ mod tests {
                 shared_producer(*number);
             }).await;
 
-        uni.close(Duration::ZERO).await;
+        assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
         assert_eq!(observed_sum.load(Relaxed), EXPECTED_SUM, "not all events passed through our pipeline");
     }
 
@@ -168,7 +167,7 @@ mod tests {
                 shared_producer(*number);
             }).await;
 
-        uni.close(Duration::ZERO).await;
+        assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
         assert_eq!(observed_sum.load(Relaxed), EXPECTED_SUM, "not all events passed through our async pipeline");
     }
 
@@ -185,7 +184,7 @@ mod tests {
             .spawn_non_futures_non_fallible_executor(event_name, |stream| stream, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("'only count successes' payload".to_string());
-        uni.close(Duration::ZERO).await;
+        assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
         let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executor.ok_events_avg_future_duration.lightweight_probe();
         assert_eq!(ok_counter,                               1,    "counter of successful '{}' events is wrong", event_name);
         assert_eq!(ok_avg_futures_resolution_duration,       -1.0, "avg futures resolution time of successful '{}' events is wrong -- since it is a non-future, avg times should be always -1.0", event_name);
@@ -226,7 +225,7 @@ mod tests {
             producer("'unsuccessful' payload".to_string());
             producer("'timeout' payload".to_string());
         }
-        uni.close(Duration::ZERO).await;
+        assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
         let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executor.ok_events_avg_future_duration.lightweight_probe();
         assert_eq!(ok_counter,                                              2,   "counter of successful '{}' events is wrong", event_name);
         assert!((ok_avg_futures_resolution_duration-0.100).abs()        < 15e-2, "avg futures resolution time of successful '{}' events is wrong -- it should be 0.1s", event_name);
@@ -266,7 +265,7 @@ mod tests {
             let six_uni = Arc::clone(&six_uni_ref);
             async move {
                 if can_six_be_closed.swap(false, Relaxed) {
-                    six_uni.close(Duration::ZERO).await;
+                    assert!(six_uni.close(Duration::ZERO).await, "`six_uni` wasn't properly closed");
                 }
             }
         });
@@ -434,7 +433,7 @@ mod tests {
         producer(2);
         producer(79);
         producer(80);
-        uni.close(Duration::ZERO).await;
+        assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
 
         assert_eq!(on_err_count.load(Relaxed), 1, "'on_err()' callback contract broken: events with handled errors should not call on_err(), the ones not 'caught', should")
     }
@@ -485,7 +484,7 @@ mod tests {
                     }
                 };
             }
-            uni.close(Duration::from_secs(5)).await;
+            assert!(uni.close(Duration::from_secs(5)).await, "Uni wasn't properly closed");
             let elapsed = start.elapsed();
             println!("{:10.2}/s -- {} items processed in {:?}",
                      count as f64 / elapsed.as_secs_f64(),
