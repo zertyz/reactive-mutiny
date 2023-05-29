@@ -3,13 +3,13 @@ name          = "reactive-mutiny"
 version       = "0.1.1"
 edition       = "2021"
 description   = "async Event-Driven Reactive Library with advanced & optimized containers (channels) and Stream executors"
-keywords      = ["reactive", "events", "microservices", "async", "performance"]
-categories    = ["asynchronous", "concurrency", "Rust patterns"]
+keywords      = ["reactive", "event-driven", "microservices", "async", "performance"]
+categories    = ["asynchronous", "concurrency", "rust-patterns"]
 readme        = "README.md"
 authors       = ["Luiz Silveira <zertyz@gmail.com>"]
-homepage      = "https://github.com/zertyz/big-o"
-repository    = "https://github.com/zertyz/big-o"
-documentation = "https://docs.rs/big-o-test/"
+homepage      = "https://github.com/zertyz/reactive-mutiny"
+repository    = "https://github.com/zertyz/reactive-mutiny"
+documentation = "https://docs.rs/reactive-mutiny/"
 license       = "Unlicense"
 
 
@@ -69,13 +69,13 @@ slog        = "2"
 sloggers    = "2"
 
 # deprecated
-lazy_static = "1.4"     # as of 2023-03-29: use `one_cell` instead
+lazy_static    = "1.4"  # as of 2023-03-29: use `one_cell` instead
 neat-date-time = "0.1"  # as of 2023-04-05: scheduled to be removed once ogre is removed from here
 
 # dependencies for benchmarks
 #############################
 
-criterion         = { version = "0.3", features=["html_reports"] }
+criterion = { version = "0.3", features=["html_reports"] }
 
 [[bench]]
 name = "channels"

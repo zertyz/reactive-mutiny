@@ -46,7 +46,7 @@ struct Order {
 const BUFFER_SIZE: usize = 1024;
 const MAX_STREAMS: usize = 16;
 
-/// Stream type for our listeners
+/// Stream type for our listeners (to allow us to use an adapter function for adding new listeners to our `Multi`)
 type MultiStreamType = MutinyStream<'static, OrderEvent, ChannelMultiArcAtomic<OrderEvent, BUFFER_SIZE, MAX_STREAMS>, Arc<OrderEvent>>;
 
 /// The processor of [AnalysisEvent]s, generating [Order] events for our [Multi]
@@ -63,9 +63,10 @@ impl DecisionMaker {
         }
     }
 
-    pub async fn add_listener<IntoString:             Into<String>,
-                              OutItemType:            Send + Debug,
-                              OutStreamType:          Stream<Item=OutItemType> + Send + 'static>
+    /// adapter function to allow listeners to be added to our `Multi`
+    pub async fn add_listener<IntoString:    Into<String>,
+                              OutItemType:   Send + Debug,
+                              OutStreamType: Stream<Item=OutItemType> + Send + 'static>
                              (&self,
                               listener_name:    IntoString,
                               pipeline_builder: impl FnOnce(MultiStreamType) -> OutStreamType)
@@ -76,7 +77,7 @@ impl DecisionMaker {
     }
 
     /// The main logic -- a continuation to what we have in `uni-microservice`:\
-    /// processes [AnalysisEvent]s (without an answer), generating [OrderEvent] events in the process
+    /// processes [AnalysisEvent]s (without an answer), generating [OrderEvent] events in the process, which are sent to our `Multi`
     fn decider<'a>(&'a mut self, analysis_events_stream: impl Stream<Item=AnalysisEvent> + 'a) -> impl Stream<Item=()> + 'a {
         let mut positions = 0;
         analysis_events_stream.map(move |analysis| {

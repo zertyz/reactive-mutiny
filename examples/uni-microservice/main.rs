@@ -7,7 +7,7 @@
 //!   3) No matter how the pipeline is composed -- in a single function or spread through several modules: `reactive-mutiny`
 //!      allows the compiler to see it in its entirety, so Release builds may do full optimizations.
 //!
-//! In this example, the input is `ExchangeEvent`, which is transformed into `AnalysisEvent` in the `process()` logic
+//! In this example, the input is `ExchangeEvent`, which is transformed into `AnalysisEvent` in the `process()` logic.
 
 #[path = "../common/mod.rs"] mod common;
 
@@ -40,7 +40,7 @@ fn process(exchange_events_stream: impl Stream<Item=ExchangeEvent>) -> impl Stre
     let mut state_store = None;
 
     // The following expression generates the output stream.
-    // We only care for `TradeEvent` -- all other input events won't generate an "answer"
+    // We only care for the `TradeEvent` variant -- all other input events won't generate an "answer"
     exchange_events_stream.filter_map(move |incoming_event| future::ready({
         match incoming_event {
             ExchangeEvent::TradeEvent { unitary_value, .. } => {

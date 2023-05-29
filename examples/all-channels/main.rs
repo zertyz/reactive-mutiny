@@ -29,7 +29,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
                                UniChannelType:      FullDuplexUniChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
                               (ident: &str,
                                name: &str,
-                               uni_builder: reactive_mutiny::uni::UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
+                               uni_builder: UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
 
     #[cfg(not(debug_assertions))]
     const ITERATIONS: u32 = 1<<24;
@@ -73,7 +73,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
                                 (ident:               &str,
                                  name:                &str,
                                  number_of_listeners: u32,
-                                 multi:               reactive_mutiny::multi::Multi<ExchangeEvent, MultiChannelType, INSTRUMENTS, DerivedEventType>)
+                                 multi:               Multi<ExchangeEvent, MultiChannelType, INSTRUMENTS, DerivedEventType>)
                                 -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(not(debug_assertions))]
@@ -133,7 +133,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("On this code, you may see how to build `Uni`s and `Multi`s using all the available channels");
     println!("-- each providing tradeoffs between features and performance.");
-    println!("Performance characteristics of passing our `ExchangeEvent` through all the different channels:");
+    println!("So, here are performance characteristics of passing our `ExchangeEvent` through all the different channels -- for all `Uni`s and `Multi`s:");
     println!();
     simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
     println!("Uni:");
