@@ -60,10 +60,10 @@ a superior performance over the native versions -- inspect the `benches` folder 
 Here are some performance characteristics -- see more in `benches/`:
 ![reactive-mutiny's channels latencies](screenshots/channels_latencies.svg)
 ![reactive-mutiny's channels throughput](screenshots/channels_throughput.svg)
-(performance characteristics of the standard/community vs our provided raw senders of payloads from one thread to another)
+*(performance characteristics of the standard/community vs our provided raw senders of payloads from one thread to another)*
 
 ![reactive-mutiny's allocators & type wrappers](screenshots/allocators_and_type_wrappers.svg)
-(performance characteristics comparison of standard vs our provided type wrappers and allocators, used for zero-copy channels)
+*(performance characteristics comparison of standard vs our provided type wrappers and allocators, used for zero-copy channels -- with raw `memcopy` and allocators baselines)*
 
 # Where to go next
 
