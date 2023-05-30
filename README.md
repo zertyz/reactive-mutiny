@@ -14,9 +14,9 @@ The core of this library is composed of a `Uni` and a `Multi` -- hence the name 
 
 Moreover, zero-costs metrics & logs are available -- getting optimized away if not used.
 
-Taste it in this excerpt:
+Taste the library in this excerpt:
 
-```nocompile
+```rust
     use reactive_mutiny::prelude::*;
 
     fn logic_1(events_stream: impl Stream<Item=InputEventType>) -> impl Stream<Item=OutputEventType> {
@@ -46,24 +46,23 @@ Core components:
   5) The main `Multi` and `Uni` objects, along with a set of prelude type aliases binding the channels and allocators together
 
 
-**WARNING: This crate is still in its first steps into production usage: no known bugs exist, speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback**
+**WARNING: * This crate is still in its first steps into production usage: no known bugs exist, speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback**
 
+
+# Performance
 
 This crate was inspired by the SmallRye's Mutiny library for Java, from which some names were borrowed.
 Little had to be done to bring the same functionality to Rust, due to the native functional approach, powerful error
 handling, async support and wonderful & flexible Iterator/Stream APIs, so the focus of this work went into bringing the events to
 their maximum processing speed & operability: special queues, topics, stacks, channels and Stream executors have been created, offering
-a superior performance over the native versions -- inspect the `benches` folder for details.
+a superior performance over the native versions -- inspect the `benches` folder for details:
 
-# Performance
-
-Here are some performance characteristics -- see more in `benches/`:
 ![reactive-mutiny's channels latencies](screenshots/channels_latencies.png)
 ![reactive-mutiny's channels throughput](screenshots/channels_throughput.png)
-*(performance characteristics of the standard/community vs our provided raw senders of payloads from one thread to another)*
+*performance characteristics of the standard/community vs our provided raw senders of payloads from one thread to another*
 
 ![reactive-mutiny's allocators & type wrappers](screenshots/allocators_and_type_wrappers.png)
-*(performance characteristics comparison of standard vs our provided type wrappers and allocators, used for zero-copy channels -- with raw `memcopy` and allocators baselines)*
+*performance characteristics comparison of standard vs our provided type wrappers and allocators, used for zero-copy channels -- with raw `memcopy` and allocators baselines*
 
 # Where to go next
 
