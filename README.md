@@ -1,6 +1,19 @@
-# reactive-mutiny
+# reactive-mutiny crate
+
+[gh-image]: https://github.com/zertyz/reactive-mutiny/workflows/Rust/badge.svg
+[gh-checks]: https://github.com/zertyz/reactive-mutiny/actions/workflows/rust.yml
+[cratesio-image]: https://img.shields.io/crates/v/reactive-mutiny.svg
+[cratesio]: https://crates.io/crates/reactive-mutiny
+[docsrs-image]: https://docs.rs/reactive-mutiny/badge.svg
+[docsrs]: https://docs.rs/reactive-mutiny
+
+[![reactive-mutiny GitHub Actions][gh-image]][gh-checks]
+[![reactive-mutiny on crates.io][cratesio-image]][cratesio]
+[![reactive-mutiny on docs.rs][docsrs-image]][docsrs]
 
 *async Event-Driven Reactive Library for Rust with advanced & optimized containers (channels) and Stream executors*
+
+Browse the [Docs][docsrs].
 
 Rust's `reactive-mutiny` was designed to allow building efficient & elegant asynchronous event processing pipelines (using
 Streams -- a.k.a. "async Iterators"), easing flexible & decoupled microservice architectures (distributed or not), ready for production*.
