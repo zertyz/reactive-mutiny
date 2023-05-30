@@ -87,9 +87,9 @@ impl SocketServer<'static> {
                                                                       port,
                                                                       shutdown_receiver,
                                                                       move |network_event| {
-                                                                     request_processor_stream_producer(network_event);
-                                                                     async move {}
-                                                                 }).await;
+                                                                          request_processor_stream_producer(network_event);
+                                                                          async move {}
+                                                                      }).await;
                 }).await?;
 
                 Ok(())
