@@ -11,13 +11,15 @@ This file contains the backlog & implementation plans for all foreseable feature
 
 # TODO
 
-  r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
   b8) 2023-05-30: No function should panic! for non-bug scenarios: `Result<>`s should be returned instead
   r2) 2023-05-30: Complete the socket-server example with fully working server and client sides (with benchmraks)
     r2.1) Simplify / redocument the existing code based on the latest improvements of the reactive-mutiny library
     r2.2) Complete the messaging model, with a minimum working implementation for the server & client sides
     r2.3) Revisit the unit tests, making sure all use cases of the messaging model are covered
     r2.4) Write benchmarks and tune it to perfection (using the appropriate Channels and internal structures)
+  n9) Include benchmarks for tokio::sync::broadcast -- a Multi channel. If they have good performance, include this channel in our Multi. They also have a "watch" in addition to "broadcast", but it is unknown if watch attends to our requisites
+  f10) Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures
+The same for Multi
 
 # Backlog
 
@@ -35,3 +37,4 @@ This file contains the backlog & implementation plans for all foreseable feature
 # Done
 
   0) 2022/2023: ((past improvements were not documented here yet))
+  r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io

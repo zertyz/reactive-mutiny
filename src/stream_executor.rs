@@ -272,8 +272,8 @@ impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
     }
 
     /// spawns an optimized executor for a Stream of `ItemType`s which are:
-    ///   * Futures  -- ItemType = Future<Output=InnerFallibleType>
-    ///   * Fallible -- InnerFallibleType = Result<InnerType, Box<dyn std::error::Error>>.\
+    ///   * Futures  -- `ItemType := Future<Output=InnerFallibleType>`
+    ///   * Fallible -- `InnerFallibleType := Result<InnerType, Box<dyn std::error::Error>>.`\
     /// NOTE: special (optimized) versions are spawned depending if we should or not enforce each item's `Future` a resolution timeout
     pub fn spawn_executor<OutItemType:        Send + Debug,
                           FutureItemType:     Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
@@ -387,11 +387,130 @@ impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
             },
 
         }
+    }
 
+    /// Spawns an optimized executor for a `Stream` of `FutureItemType`s (non fallible Futures).\
+    /// NOTE: Since this is non-fallible, timeouts are enforced but not detectable. If that is not acceptable, use [Self::spawn_executor()] instead
+    pub fn spawn_futures_executor<OutItemType:        Send + Debug,
+                                  FutureItemType:     Future<Output=OutItemType> + Send,
+                                  CloseVoidAsyncType: Future<Output=()> + Send + 'static>
+                                 (self:                  Arc<Self>,
+                                  concurrency_limit:     u32,
+                                  stream_ended_callback: impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                                  stream:                impl Stream<Item=FutureItemType> + 'static + Send) {
+        let cloned_self = Arc::clone(&self);
+
+        match self.futures_timeout {
+
+            // spawns an optimized executor that do not track `Future`s timeouts
+            Duration::ZERO => {
+                tokio::spawn(async move {
+                    on_executor_start!(cloned_self, true, true, cloned_self.futures_timeout);
+                    let mut start = Instant::now();     // item's Future resolution time -- declared here to allow optimizations when METRICS=false
+                    let item_processor = |future_element| {
+                        let cloned_self = Arc::clone(&cloned_self);
+                        async move {
+                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                start = Instant::now();
+                            }
+                            let yielded_item = future_element.await;
+                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                let elapsed = start.elapsed();
+                                on_timed_ok_item!(cloned_self, yielded_item, elapsed);
+                            } else {
+                                on_non_timed_ok_item!(cloned_self, yielded_item);
+                            }
+                        }
+                    };
+                    match concurrency_limit {
+                        1 => stream.for_each(item_processor).await,     // faster in `futures 0.3` -- may be useless in the future
+                        _ => stream.for_each_concurrent(concurrency_limit as usize, item_processor).await,
+                    }
+                    on_executor_end!(cloned_self, true, true, Duration::ZERO);
+                    stream_ended_callback(cloned_self).await;
+                });
+            },
+
+            // spawns an optimized executor that tracks `Future`s timeouts
+            _ => {
+                tokio::spawn(async move {
+                    on_executor_start!(cloned_self, true, true, cloned_self.futures_timeout);
+                    let mut start = Instant::now();     // item's Future resolution time -- declared here to allow optimizations when METRICS=false
+                    let item_processor = |future_element| {
+                        let cloned_self = Arc::clone(&cloned_self);
+                        async move {
+                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                start = Instant::now();
+                            }
+                            match timeout(cloned_self.futures_timeout, future_element).await {
+                                Ok(non_timed_out_result) => {
+                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                        let elapsed = start.elapsed();
+                                        on_timed_ok_item!(cloned_self, non_timed_out_result, elapsed);
+                                    } else {
+                                        on_non_timed_ok_item!(cloned_self, non_timed_out_result);
+                                    }
+                                }
+                                Err(_time_out_err) => {
+                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                        let elapsed = start.elapsed();
+                                        cloned_self.timed_out_events_avg_future_duration.inc(elapsed.as_secs_f32());
+                                        if Instruments::from(INSTRUMENTS).logging() {
+                                            error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT after {:?}", cloned_self.executor_name, elapsed);
+                                        }
+                                    } else if Instruments::from(INSTRUMENTS).logging() {
+                                        error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT", cloned_self.executor_name);
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    match concurrency_limit {
+                        1 => stream.for_each(item_processor).await,     // faster in `futures 0.3` -- may be useless in other versions
+                        _ => stream.for_each_concurrent(concurrency_limit as usize, item_processor).await,
+                    }
+                    on_executor_end!(cloned_self, true, true, cloned_self.futures_timeout);     // notice the `fallible = true` here -- this is due to the timeouts, that shows as errors
+                    stream_ended_callback(cloned_self).await;
+                });
+            },
+
+        }
+    }
+
+    /// spawns an optimized executor for a Stream of `FallibleItemType`s, where:\
+    ///   * `FallibleItemType := Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>`
+    pub fn spawn_fallibles_executor<OutItemType:        Send + Debug,
+                                    CloseVoidAsyncType: Future<Output=()> + Send + 'static>
+                                   (self:                  Arc<Self>,
+                                    concurrency_limit:     u32,
+                                    on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>)                               + Send + Sync + 'static,
+                                    stream_ended_callback: impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                                    stream:                impl Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + 'static + Send) {
+
+        tokio::spawn(async move {
+            on_executor_start!(self, true, true, Duration::ZERO);
+            let item_processor = |element| {
+                match element {
+                    Ok(yielded_item) => {
+                        on_non_timed_ok_item!(self, yielded_item);
+                    },
+                    Err(err) => {
+                        on_non_timed_err_item!(self, err);
+                        on_err_callback(err);
+                    }
+                }
+            };
+            match concurrency_limit {
+                1 => stream.for_each(|item| future::ready(item_processor(item))).await,     // faster in `futures 0.3` -- may be useless in the future
+                _ => stream.for_each_concurrent(concurrency_limit as usize, |item| future::ready(item_processor(item))).await,
+            }
+            on_executor_end!(self, false, true, Duration::ZERO);
+            stream_ended_callback(self).await;
+        });
     }
 
     /// spawns an executor for a Stream of `ItemType`s which are not Futures but are fallible:
-    ///   * InnerFallibleType = Result<ItemType, Box<dyn std::error::Error>>
+    ///   * `InnerFallibleType := Result<ItemType, Box<dyn std::error::Error>>`
     pub fn spawn_non_futures_executor<ItemType:      Send + Debug,
                                       VoidAsyncType: Future<Output=()> + Send + 'static>
                                      (self:                      Arc<Self>,
@@ -416,7 +535,7 @@ impl<const INSTRUMENTS: usize> StreamExecutor<INSTRUMENTS> {
     }
 
     /// spawns an optimized executor for a Stream of `ItemType`s which are not Futures and, also, are not fallible
-    pub fn spawn_non_futures_non_fallible_executor<OutItemType:   Send + Debug,
+    pub fn spawn_non_futures_non_fallibles_executor<OutItemType:   Send + Debug,
                                                    VoidAsyncType: Future<Output=()> + Send + 'static>
                                                   (self:                  Arc<Self>,
                                                    concurrency_limit:     u32,
@@ -455,6 +574,9 @@ mod tests {
         simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
         info!("minstant: is TSC / RDTSC instruction available for time measurement? {}", minstant::is_tsc_available());
     }
+
+    // fallible futures
+    ///////////////////
 
     #[cfg_attr(not(doc),tokio::test)]
     async fn spawn_non_timeout_futures_fallible_executor_with_logs_and_metrics() {
@@ -496,7 +618,7 @@ mod tests {
         assert_spawn_futures_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::with_futures_timeout("executor with NO logs & NO metrics", Duration::from_millis(100))).await;
     }
 
-    /// executes assertions on the given `executor` by spawning the executor and adding futures / fallible elements to it.\
+    /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding `Future<Result>` elements
     async fn assert_spawn_futures_fallible_executor<const INSTRUMENTS: usize>
                                                     (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
 
@@ -530,36 +652,157 @@ mod tests {
 
     }
 
+    // non-fallible futures
+    ///////////////////////
+
     #[cfg_attr(not(doc),tokio::test)]
-    async fn spawn_non_futures_non_fallible_executor_with_logs_and_metrics() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
+    async fn spawn_non_timeout_futures_executor_with_logs_and_metrics() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
     }
 
     #[cfg_attr(not(doc),tokio::test)]
-    async fn spawn_non_futures_non_fallible_executor_with_metrics_and_no_logs() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
+    async fn spawn_non_timeout_futures_executor_with_metrics_and_no_logs() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
     }
 
     #[cfg_attr(not(doc),tokio::test)]
-    async fn spawn_non_futures_non_fallible_executor_with_logs_and_no_metrics() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
+    async fn spawn_non_timeout_futures_executor_with_logs_and_no_metrics() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
     }
 
     #[cfg_attr(not(doc),tokio::test)]
-    async fn spawn_non_futures_non_fallible_executor_with_no_logs_and_no_metrics() {
-        assert_spawn_non_futures_non_fallible_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
+    async fn spawn_non_timeout_futures_executor_with_no_logs_and_no_metrics() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
     }
 
-    /// executes assertions on the given `executor` by spawning the executor and adding non-futures / non-fallible elements to it
-    async fn assert_spawn_non_futures_non_fallible_executor<const INSTRUMENTS: usize>
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_timeout_futures_executor_with_logs_and_metrics() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::with_futures_timeout("executor with logs & metrics", Duration::from_millis(100))).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_timeout_futures_executor_with_metrics_and_no_logs() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::with_futures_timeout("executor with metrics & NO logs", Duration::from_millis(100))).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_timeout_futures_executor_with_logs_and_no_metrics() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::with_futures_timeout("executor with logs & NO metrics", Duration::from_millis(100))).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_timeout_futures_executor_with_no_logs_and_no_metrics() {
+        assert_spawn_futures_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::with_futures_timeout("executor with NO logs & NO metrics", Duration::from_millis(100))).await;
+    }
+
+    /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding `Future` elements
+    async fn assert_spawn_futures_executor<const INSTRUMENTS: usize>
+                                          (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
+
+        async fn to_future(item: u32) -> u32 {
+            // OK items > 100 will sleep for a while -- intended to cause a timeout, provided the given executor is appropriately configured
+            if item > 100 {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+            }
+            item
+        }
+
+        let (tx, mut rx) = mpsc::channel::<bool>(10);
+        let cloned_executor = Arc::clone(&executor);
+        let timeout_enabled = executor.futures_timeout > Duration::ZERO;
+        let expected_timeout_count = if timeout_enabled {2} else {0};
+        executor.spawn_futures_executor(1,
+                                move |_| { let mut tx = tx.clone(); async move {tx.send(true).await.unwrap()} },
+                                stream::iter(vec![to_future(17),
+                                                            to_future(170),     // times out
+                                                            to_future(19),
+                                                            to_future(190)]     // times out
+                                ));
+        assert!(rx.next().await.expect("consumption_done_reporter() wasn't called"), "consumption_done_reporter yielded the wrong value");
+        assert_metrics(cloned_executor, 4 - expected_timeout_count, expected_timeout_count, 0);
+
+    }
+
+    // fallible (non-futures)
+    /////////////////////////
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_fallibles_executor_with_logs_and_metrics() {
+        assert_spawn_fallibles_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_fallibles_executor_with_metrics_and_no_logs() {
+        assert_spawn_fallibles_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_fallibles_executor_with_logs_and_no_metrics() {
+        assert_spawn_fallibles_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_fallibles_executor_with_no_logs_and_no_metrics() {
+        assert_spawn_fallibles_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
+    }
+
+    /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding fallible elements
+    async fn assert_spawn_fallibles_executor<const INSTRUMENTS: usize>
+                                                           (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
+        let error_count = Arc::new(AtomicU32::new(0));
+        let error_count_ref = Arc::clone(&error_count);
+        let (mut tx, mut rx) = mpsc::channel::<bool>(10);
+        let cloned_executor = Arc::clone(&executor);
+        executor.spawn_fallibles_executor(1,
+                                          move |_err| {
+                                              error_count_ref.fetch_add(1, Relaxed);
+                                          },
+                                          move |_| async move {
+                                              tx.send(true).await.unwrap()
+                                          },
+                                          stream::iter(vec![Ok(17), Ok(19), Err(Box::from(format!("Error on 20th")))]) );
+        assert!(rx.next().await.expect("consumption_done_reporter() wasn't called"), "consumption_done_reporter yielded the wrong value");
+        assert_eq!(error_count.load(Relaxed), 1, "Error count is wrong, as computed by the error callback");
+        assert_metrics(cloned_executor, 2, 0, 1);
+
+    }
+
+    // non-fallible & non-futures
+    /////////////////////////////
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_non_futures_non_fallibles_executor_with_logs_and_metrics() {
+        assert_spawn_non_futures_non_fallibles_executor(StreamExecutor::<{Instruments::LogsWithMetrics.into()}>::new("executor with logs & metrics")).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_non_futures_non_fallibles_executor_with_metrics_and_no_logs() {
+        assert_spawn_non_futures_non_fallibles_executor(StreamExecutor::<{Instruments::MetricsWithoutLogs.into()}>::new("executor with metrics & NO logs")).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_non_futures_non_fallibles_executor_with_logs_and_no_metrics() {
+        assert_spawn_non_futures_non_fallibles_executor(StreamExecutor::<{Instruments::LogsWithoutMetrics.into()}>::new("executor with logs & NO metrics")).await;
+    }
+
+    #[cfg_attr(not(doc),tokio::test)]
+    async fn spawn_non_futures_non_fallibles_executor_with_no_logs_and_no_metrics() {
+        assert_spawn_non_futures_non_fallibles_executor(StreamExecutor::<{Instruments::NoInstruments.into()}>::new("executor with NO logs & NO metrics")).await;
+    }
+
+    /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding non-futures / non-fallible elements
+    async fn assert_spawn_non_futures_non_fallibles_executor<const INSTRUMENTS: usize>
                                                            (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
         let (mut tx, mut rx) = mpsc::channel::<bool>(10);
         let cloned_executor = Arc::clone(&executor);
-        executor.spawn_non_futures_non_fallible_executor(1, move |_| async move {tx.send(true).await.unwrap()}, stream::iter(vec![17, 19]));
+        executor.spawn_non_futures_non_fallibles_executor(1, move |_| async move {tx.send(true).await.unwrap()}, stream::iter(vec![17, 19]));
         assert!(rx.next().await.expect("consumption_done_reporter() wasn't called"), "consumption_done_reporter yielded the wrong value");
         assert_metrics(cloned_executor, 2, 0, 0);
 
     }
+
+    // auxiliary functions
+    //////////////////////
 
     /// apply assertions on metrics for the given `executor`
     fn assert_metrics<const INSTRUMENTS: usize>

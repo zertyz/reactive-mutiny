@@ -79,7 +79,7 @@ mod tests {
                 .inspect(|message| println!("ZETA: Received a message: '{}'", message))
         }
         let uni = UniBuilder::<&str, 1024, 1>::new()
-            .spawn_non_futures_non_fallible_executor("doc_test() Event", on_event, |_| async {});
+            .spawn_non_futures_non_fallibles_executor("doc_test() Event", on_event, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
@@ -97,12 +97,12 @@ mod tests {
 
         // this is the uni to work with our local variable
         let uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallible_executor("simple_pipeline() Event", |stream| {
+            .spawn_non_futures_non_fallibles_executor("simple_pipeline() Event", |stream| {
                     let observed_sum = Arc::clone(&observed_sum);
                     stream
                         .map(move |number| observed_sum.fetch_add(number, Relaxed))
                 },
-                |_| async {});
+                                                      |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
 
         // now the consumer: lets suppose we share it among several different tasks -- sharing a reference is one way to do it
@@ -181,7 +181,7 @@ mod tests {
         // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
         let uni = UniBuilder::<String, 1024, 1>::new()
-            .spawn_non_futures_non_fallible_executor(event_name, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executor(event_name, |stream| stream, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("'only count successes' payload".to_string());
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
@@ -256,7 +256,7 @@ mod tests {
             })
         };
         let six_uni = UniBuilder::<(), 1024, 1>::new()
-            .spawn_non_futures_non_fallible_executor("SIX event", on_six_event, |_| async {});
+            .spawn_non_futures_non_fallibles_executor("SIX event", on_six_event, |_| async {});
         // assures we'll close SIX only once
         let can_six_be_closed = Arc::new(AtomicBool::new(true));
         let six_uni_ref = Arc::clone(&six_uni);
@@ -304,7 +304,7 @@ mod tests {
             }
         };
         let two_uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallible_executor("TWO event", on_two_event, on_two_close);
+            .spawn_non_futures_non_fallibles_executor("TWO event", on_two_event, on_two_close);
         let two_producer = |item| two_uni.try_send(|slot| *slot = item);
 
         // FOUR event
@@ -341,7 +341,7 @@ mod tests {
             }
         };
         let four_uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallible_executor("FOUR event", on_four_event, on_four_close);
+            .spawn_non_futures_non_fallibles_executor("FOUR event", on_four_event, on_four_close);
         let four_producer = |item| four_uni.try_send(|slot| *slot = item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
@@ -496,18 +496,18 @@ mod tests {
 
         let profiling_name = "metricfull_non_futures_non_fallible_uni:    ";
         let uni = UniBuilder::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new()
-            .spawn_non_futures_non_fallible_executor(profiling_name, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executor(profiling_name, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_uni:    ";
         let uni = UniBuilder::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new()
-            .spawn_non_futures_non_fallible_executor(profiling_name, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executor(profiling_name, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_uni:";
         let uni = UniBuilder::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new()
             .concurrency_limit(12)
-            .spawn_non_futures_non_fallible_executor(profiling_name, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executor(profiling_name, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_uni:            ";
