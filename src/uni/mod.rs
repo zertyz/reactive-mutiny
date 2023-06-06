@@ -97,11 +97,12 @@ mod tests {
 
         // this is the uni to work with our local variable
         let uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor("simple_pipeline() Event", |stream| {
-                    let observed_sum = Arc::clone(&observed_sum);
-                    stream
-                        .map(move |number| observed_sum.fetch_add(number, Relaxed))
-                },
+            .spawn_non_futures_non_fallibles_executor("simple_pipeline() Event",
+                                                      |stream| {
+                                                          let observed_sum = Arc::clone(&observed_sum);
+                                                          stream
+                                                              .map(move |number| observed_sum.fetch_add(number, Relaxed))
+                                                      },
                                                       |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
 

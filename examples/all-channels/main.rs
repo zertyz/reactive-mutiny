@@ -39,16 +39,17 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
     let sum = Arc::new(AtomicU64::new(0));
 
     let uni = uni_builder
-        .spawn_non_futures_non_fallibles_executor(name, |stream| {
-            let sum = Arc::clone(&sum);
-            stream.map(move |exchange_event| {
-                let val = match *exchange_event {
-                    ExchangeEvent::TradeEvent { quantity, .. } => quantity,
-                    _ => 0,
-                };
-                sum.fetch_add(val as u64, Relaxed)
-            })
-        },
+        .spawn_non_futures_non_fallibles_executor(name,
+                                                  |stream| {
+                                                      let sum = Arc::clone(&sum);
+                                                      stream.map(move |exchange_event| {
+                                                          let val = match *exchange_event {
+                                                              ExchangeEvent::TradeEvent { quantity, .. } => quantity,
+                                                              _ => 0,
+                                                          };
+                                                          sum.fetch_add(val as u64, Relaxed)
+                                                      })
+                                                  },
                                                   |_| async {});
 
     print!("{ident}{name}: "); std::io::stdout().flush().unwrap();
