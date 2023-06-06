@@ -41,7 +41,7 @@ Taste the library in this excerpt:
         let events_handle = UniZeroCopy::<InputEventType, 1024, 1>::new()
         .spawn_non_futures_non_fallible_executor("Consumer of InputEventType and issiuer of OutputEventType",
                                                  |events_stream| {
-                                                     logic_2(logic_1(exchange_events))
+                                                     logic_2(logic_1(events_stream))
                                                          .inspect(|outgoing_event| send(outgoing_event))
                                                  },
                                                  |_executor| async { /* on-close logic */ });
@@ -53,22 +53,22 @@ Taste the library in this excerpt:
 
 Core components:
   1) A set of channels through which events are sent from producers to consumers -- all context-switch-free (AKA "lock-free") -- including zero-copy & mmap log based ones;
-  2) Custom allocators, for superior performance and flexibility
-  3) A set of generic `Stream` executors for all possible combinations of Future/NonFuture & Fallible/NonFallible event types, with the option of enforcing or not a Timeout on each event's resolution of their `Future`. The API was carefully designed to allow the compiler to fully optimize all the code: most of times, all code end up in the executors and the whole Multi / Uni abstractions are zeroed out.
-  4) Instrumentation & Metrics collectors for visibility of the performance and operation
-  5) The main `Multi` and `Uni` objects, along with a set of prelude type aliases binding the channels and allocators together
+  2) Custom allocators, for superior performance and flexibility;
+  3) A set of generic `Stream` executors for all possible combinations of Future/non-Future & Fallible/non-Fallible event types, with the option of enforcing or not a Timeout on each event's resolution of their `Future`. *The API was carefully designed to allow the compiler to fully optimize everything: most of times, all of the reactive code ends up in the executors and the whole Multi / Uni abstractions are zeroed out;*
+  4) Instrumentation & Metrics collectors for visibility of the performance and operation;
+  5) The main `Multi` and `Uni` objects, along with a set of prelude type aliases binding the channels and allocators together.
 
 
-**WARNING: * This crate is still in its first steps into production usage: no known bugs exist, speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback**
+**WARNING: * This crate is still in its first steps into production usage: no known bugs exist, speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback + any API symmetry adjustments that are detected along the way**
 
 
 # Performance
 
-This crate was inspired by the SmallRye's Mutiny library for Java, from which some names were borrowed.
+This crate was very losely inspired by the SmallRye's Mutiny library for Java, from which some names were borrowed.
 Little had to be done to bring the same functionality to Rust, due to the native functional approach, powerful error
-handling, async support and wonderful & flexible Iterator/Stream APIs, so the focus of this work went into bringing the events to
-their maximum processing speed & operability: special queues, topics, stacks, channels and Stream executors have been created, offering
-a superior performance over the native versions -- inspect the `benches` folder for details:
+handling, async support and wonderful & flexible Iterator/Stream APIs supported by the language, so the focus of this work went into
+bringing the events to their maximum processing speed & operability: special queues, topics, stacks, channels and Stream executors have
+been created, offering a superior performance over the Rust's native & community versions -- inspect the `benches` folder for details:
 
 ![reactive-mutiny's channels latencies](screenshots/channels_latencies.png)
 ![reactive-mutiny's channels throughput](screenshots/channels_throughput.png)

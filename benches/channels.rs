@@ -18,6 +18,7 @@
 //!     - The Same-thread measurements follow the same tendency
 //!
 
+use std::hint::black_box;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8};
 use std::sync::atomic::Ordering::Relaxed;
@@ -66,40 +67,40 @@ fn bench_same_thread_latency(criterion: &mut Criterion) {
     let (crossbeam_sender, crossbeam_receiver) = crossbeam_channel::bounded::<ItemType>(BUFFER_SIZE);
 
     let bench_id = format!("ogre_std's FullSync queue");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         while full_sync_sender.publish_movable(ItemType::default()).is_none() {};
         while full_sync_receiver.consume_movable().is_none() {};
-    }));
+    })));
 
     let bench_id = format!("ogre_std's Atomic queue");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         while atomic_sender.publish_movable(ItemType::default()).is_none() {};
         while atomic_receiver.consume_movable().is_none() {};
-    }));
+    })));
 
     let bench_id = format!("Std MPSC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         while std_sender.try_send(ItemType::default()).is_err() {};
         while std_receiver.try_recv().is_err() {};
-    }));
+    })));
 
     let bench_id = format!("Tokio MPSC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         while tokio_sender.try_send(ItemType::default()).is_err() {};
         while tokio_receiver.try_recv().is_err() {};
-    }));
+    })));
 
     let bench_id = format!("Futures MPSC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         while futures_sender.try_send(ItemType::default()).is_err() {};
         while futures_receiver.try_next().is_err() {};
-    }));
+    })));
 
     let bench_id = format!("Crossbeam MPMC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         while crossbeam_sender.try_send(ItemType::default()).is_err() {};
         while crossbeam_receiver.try_recv().is_err() {};
-    }));
+    })));
 
     group.finish();
 }
@@ -137,7 +138,7 @@ fn bench_inter_thread_latency(criterion: &mut Criterion) {
                     counter.fetch_add(1, Relaxed);
                 }
             });
-            group.bench_function(bench_id, |bencher| bencher.iter(|| {
+            group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
                 let last_count = counter_ref.load(Relaxed);
                 loop {
                     let current_count = counter_ref.load(Relaxed);
@@ -146,7 +147,7 @@ fn bench_inter_thread_latency(criterion: &mut Criterion) {
                     }
                     std::hint::spin_loop();
                 }
-            }));
+            })));
             keep_running_ref.store(false, Relaxed);
         }).expect("Spawn baseline threads");
     }
@@ -166,10 +167,10 @@ fn bench_inter_thread_latency(criterion: &mut Criterion) {
                     send_fn();
                 }
             });
-            group.bench_function(bench_id, |bencher| bencher.iter(|| {
+            group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
                 send_ref.store(true, Relaxed);
                 receive_fn();
-            }));
+            })));
             keep_running_ref.store(false, Relaxed);
             send_ref.store(true, Relaxed);
         }).expect("Spawn benchmarking threads");
@@ -227,64 +228,64 @@ fn bench_same_thread_throughput(criterion: &mut Criterion) {
     let (crossbeam_sender, crossbeam_receiver) = crossbeam_channel::bounded::<ItemType>(BUFFER_SIZE);
 
     let bench_id = format!("ogre_std's FullSync queue");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         for _ in 0..BUFFER_SIZE {
             while full_sync_sender.publish_movable(ItemType::default()).is_none() {};
         }
         for _ in 0..BUFFER_SIZE {
             while full_sync_receiver.consume_movable().is_none() {};
         }
-    }));
+    })));
 
     let bench_id = format!("ogre_std's Atomic queue");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         for _ in 0..BUFFER_SIZE {
             while atomic_sender.publish_movable(ItemType::default()).is_none() {};
         }
         for _ in 0..BUFFER_SIZE {
             while atomic_receiver.consume_movable().is_none() {};
         }
-    }));
+    })));
 
     let bench_id = format!("Std MPSC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         for _ in 0..BUFFER_SIZE {
             while std_sender.try_send(ItemType::default()).is_err() {};
         }
         for _ in 0..BUFFER_SIZE {
             while std_receiver.try_recv().is_err() {};
         }
-    }));
+    })));
 
     let bench_id = format!("Tokio MPSC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         for _ in 0..BUFFER_SIZE {
             while tokio_sender.try_send(ItemType::default()).is_err() {};
         }
         for _ in 0..BUFFER_SIZE {
             while tokio_receiver.try_recv().is_err() {};
         }
-    }));
+    })));
 
     let bench_id = format!("Futures MPSC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         for _ in 0..BUFFER_SIZE {
             while futures_sender.try_send(ItemType::default()).is_err() {};
         }
         for _ in 0..BUFFER_SIZE {
             while futures_receiver.try_next().is_err() {};
         }
-    }));
+    })));
 
     let bench_id = format!("Crossbeam MPMC Channel");
-    group.bench_function(bench_id, |bencher| bencher.iter(|| {
+    group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         for _ in 0..BUFFER_SIZE {
             while crossbeam_sender.try_send(ItemType::default()).is_err() {};
         }
         for _ in 0..BUFFER_SIZE {
             while crossbeam_receiver.try_recv().is_err() {};
         }
-    }));
+    })));
 
     group.finish();
 }
@@ -319,9 +320,9 @@ fn bench_inter_thread_throughput(criterion: &mut Criterion) {
                     send_fn();
                 }
             });
-            group.bench_function(bench_id, |bencher| bencher.iter(|| {
+            group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
                 receive_fn();
-            }));
+            })));
             keep_running_ref.store(false, Relaxed);
         }).expect("Spawn benchmarking threads");
     }
