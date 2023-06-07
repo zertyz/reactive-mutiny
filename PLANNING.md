@@ -18,8 +18,6 @@ This file contains the backlog & implementation plans for all foreseable feature
     r2.3) Revisit the unit tests, making sure all use cases of the messaging model are covered
     r2.4) Write benchmarks and tune it to perfection (using the appropriate Channels and internal structures)
   n9) Include benchmarks for tokio::sync::broadcast -- a Multi channel. If they have good performance, include this channel in our Multi. They also have a "watch" in addition to "broadcast", but it is unknown if watch attends to our requisites
-  f10) Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures
-The same for Multi
 
 # Backlog
 
@@ -38,3 +36,4 @@ The same for Multi
 
   0) 2022/2023: ((past improvements were not documented here yet))
   r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
+  f10) 2023-06-05: Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures -- the same for Multi
