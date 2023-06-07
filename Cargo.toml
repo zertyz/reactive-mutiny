@@ -1,6 +1,6 @@
 [package]
 name          = "reactive-mutiny"
-version       = "0.1.3"
+version       = "0.1.4"
 edition       = "2021"
 description   = "async Event-Driven Reactive Library with advanced & optimized containers (channels) and Stream executors"
 keywords      = ["reactive", "event-driven", "microservices", "async", "performance"]
