@@ -31,9 +31,11 @@ This file contains the backlog & implementation plans for all foreseable feature
     r3.5) Provide documentation examples wherever that is applicable
   f6) 2023-05-30: add channels for Stacks
   f7) 2023-05-30: add the Box allocator
+  r12) 2023-06-14: Unify `UniBuilder` & `Uni`, for types simplification & symmetry with how `Multi`s work -- causing a MAJOR version upgrade
 
 # Done
 
   0) 2022/2023: ((past improvements were not documented here yet))
   r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
   f10) 2023-06-05: Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures -- the same for Multi
+  b11) 2023-06-14: there seems to be no known way of passing the stream processing logic down a complex call chain

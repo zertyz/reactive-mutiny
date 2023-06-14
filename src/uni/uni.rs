@@ -46,6 +46,7 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
+    #[must_use]
     pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
         self.uni_channel.try_send(setter)
     }
