@@ -12,34 +12,35 @@ use std::{
     time::Duration,
     sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}},
 };
+use std::future::Future;
 use std::marker::PhantomData;
+use futures::Stream;
 use minstant::Instant;
 
 
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
-pub struct Uni<'a, ItemType:          Send + Sync + Debug,
-                   UniChannelType:    FullDuplexUniChannel<'a, ItemType, DerivedItemType>,
-                   const INSTRUMENTS: usize,
-                   DerivedItemType:   Debug = ItemType> {
+pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
+               UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+               const INSTRUMENTS: usize,
+               DerivedItemType:   Debug + 'static = ItemType> {
     pub uni_channel:              Arc<UniChannelType>,
-    pub stream_executor:          Arc<StreamExecutor<INSTRUMENTS>>,
+    pub stream_executors:         Vec<Arc<StreamExecutor<INSTRUMENTS>>>,
     pub finished_executors_count: AtomicU32,
-        _phantom:                 PhantomData<(&'a ItemType, &'a DerivedItemType)>,
+        _phantom:                 PhantomData<(&'static ItemType, &'static DerivedItemType)>,
 }
 
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
-         UniChannelType:    FullDuplexUniChannel<'a, ItemType, DerivedItemType>,
-         const INSTRUMENTS: usize,
-         DerivedItemType:   Debug>
-Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
+impl<ItemType:          Send + Sync + Debug + 'static,
+     UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+     const INSTRUMENTS: usize,
+     DerivedItemType:   Debug + Sync>
+Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// creates & returns a pair (`Uni`, `UniStream`)
-    pub fn new<IntoString: Into<String>>(uni_name: IntoString,
-                                         stream_executor: Arc<StreamExecutor<INSTRUMENTS>>) -> Self {
+    pub fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self {
         Uni {
             uni_channel:              UniChannelType::new(uni_name),
-            stream_executor,
+            stream_executors:         vec![],
             finished_executors_count: AtomicU32::new(0),
             _phantom:                 PhantomData::default(),
         }
@@ -62,7 +63,7 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         self.uni_channel.try_send_movable(item)
     }
 
-    pub fn consumer_stream(&self) -> MutinyStream<'a, ItemType, UniChannelType, DerivedItemType> {
+    pub fn consumer_stream(&self) -> MutinyStream<'static, ItemType, UniChannelType, DerivedItemType> {
         let (stream, _stream_id) = self.uni_channel.create_stream();
         stream
     }
@@ -92,6 +93,159 @@ Uni<'a, ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         }
+    }
+
+    #[must_use]
+    pub fn spawn_executor<OutItemType:            Send + Debug,
+                          OutStreamType:          Stream<Item=OutType> + Send + 'static,
+                          OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
+                          ErrVoidAsyncType:       Future<Output=()> + Send + 'static,
+                          CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                         (mut self,
+                          concurrency_limit:         u32,
+                          futures_timeout:           Duration,
+                          pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
+                          on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                             -> ErrVoidAsyncType   + Send + Sync + 'static,
+                          on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                 -> CloseVoidAsyncType + Send + Sync + 'static)
+
+                         -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
+
+        let pipeline_name = format!("Consumer #1 for Uni '{}'", self.uni_channel.name());
+        let on_close_callback = Some(on_close_callback);
+        // TODO: 2023-06-14: create as many executors as `self.uni_channel.MAX_STREAMS` (new API there might be needed)
+        let in_stream = self.consumer_stream();
+        let executor = StreamExecutor::with_futures_timeout(pipeline_name.to_string(), futures_timeout);
+        self.stream_executors.push(Arc::clone(&executor));
+        let out_stream = pipeline_builder(in_stream);
+        let arc_self = Arc::new(self);
+        let arc_self_ref = Arc::clone(&arc_self);
+        executor
+            .spawn_executor(
+                concurrency_limit,
+                on_err_callback,
+                move |executor| {
+                    let arc_self = Arc::clone(&arc_self);
+                        async move {
+                        arc_self.finished_executors_count.fetch_add(1, Relaxed);
+                        (on_close_callback.expect("TODO: 2023-06-14: to be called when the last executor ends"))(executor).await;
+                    }
+                },
+                out_stream
+            );
+        arc_self_ref
+    }
+
+    #[must_use]
+    pub fn spawn_fallibles_executor<OutItemType:            Send + Debug,
+                                    OutStreamType:          Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
+                                    CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                                   (mut self,
+                                    concurrency_limit:         u32,
+                                    pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
+                                    on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                                                   + Send + Sync + 'static,
+                                    on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                 -> CloseVoidAsyncType + Send + Sync + 'static)
+
+                                    -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
+
+        let pipeline_name = format!("Consumer #1 for Uni '{}'", self.uni_channel.name());
+        let on_close_callback = Some(on_close_callback);
+        // TODO: 2023-06-14: create as many executors as `self.uni_channel.MAX_STREAMS` (new API there might be needed)
+        let in_stream = self.consumer_stream();
+        let executor = StreamExecutor::new(pipeline_name.to_string());
+        self.stream_executors.push(Arc::clone(&executor));
+        let out_stream = pipeline_builder(in_stream);
+        let arc_self = Arc::new(self);
+        let arc_self_ref = Arc::clone(&arc_self);
+        executor
+            .spawn_fallibles_executor(
+                concurrency_limit,
+                on_err_callback,
+                move |executor| {
+                    let arc_self = Arc::clone(&arc_self);
+                        async move {
+                        arc_self.finished_executors_count.fetch_add(1, Relaxed);
+                        (on_close_callback.expect("TODO: 2023-06-14: to be called when the last executor ends"))(executor).await;
+                    }
+                },
+                out_stream
+            );
+        arc_self_ref
+    }
+
+    #[must_use]
+    pub fn spawn_futures_executor<OutItemType:            Send + Debug,
+                                  OutStreamType:          Stream<Item=OutType> + Send + 'static,
+                                  OutType:                Future<Output=OutItemType> + Send,
+                                  CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                                 (mut self,
+                                  concurrency_limit:         u32,
+                                  futures_timeout:           Duration,
+                                  pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
+                                  on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                 -> CloseVoidAsyncType + Send + Sync + 'static)
+
+                                 -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
+
+        let pipeline_name = format!("Consumer #1 for Uni '{}'", self.uni_channel.name());
+        let on_close_callback = Some(on_close_callback);
+        // TODO: 2023-06-14: create as many executors as `self.uni_channel.MAX_STREAMS` (new API there might be needed)
+        let in_stream = self.consumer_stream();
+        let executor = StreamExecutor::with_futures_timeout(pipeline_name.to_string(), futures_timeout);
+        self.stream_executors.push(Arc::clone(&executor));
+        let out_stream = pipeline_builder(in_stream);
+        let arc_self = Arc::new(self);
+        let arc_self_ref = Arc::clone(&arc_self);
+        executor
+            .spawn_futures_executor(
+                concurrency_limit,
+                move |executor| {
+                    let arc_self = Arc::clone(&arc_self);
+                        async move {
+                        arc_self.finished_executors_count.fetch_add(1, Relaxed);
+                        (on_close_callback.expect("TODO: 2023-06-14: to be called when the last executor ends"))(executor).await;
+                    }
+                },
+                out_stream
+            );
+        arc_self_ref
+    }
+
+    #[must_use]
+    pub fn spawn_non_futures_non_fallibles_executor<OutItemType:            Send + Debug,
+                                                    OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
+                                                    CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+
+                                                   (mut self,
+                                                    concurrency_limit:        u32,
+                                                    pipeline_builder:         impl FnOnce(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
+                                                    on_close_callback:        impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                                 -> CloseVoidAsyncType + Send + Sync + 'static)
+
+                                                   -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
+
+        let pipeline_name = format!("Consumer #1 for Uni '{}'", self.uni_channel.name());
+        let on_close_callback = Some(on_close_callback);
+        // TODO: 2023-06-14: create as many executors as `self.uni_channel.MAX_STREAMS` (new API there might be needed)
+        let in_stream = self.consumer_stream();
+        let executor = StreamExecutor::new(pipeline_name.to_string());
+        self.stream_executors.push(Arc::clone(&executor));
+        let out_stream = pipeline_builder(in_stream);
+        let arc_self = Arc::new(self);
+        let arc_self_ref = Arc::clone(&arc_self);
+        executor
+            .spawn_non_futures_non_fallibles_executor(
+                concurrency_limit,
+                move |executor| {
+                    let arc_self = Arc::clone(&arc_self);
+                    async move {
+                        arc_self.finished_executors_count.fetch_add(1, Relaxed);
+                        (on_close_callback.expect("TODO: 2023-06-14: to be called when the last executor ends"))(executor).await;
+                    }
+                },
+                out_stream
+            );
+        arc_self_ref
     }
 
 }

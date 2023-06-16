@@ -189,4 +189,9 @@ impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
 FullDuplexUniChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
-for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}
+for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn name(&self) -> &str {
+        self.streams_manager.name()
+    }
+}

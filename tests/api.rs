@@ -4,13 +4,15 @@
 //! NOTE: many "tests" here have no real assertions, as they are used only to verify the API is able to represent certain models
 
 
+use std::cell::UnsafeCell;
 use std::fmt::Debug;
+use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
 use futures::{Stream, StreamExt};
 use reactive_mutiny::mutiny_stream::MutinyStream;
 use reactive_mutiny::ogre_std::{ogre_alloc, ogre_queues};
-use reactive_mutiny::prelude::advanced::{OgreAllocator, OgreUnique, UniZeroCopyAtomic, Instruments, UniMoveAtomic, ChannelUniMoveAtomic, RawUniZeroCopyAtomic, RawUniMoveAtomic};
+use reactive_mutiny::prelude::advanced::{OgreAllocator, OgreUnique, UniZeroCopyAtomic, Instruments, UniMoveAtomic, ChannelUniMoveAtomic};
 use reactive_mutiny::prelude::{ChannelConsumer, Uni};
 use reactive_mutiny::uni;
 
@@ -28,18 +30,15 @@ async fn elaborated_generics_on_call_chains() {
     // generics typing
     const INSTRUMENTS: usize = Instruments::LogsWithExpensiveMetrics.into();
     const BUFFER_SIZE: usize = 1024;
-    // TODO 2023-06-14: after the MAJOR version upgrade, these may be condensed into a single type, or simply omitted
-    type RawUni<ItemType> = RawUniZeroCopyAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
-    type UniBuilder<ItemType> = UniZeroCopyAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
-    // type RawUni<ItemType> = RawUniMoveAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
-    // type UniBuilder<ItemType> = UniMoveAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
+    type Uni<ItemType> = UniZeroCopyAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
+    // type Uni<ItemType> = UniMoveAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
 
     trait CustomTrait<T> { fn get_data(self) -> T; }
     #[derive(Debug)]
     struct CustomType<T: Debug> {data: T}
     impl<T: Debug> CustomTrait<CustomType<T>> for CustomType<T> { fn get_data(self) -> CustomType<T> { CustomType {data: self.data} } }
     async fn with_generics<RemoteMessages: CustomTrait<RemoteMessages> + Send + Sync + Debug>
-                          (events_sender: Arc<RawUni<RemoteMessages>>,
+                          (events_sender: Arc<Uni<RemoteMessages>>,
                            value:         RemoteMessages)
                           -> bool {
         assert!(events_sender.try_send(|slot| *slot = value), "couldn't send value");
@@ -48,8 +47,8 @@ async fn elaborated_generics_on_call_chains() {
 
     // notice the simple `pipeline_builder`, that is able to make it down the chain of `with_generics()` call only in the `Uni` / `Multi` form
     // (as opposed to passing the `pipeline_builder` as a parameter to `with_generics()`, which would, then, create the `Uni` / `Multi` there)
-    let uni = UniBuilder::<CustomType<bool>>::new()
-            .spawn_non_futures_non_fallibles_executor(format!("Test processor with advanced generics"),
+    let uni = Uni::<CustomType<bool>>::new("advanced generics")
+            .spawn_non_futures_non_fallibles_executor(1,
                                                       |remote_messages_stream| remote_messages_stream.map(|in_msg| CustomType {data: true}),
                                                       |_executor| async {});
     with_generics(uni, CustomType {data: false}).await;

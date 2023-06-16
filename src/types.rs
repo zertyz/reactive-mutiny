@@ -175,7 +175,11 @@ pub trait FullDuplexUniChannel<'a, ItemType:        'a + Debug + Send + Sync,
           ChannelCommon<'a, ItemType, DerivedItemType> +
           ChannelUni<'a, ItemType, DerivedItemType> +
           ChannelProducer<'a, ItemType, DerivedItemType> +
-          ChannelConsumer<'a, DerivedItemType> {}
+          ChannelConsumer<'a, DerivedItemType> {
+
+    /// Returns this channel's name
+    fn name(&self) -> &str;
+}
 
 /// A fully fledged `Multi` channel, that has both the producer and consumer parts
 pub trait FullDuplexMultiChannel<'a, ItemType:        'a + Debug + Send + Sync,

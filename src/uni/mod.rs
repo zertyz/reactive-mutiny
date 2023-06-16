@@ -19,9 +19,6 @@
 //!    uni.close().await;
 //! ```
 
-mod uni_builder;
-pub use uni_builder::*;
-
 mod uni;
 pub use uni::*;
 
@@ -53,14 +50,14 @@ mod tests {
 
 
     /// The `UniBuilder` specialization used for the tests to follow
-    type UniBuilder<InType,
-                    const BUFFER_SIZE: usize,
-                    const MAX_STREAMS: usize,
-                    const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
-        = crate::uni::UniBuilder<InType,
-                                 channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>,
-                                 INSTRUMENTS,
-                                 InType>;
+    type TestUni<InType,
+                 const BUFFER_SIZE: usize,
+                 const MAX_STREAMS: usize,
+                 const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+        = crate::uni::Uni<InType,
+                          channels::movable::full_sync::FullSync<'static, InType, BUFFER_SIZE, MAX_STREAMS>,
+                          INSTRUMENTS,
+                          InType>;
 
 
 
@@ -78,8 +75,8 @@ mod tests {
                 .inspect(|sneak_peeked_message| println!("EARTH: Sneak peeked a message to Zeta Reticuli: '{}'", sneak_peeked_message))
                 .inspect(|message| println!("ZETA: Received a message: '{}'", message))
         }
-        let uni = UniBuilder::<&str, 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor("doc_test() Event", on_event, |_| async {});
+        let uni = TestUni::<&str, 1024, 1>::new("doc_test()")
+            .spawn_non_futures_non_fallibles_executor(1, on_event, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
@@ -96,8 +93,8 @@ mod tests {
         let observed_sum = Arc::new(AtomicU32::new(0));
 
         // this is the uni to work with our local variable
-        let uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor("simple_pipeline() Event",
+        let uni = TestUni::<u32, 1024, 1>::new("simple_pipeline()")
+            .spawn_non_futures_non_fallibles_executor(1,
                                                       |stream| {
                                                           let observed_sum = Arc::clone(&observed_sum);
                                                           stream
@@ -155,10 +152,8 @@ mod tests {
                 // .buffer_unordered(4)
         };
 
-        let uni = UniBuilder::<u32, 1024, 1>::new()
-            .concurrency_limit(PARTS.len() as u32)
-            .futures_timeout(Duration::from_secs(2))
-            .spawn_executor("async_elements() Event", on_event, |_| async {}, |_| async {});
+        let uni = TestUni::<u32, 1024, 1>::new("async_elements()")
+            .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), on_event, |_| async {}, |_| async {});
 
         let producer = |item| uni.try_send(|slot| *slot = item);
 
@@ -181,27 +176,27 @@ mod tests {
         // asserts spawn_non_futures_non_fallible_executor() register statistics appropriately:
         // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
-        let uni = UniBuilder::<String, 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor(event_name, |stream| stream, |_| async {});
+        let uni = TestUni::<String, 1024, 1>::new(event_name)
+            .spawn_non_futures_non_fallibles_executor(1, |stream| stream, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("'only count successes' payload".to_string());
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
-        let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executor.ok_events_avg_future_duration.lightweight_probe();
+        let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executors[0].ok_events_avg_future_duration.lightweight_probe();
         assert_eq!(ok_counter,                               1,    "counter of successful '{}' events is wrong", event_name);
         assert_eq!(ok_avg_futures_resolution_duration,       -1.0, "avg futures resolution time of successful '{}' events is wrong -- since it is a non-future, avg times should be always -1.0", event_name);
-        let (failures_counter, failures_avg_futures_resolution_duration) = uni.stream_executor.failed_events_avg_future_duration.lightweight_probe();
+        let (failures_counter, failures_avg_futures_resolution_duration) = uni.stream_executors[0].failed_events_avg_future_duration.lightweight_probe();
         assert_eq!(failures_counter,                         0,    "counter of unsuccessful '{}' events is wrong -- since it is a non-fallible event, failures should always be 0", event_name);
         assert_eq!(failures_avg_futures_resolution_duration, 0.0,  "avg futures resolution time of unsuccessful '{}' events is wrong -- since it is a non-fallible event,, avg times should be always 0.0", event_name);
-        let (timeouts_counter, timeouts_avg_futures_resolution_duration) = uni.stream_executor.timed_out_events_avg_future_duration.lightweight_probe();
+        let (timeouts_counter, timeouts_avg_futures_resolution_duration) = uni.stream_executors[0].timed_out_events_avg_future_duration.lightweight_probe();
         assert_eq!(timeouts_counter,                         0,    "counter of timed out '{}' events is wrong -- since it is a non-future event, timeouts should always be 0", event_name);
         assert_eq!(timeouts_avg_futures_resolution_duration, 0.0,  "avg futures resolution time of timed out '{}' events is wrong -- since it is a non-future event,, avg timeouts should be always 0.0", event_name);
 
         // asserts spawn_executor() register statistics appropriately:
         // with counters & with average futures resolution time measurements
         let event_name = "future & fallible event";
-        let uni = UniBuilder::<String, 1024, 1>::new()
-            .futures_timeout(Duration::from_millis(150))
-            .spawn_executor(event_name,
+        let uni = TestUni::<String, 1024, 1>::new(event_name)
+            .spawn_executor(1,
+                            Duration::from_millis(150),
                             |stream| {
                                 stream.map(|payload: String| async move {
                                     if payload.contains("unsuccessful") {
@@ -227,13 +222,13 @@ mod tests {
             producer("'timeout' payload".to_string());
         }
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
-        let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executor.ok_events_avg_future_duration.lightweight_probe();
+        let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executors[0].ok_events_avg_future_duration.lightweight_probe();
         assert_eq!(ok_counter,                                              2,   "counter of successful '{}' events is wrong", event_name);
         assert!((ok_avg_futures_resolution_duration-0.100).abs()        < 15e-2, "avg futures resolution time of successful '{}' events is wrong -- it should be 0.1s", event_name);
-        let (failures_counter, failures_avg_futures_resolution_duration) = uni.stream_executor.failed_events_avg_future_duration.lightweight_probe();
+        let (failures_counter, failures_avg_futures_resolution_duration) = uni.stream_executors[0].failed_events_avg_future_duration.lightweight_probe();
         assert_eq!(failures_counter,                                       2,   "counter of unsuccessful '{}' events is wrong", event_name);
         assert!((failures_avg_futures_resolution_duration-0.050).abs() < 15e-2, "avg futures resolution time of unsuccessful '{}' events is wrong -- it should be 0.05s, but was {}", event_name, failures_avg_futures_resolution_duration);
-        let (timeouts_counter, timeouts_avg_futures_resolution_duration) = uni.stream_executor.timed_out_events_avg_future_duration.lightweight_probe();
+        let (timeouts_counter, timeouts_avg_futures_resolution_duration) = uni.stream_executors[0].timed_out_events_avg_future_duration.lightweight_probe();
         assert_eq!(timeouts_counter,                                       2,   "counter of timed out '{}' events is wrong", event_name);
         assert!((timeouts_avg_futures_resolution_duration-0.150).abs() < 15e-2, "avg futures resolution time of timed out '{}' events is wrong -- it should be 0.150s", event_name);
 
@@ -256,8 +251,8 @@ mod tests {
                 six_fire_count_ref.fetch_add(1, Relaxed);
             })
         };
-        let six_uni = UniBuilder::<(), 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor("SIX event", on_six_event, |_| async {});
+        let six_uni = TestUni::<(), 1024, 1>::new("SIX event")
+            .spawn_non_futures_non_fallibles_executor(1, on_six_event, |_| async {});
         // assures we'll close SIX only once
         let can_six_be_closed = Arc::new(AtomicBool::new(true));
         let six_uni_ref = Arc::clone(&six_uni);
@@ -304,8 +299,8 @@ mod tests {
                 six_closer_for_two().await;
             }
         };
-        let two_uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor("TWO event", on_two_event, on_two_close);
+        let two_uni = TestUni::<u32, 1024, 1>::new("TWO event")
+            .spawn_non_futures_non_fallibles_executor(1, on_two_event, on_two_close);
         let two_producer = |item| two_uni.try_send(|slot| *slot = item);
 
         // FOUR event
@@ -341,8 +336,8 @@ mod tests {
                 six_closer_for_four().await;
             }
         };
-        let four_uni = UniBuilder::<u32, 1024, 1>::new()
-            .spawn_non_futures_non_fallibles_executor("FOUR event", on_four_event, on_four_close);
+        let four_uni = TestUni::<u32, 1024, 1>::new("FOUR event")
+            .spawn_non_futures_non_fallibles_executor(1, on_four_event, on_four_close);
         let four_producer = |item| four_uni.try_send(|slot| *slot = item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
@@ -415,9 +410,9 @@ mod tests {
                 })
         }
         let on_err_count_clone = Arc::clone(&on_err_count);
-        let uni = UniBuilder::<u32, 1024, 1>::new()
-            .futures_timeout(Duration::from_millis(100))
-            .spawn_executor("fallible event",
+        let uni = TestUni::<u32, 1024, 1>::new("fallible event")
+            .spawn_executor(1,
+                            Duration::from_millis(100),
                             on_fail_when_odd_event,
                             move |err| {
                                 let on_err_count_clone = Arc::clone(&on_err_count_clone);
@@ -450,9 +445,9 @@ mod tests {
         const FACTOR: u32 = 40;
 
         /// measure how long it takes to stream a certain number of elements through the given `uni`
-        async fn profile_uni<'a, UniChannelType:    FullDuplexUniChannel<'a, u32, u32> + Sync + Send + 'a,
-                                 const INSTRUMENTS: usize>
-                            (uni:            Arc<Uni<'a, u32, UniChannelType, INSTRUMENTS>>,
+        async fn profile_uni<UniChannelType:    FullDuplexUniChannel<'static, u32, u32> + Sync + Send + 'static,
+                             const INSTRUMENTS: usize>
+                            (uni:            Arc<Uni<u32, UniChannelType, INSTRUMENTS>>,
                              profiling_name: &str,
                              count:          u32) {
             print!("{profiling_name} "); std::io::stdout().flush().unwrap();
@@ -496,24 +491,24 @@ mod tests {
         println!();
 
         let profiling_name = "metricfull_non_futures_non_fallible_uni:    ";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new()
-            .spawn_non_futures_non_fallibles_executor(profiling_name, |stream| stream, |_| async {});
+        let uni = TestUni::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new(profiling_name)
+            .spawn_non_futures_non_fallibles_executor(1, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_uni:    ";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new()
-            .spawn_non_futures_non_fallibles_executor(profiling_name, |stream| stream, |_| async {});
+        let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
+            .spawn_non_futures_non_fallibles_executor(1, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_uni:";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new()
-            .concurrency_limit(12)
-            .spawn_non_futures_non_fallibles_executor(profiling_name, |stream| stream, |_| async {});
+        let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
+            .spawn_non_futures_non_fallibles_executor(12, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_uni:            ";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new()
-            .spawn_executor(profiling_name,
+        let uni = TestUni::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new(profiling_name)
+            .spawn_executor(1,
+                            Duration::ZERO,
                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
@@ -524,8 +519,9 @@ mod tests {
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_futures_fallible_uni:            ";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new()
-            .spawn_executor(profiling_name,
+        let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
+            .spawn_executor(1,
+                            Duration::ZERO,
                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
@@ -536,9 +532,9 @@ mod tests {
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "timeoutable_metricfull_futures_fallible_uni:";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new()
-            .futures_timeout(Duration::from_millis(100))
-            .spawn_executor(profiling_name,
+        let uni = TestUni::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new(profiling_name)
+            .spawn_executor(1,
+                            Duration::from_millis(100),
                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
@@ -549,9 +545,9 @@ mod tests {
         profile_uni(uni, profiling_name, 768*FACTOR).await;
 
         let profiling_name = "timeoutable_metricless_futures_fallible_uni:";
-        let uni = UniBuilder::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new()
-            .futures_timeout(Duration::from_millis(100))
-            .spawn_executor(profiling_name,
+        let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
+            .spawn_executor(1,
+                            Duration::from_millis(100),
                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)

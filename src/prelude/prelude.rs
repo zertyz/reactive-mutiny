@@ -6,7 +6,6 @@ pub use crate::{
     mutiny_stream::MutinyStream,
     uni::{
         Uni,
-        UniBuilder,
         unis_close_async,
     },
     multi::{

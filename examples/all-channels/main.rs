@@ -29,7 +29,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
                                UniChannelType:      FullDuplexUniChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
                               (ident: &str,
                                name: &str,
-                               uni_builder: UniBuilder<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
+                               uni: Uni<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
 
     #[cfg(not(debug_assertions))]
     const ITERATIONS: u32 = 1<<24;
@@ -38,8 +38,8 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
 
     let sum = Arc::new(AtomicU64::new(0));
 
-    let uni = uni_builder
-        .spawn_non_futures_non_fallibles_executor(name,
+    let uni = uni
+        .spawn_non_futures_non_fallibles_executor(1,
                                                   |stream| {
                                                       let sum = Arc::clone(&sum);
                                                       stream.map(move |exchange_event| {
@@ -139,24 +139,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::SimpleLogger::new().with_utc_timestamps().init().unwrap_or_else(|_| eprintln!("--> LOGGER WAS ALREADY STARTED"));
     println!("Uni:");
     println!("    Move:");
-    uni_builder_benchmark("        ", "Atomic    ", UniMoveAtomic::   <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
-    uni_builder_benchmark("        ", "Crossbeam ", UniMoveCrossbeam::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
-    uni_builder_benchmark("        ", "Full Sync ", UniMoveFullSync:: <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
+    uni_builder_benchmark("        ", "Atomic    ", UniMoveAtomic::   <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("Movable Atomic profiling Uni")).await;
+    uni_builder_benchmark("        ", "Crossbeam ", UniMoveCrossbeam::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("Movable Crossbeam profiling Uni")).await;
+    uni_builder_benchmark("        ", "Full Sync ", UniMoveFullSync:: <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("Movable Full Sync profiling Uni")).await;
     println!("    Zero-Copy:");
-    uni_builder_benchmark("        ", "Atomic    ", UniZeroCopyAtomic::  <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
-    uni_builder_benchmark("        ", "Full Sync ", UniZeroCopyFullSync::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new()).await;
+    uni_builder_benchmark("        ", "Atomic    ", UniZeroCopyAtomic::  <ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("Zero-Copy Atomic profiling Uni")).await;
+    uni_builder_benchmark("        ", "Full Sync ", UniZeroCopyFullSync::<ExchangeEvent, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>::new("Zero-Copy Full Sync profiling Uni")).await;
     println!();
     println!("Multi:");
     const LISTENERS: usize = 4;
     println!("    Arc:");
-    multi_builder_benchmark("        ", "Atomic    ", LISTENERS as u32, MultiAtomicArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
-    multi_builder_benchmark("        ", "Crossbeam ", LISTENERS as u32, MultiCrossbeamArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
-    multi_builder_benchmark("        ", "FullSync  ", LISTENERS as u32, MultiFullSyncArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "Atomic    ", LISTENERS as u32, MultiAtomicArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("Arc Atomic profiling Multi")).await?;
+    multi_builder_benchmark("        ", "Crossbeam ", LISTENERS as u32, MultiCrossbeamArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("Arc Crossbeam profiling Multi")).await?;
+    multi_builder_benchmark("        ", "FullSync  ", LISTENERS as u32, MultiFullSyncArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("Arc Full Sync profiling Multi")).await?;
     println!("    OgreArc:");
-    multi_builder_benchmark("        ", "Atomic    ", LISTENERS as u32, MultiAtomicOgreArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
-    multi_builder_benchmark("        ", "FullSync  ", LISTENERS as u32, MultiFullSyncOgreArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "Atomic    ", LISTENERS as u32, MultiAtomicOgreArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("OgreArc Atomic profiling Multi")).await?;
+    multi_builder_benchmark("        ", "FullSync  ", LISTENERS as u32, MultiFullSyncOgreArc::<ExchangeEvent, BUFFER_SIZE, LISTENERS, INSTRUMENTS>::new("OgreArc Full Sync profiling Multi")).await?;
     println!("    Reference:");
-    multi_builder_benchmark("        ", "MmapLog   ", LISTENERS as u32, MultiMmapLog::<ExchangeEvent, LISTENERS, INSTRUMENTS>::new("profiling multi")).await?;
+    multi_builder_benchmark("        ", "MmapLog   ", LISTENERS as u32, MultiMmapLog::<ExchangeEvent, LISTENERS, INSTRUMENTS>::new("Mmap Log profiling Multi")).await?;
     println!();
 
     Ok(())

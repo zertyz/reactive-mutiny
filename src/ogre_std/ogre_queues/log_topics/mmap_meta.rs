@@ -30,7 +30,7 @@ use memmap::{
 ///       (to do this on-the-fly), as dropping used instances is the only way to free the disk resources used by the m-mappings present here.
 ///       If your app is a long-runner that don't need the "replay all events guarantee", please use [ring_buffer_topics] instead.
 ///
-/// NOTE 2: this container was not designed to survive app crashes nor to provide inter-process communications: it, currently, only allows the application to store a greater-than-RAM number of events in a zero-cost manner,
+/// NOTE 2: this container was not designed to survive app crashes nor to provide inter-process communications: it, currently, only allows the application to store a greater-than-RAM number of events in a zero-cost-abstraction manner,
 ///         with none to minimal performance hit. Upgrading it seems to be a no-brainer, though, if these ever prove to be useful features.
 #[derive(Debug)]
 pub struct MMapMeta<'a, SlotType: 'a> {

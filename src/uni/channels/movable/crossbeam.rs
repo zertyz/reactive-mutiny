@@ -157,4 +157,9 @@ impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
 FullDuplexUniChannel<'a, ItemType, ItemType>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}
+for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    fn name(&self) -> &str {
+        self.streams_manager.name()
+    }
+}

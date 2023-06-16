@@ -59,7 +59,7 @@ Core components:
   5) The main `Multi` and `Uni` objects, along with a set of prelude type aliases binding the channels and allocators together.
 
 
-**WARNING: * This crate is still in its first steps into production usage: no known bugs exist, speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback + any API symmetry adjustments that are detected along the way**
+**NOTE: This crate is new, but actively used in production: no known bugs exist (and MIRI says we're fine), speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback**
 
 
 # Performance
