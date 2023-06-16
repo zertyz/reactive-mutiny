@@ -37,7 +37,7 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channel:       Pin<Box<AtomicMove<ItemType, BUFFER_SIZE>>>,
+    channel:       AtomicMove<ItemType, BUFFER_SIZE>,
 
 }
 
@@ -51,7 +51,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
-            channel:         Box::pin(AtomicMove::<ItemType, BUFFER_SIZE>::new()),
+            channel:         AtomicMove::<ItemType, BUFFER_SIZE>::new(),
         })
     }
 

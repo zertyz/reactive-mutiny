@@ -47,7 +47,7 @@ impl Default for MessageType {
 }
 
 type ItemType = MessageType;
-const BUFFER_SIZE: usize = 1<<14;
+const BUFFER_SIZE: usize = 1<<10;
 
 
 /// Benchmarks the same-thread latency of our containers against Std, Tokio, Futures & Crossbeam channels.\

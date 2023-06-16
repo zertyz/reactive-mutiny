@@ -282,7 +282,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(2, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                six_uni.try_send(|slot| *slot = ());
+                                assert!(six_uni.try_send(|slot| *slot = ()), "couldn't send");
                             }
                         } else if event == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -319,7 +319,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(4, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                six_uni.try_send(|slot| *slot = ());
+                                assert!(six_uni.try_send(|slot| *slot = ()), "couldn't send");
                             }
                         } else if event == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;

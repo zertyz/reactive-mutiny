@@ -12,13 +12,13 @@ pub trait OgreAllocator<SlotType: Debug>: Debug {
     /// Instantiates a new allocator
     fn new() -> Self;
 
-    /// Returns a mutable reference to the newly allocated slot or `None` if the allocator is, currently, out of space
+    /// Returns a (mutable reference, slot_id) to the newly allocated slot or `None` if the allocator is, currently, out of space
     /// -- in which case, a [dealloc_ref()] would remedy the situation.\
     /// IMPLEMENTORS: #[inline(always)]
     fn alloc_ref(&self) -> Option<(/*ref:*/ &mut SlotType, /*slot_id:*/ u32)>;
 
     /// Allocates & sets the data with the provided callback `f`, which should return a `DataType`.\
-    /// Returns a mutable reference to the newly allocated slot or `None` if the allocator is, currently, out of space
+    /// Returns a (mutable reference, slot_id) to the newly allocated slot or `None` if the allocator is, currently, out of space
     /// -- in which case, a [dealloc_ref()] would remedy the situation.\
     /// IMPLEMENTORS: #[inline(always)]
     fn alloc_with<F: FnOnce(&mut SlotType)>
@@ -27,7 +27,7 @@ pub trait OgreAllocator<SlotType: Debug>: Debug {
 
     /// Returns the slot for reuse by a subsequent call of [alloc_ref()]\
     /// IMPLEMENTORS: #[inline(always)]
-    fn dealloc_ref(&self, slot: &mut SlotType);
+    fn dealloc_ref(&self, slot: &SlotType);
 
     /// IMPLEMENTORS: #[inline(always)]
     fn dealloc_id(&self, slot_id: u32);

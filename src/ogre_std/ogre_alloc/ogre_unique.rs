@@ -59,8 +59,8 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Deref
-for OgreUnique<DataType, OgreAllocatorType> {
+Deref for
+OgreUnique<DataType, OgreAllocatorType> {
 
     type Target = DataType;
 
@@ -71,23 +71,10 @@ for OgreUnique<DataType, OgreAllocatorType> {
 }
 
 
-impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-DerefMut
-for OgreUnique<DataType, OgreAllocatorType> {
-
-    #[inline(always)]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        let mut_data_ref = unsafe {&mut *((self.data_ref as *const DataType) as *mut DataType)};
-        mut_data_ref
-    }
-}
-
-
 impl<DataType:          Debug + Send + Sync + Display,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Display
-for OgreUnique<DataType, OgreAllocatorType> {
+Display for
+OgreUnique<DataType, OgreAllocatorType> {
 
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.deref(), f)
@@ -97,8 +84,8 @@ for OgreUnique<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Debug
-for OgreUnique<DataType, OgreAllocatorType> {
+Debug for
+OgreUnique<DataType, OgreAllocatorType> {
 
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "OgreUnique {{allocator: {:?}, data: #{}:{:?}}}",
@@ -109,8 +96,8 @@ for OgreUnique<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-PartialEq<DataType>
-for OgreUnique<DataType, OgreAllocatorType>
+PartialEq<DataType> for
+OgreUnique<DataType, OgreAllocatorType>
 where DataType: PartialEq {
 
     #[inline(always)]
@@ -122,8 +109,8 @@ where DataType: PartialEq {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Into<OgreArc<DataType, OgreAllocatorType>>
-for OgreUnique<DataType, OgreAllocatorType> {
+Into<OgreArc<DataType, OgreAllocatorType>> for
+OgreUnique<DataType, OgreAllocatorType> {
 
     #[inline(always)]
     fn into(self) -> OgreArc<DataType, OgreAllocatorType> {
@@ -134,26 +121,25 @@ for OgreUnique<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Drop
-for OgreUnique<DataType, OgreAllocatorType> {
+Drop for
+OgreUnique<DataType, OgreAllocatorType> {
 
     #[inline(always)]
     fn drop(&mut self) {
-        let mut_data_ref = unsafe {&mut *((self.data_ref as *const DataType) as *mut DataType)};
-        self.allocator.dealloc_ref(mut_data_ref);
+        self.allocator.dealloc_ref(self.data_ref);
     }
 }
 
 
 unsafe impl<DataType:          Debug + Send + Sync,
             OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Send
-for OgreUnique<DataType, OgreAllocatorType> {}
+Send for
+OgreUnique<DataType, OgreAllocatorType> {}
 
 unsafe impl<DataType:          Debug + Send + Sync,
             OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Sync
-for OgreUnique<DataType, OgreAllocatorType> {}
+Sync for
+OgreUnique<DataType, OgreAllocatorType> {}
 
 
 #[cfg(any(test,doc))]

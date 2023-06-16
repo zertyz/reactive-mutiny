@@ -21,6 +21,7 @@ use std::{
     task::{Waker},
     marker::PhantomData,
 };
+use std::cell::UnsafeCell;
 use minstant::Instant;
 
 
@@ -32,11 +33,11 @@ pub struct StreamsManagerBase<'a, ItemType:           'a,
 
     /// the id # of streams that can be created are stored here.\
     /// synced with `used_streams`, so creating & dropping streams occurs as fast as possible
-    vacant_streams:         Pin<Box<FullSyncMove<u32, MAX_STREAMS>>>,
+    vacant_streams:         FullSyncMove<u32, MAX_STREAMS>,
     /// this is synced with `vacant_streams` to be its counter-part -- so enqueueing is optimized:
     /// it holds the stream ids that are active.
     /// Note: the sentinel value `u32::MAX` is used to indicate a premature end of the list
-    used_streams:           Pin<Box<[u32; MAX_STREAMS]>>,
+    used_streams:           UnsafeCell<Pin<Box<[u32; MAX_STREAMS]>>>,
     /// redundant over `created_streams_count` & `finished_streams_count`
     used_streams_count:     AtomicU32,
     /// used to coordinate syncing between `vacant_streams` and `used_streams`
@@ -48,9 +49,9 @@ pub struct StreamsManagerBase<'a, ItemType:           'a,
     /// coordinates writes to the wakers -- TODO might not be needed if we use AtomicPointers on `wakers`
     wakers_lock:            AtomicBool,
     /// holds wakers for each stream id #
-    wakers:                 Pin<Box<[Option<Waker>; MAX_STREAMS]>>,
+    wakers:                 UnsafeCell<Pin<Box<[Option<Waker>; MAX_STREAMS]>>>,
     /// signals for Streams to end or to continue waiting for elements
-    keep_streams_running:   Pin<Box<[bool; MAX_STREAMS]>>,
+    keep_streams_running:   UnsafeCell<Pin<Box<[bool; MAX_STREAMS]>>>,
     /// for logs
     streams_manager_name:    String,
 
@@ -66,19 +67,19 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Self {
         Self {
             vacant_streams:         {
-                                        let vacant_streams = Box::pin(FullSyncMove::<u32, MAX_STREAMS>::new());
+                                        let vacant_streams = FullSyncMove::<u32, MAX_STREAMS>::new();
                                         for stream_id in 0..MAX_STREAMS as u32 {
                                             vacant_streams.publish_movable(stream_id);
                                         }
                                         vacant_streams
                                     },
-            used_streams:           Box::pin([u32::MAX; MAX_STREAMS]),
+            used_streams:           UnsafeCell::new(Box::pin([u32::MAX; MAX_STREAMS])),
             used_streams_count:     AtomicU32::new(0),
             created_streams_count:  AtomicU32::new(0),
             finished_streams_count: AtomicU32::new(0),
-            wakers:                 Box::pin((0..MAX_STREAMS).map(|_| Option::<Waker>::None).collect::<Vec<_>>().try_into().unwrap()),
+            wakers:                 UnsafeCell::new(Box::pin((0..MAX_STREAMS).map(|_| Option::<Waker>::None).collect::<Vec<_>>().try_into().unwrap())),
             wakers_lock:            AtomicBool::new(false),
-            keep_streams_running:   Box::pin([false; MAX_STREAMS]),
+            keep_streams_running:   UnsafeCell::new(Box::pin([false; MAX_STREAMS])),
             streams_lock:           AtomicBool::new(false),
             streams_manager_name:   streams_manager_name.into(),
             _phanrom:               Default::default(),
@@ -99,8 +100,8 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             None => panic!("StreamsManager: '{}' has a MAX_STREAMS of {MAX_STREAMS} -- which just got exhausted: stats: {} streams were created; {} dropped. Please, increase the limit or fix the LOGIC BUG!",
                            self.streams_manager_name, self.created_streams_count.load(Relaxed), self.finished_streams_count.load(Relaxed)),
         };
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        mutable_self.keep_streams_running[stream_id as usize] = true;
+        let mut keep_streams_running = unsafe { &mut * self.keep_streams_running.get() };
+        keep_streams_running[stream_id as usize] = true;
         self.sync_vacant_and_used_streams();
         stream_id
     }
@@ -108,12 +109,13 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// Wakes the `stream_id` -- for instance, when an element arrives at an empty container.
     #[inline(always)]
     pub fn wake_stream(&self, stream_id: u32) {
-        match unsafe {self.wakers.get_unchecked(stream_id as usize)} {
+        let wakers = unsafe { &* self.wakers.get() };
+        match unsafe {wakers.get_unchecked(stream_id as usize)} {
             Some(waker) => waker.wake_by_ref(),
             None => {
                 // try again, syncing
                 ogre_sync::lock(&self.wakers_lock);
-                if let Some(waker) = unsafe {self.wakers.get_unchecked(stream_id as usize)} {
+                if let Some(waker) = unsafe {wakers.get_unchecked(stream_id as usize)} {
                     waker.wake_by_ref();
                 }
                 ogre_sync::unlock(&self.wakers_lock);
@@ -134,21 +136,25 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// Returns `false` if the `Stream` has been signaled to end its operations, causing it to report "out-of-elements" as soon as possible.
     #[inline(always)]
     pub fn keep_stream_running(&self, stream_id: u32) -> bool {
-        unsafe { *self.keep_streams_running.get_unchecked(stream_id as usize) }
+        unsafe {
+            let keep_streams_running = &* self.keep_streams_running.get();
+            *keep_streams_running.get_unchecked(stream_id as usize)
+        }
     }
 
     /// Signals `stream_id` to end, as soon as possible -- making it reach its end-of-life.\
     /// Also guarantees that it will be awoken to react to the command immediately
     pub fn cancel_stream(&self, stream_id: u32) {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        mutable_self.keep_streams_running[stream_id as usize] = false;
+        let mut keep_streams_running = unsafe { &mut * self.keep_streams_running.get() };
+        keep_streams_running[stream_id as usize] = false;
         self.wake_stream(stream_id);
     }
 
     /// Signals all `Stream`s to end as soon as possible (making them reach their "out of elements" phase).\
     /// Any parked streams are awaken, so they may end as well.
     pub fn cancel_all_streams(&self) {
-        for stream_id in self.used_streams.iter() {
+        let used_streams = unsafe { &* self.used_streams.get() };
+        for stream_id in used_streams.iter() {
             if *stream_id == u32::MAX {
                 break
             }
@@ -159,14 +165,14 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     #[inline(always)]
     pub fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
 
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mut wakers = unsafe { &mut * self.wakers.get() };
 
         macro_rules! set {
             () => {
                 let waker = waker.clone();
-                ogre_sync::lock(&mutable_self.wakers_lock);
-                let waker = unsafe { mutable_self.wakers.get_unchecked_mut(stream_id as usize).insert(waker) };
-                ogre_sync::unlock(&mutable_self.wakers_lock);
+                ogre_sync::lock(&self.wakers_lock);
+                let waker = unsafe { wakers.get_unchecked_mut(stream_id as usize).insert(waker) };
+                ogre_sync::unlock(&self.wakers_lock);
                 // the producer might have just woken the old version of the waker,
                 // so the following waking up line is needed to assure the consumers won't ever hang
                 // (as demonstrated by tests)
@@ -174,7 +180,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             }
         }
 
-        match unsafe { mutable_self.wakers.get_unchecked_mut(stream_id as usize) } {
+        match unsafe { wakers.get_unchecked_mut(stream_id as usize) } {
             Some(registered_waker) => {
                 if !registered_waker.will_wake(waker) {
                     set!();
@@ -197,30 +203,30 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     ///   3) Eventually, a second item is sent: now the queue has length 2 and the send logic will wake consumer #1
     ///   4) Consumer #1, since it was not dropped, will be awaken and will run until the channel is empty again -- consuming both elements.
     pub fn report_stream_dropped(&self, stream_id: u32) {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mut wakers = unsafe { &mut * self.wakers.get() };
         ogre_sync::lock(&self.wakers_lock);
-        mutable_self.wakers[stream_id as usize] = None;
+        wakers[stream_id as usize] = None;
         ogre_sync::unlock(&self.wakers_lock);
-        mutable_self.finished_streams_count.fetch_add(1, Relaxed);
-        mutable_self.used_streams_count.fetch_sub(1, Relaxed);
-        mutable_self.vacant_streams.publish_movable(stream_id);
-        mutable_self.sync_vacant_and_used_streams();
+        self.finished_streams_count.fetch_add(1, Relaxed);
+        self.used_streams_count.fetch_sub(1, Relaxed);
+        self.vacant_streams.publish_movable(stream_id);
+        self.sync_vacant_and_used_streams();
     }
 
     /// Return the ids of the used streams.\
     /// WARNING: the sentinel value u32::MAX is used to indicate a premature end of the list
     #[inline(always)]
     pub fn used_streams(&self) -> &[u32; MAX_STREAMS] {
-        &self.used_streams
+        unsafe { &* self.used_streams.get() }
     }
 
     /// rebuilds the `used_streams` list based of the current `vacant_items`
     #[inline(always)]
     fn sync_vacant_and_used_streams(&self) {
+        let mut used_streams = unsafe { &mut * self.used_streams.get() };
         ogre_sync::lock(&self.streams_lock);
         let mut vacant = unsafe { self.vacant_streams.peek_remaining().concat() };
         vacant.sort_unstable();
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
         let mut vacant_iter = vacant.iter();
         let mut i = 0;
         let mut last_used_stream_id = -1;
@@ -229,20 +235,20 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
                 Some(next_vacant_stream_id) => {
                     for used_stream_id in i .. *next_vacant_stream_id {
                         last_used_stream_id += 1;
-                        unsafe { *mutable_self.used_streams.get_unchecked_mut(last_used_stream_id as usize)  = used_stream_id };
+                        unsafe { *used_streams.get_unchecked_mut(last_used_stream_id as usize)  = used_stream_id };
                         i += 1;
                     }
                     i += 1;
                 }
                 None => {
                     last_used_stream_id += 1;
-                    unsafe { *mutable_self.used_streams.get_unchecked_mut(last_used_stream_id as usize) = i };
+                    unsafe { *used_streams.get_unchecked_mut(last_used_stream_id as usize) = i };
                     i += 1;
                 }
             }
         }
         for i in (last_used_stream_id + 1) as usize .. MAX_STREAMS {
-            unsafe { *mutable_self.used_streams.get_unchecked_mut(i) = u32::MAX };
+            unsafe { *used_streams.get_unchecked_mut(i) = u32::MAX };
         }
         ogre_sync::unlock(&self.streams_lock);
     }
@@ -279,7 +285,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             .is_some();
 
         debug_assert_eq!(false, is_vacant(), "Mutiny's `StreamsManager` @ end_stream(): BUG! stream_id {stream_id} is not running! Running ones are {:?}",
-                                             self.used_streams.iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
+                                             unsafe { &*self.used_streams.get() } .iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
 
         let start = Instant::now();
         self.flush(timeout, pending_items_count).await;
@@ -317,3 +323,19 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     }
 
 }
+
+
+// TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
+unsafe impl<ItemType,
+            const MAX_STREAMS:  usize,
+            DerivativeItemType>
+Send for
+StreamsManagerBase<'_, ItemType, MAX_STREAMS, DerivativeItemType> {}
+
+// TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
+unsafe impl<ItemType,
+            const MAX_STREAMS:  usize,
+            DerivativeItemType>
+Sync for
+StreamsManagerBase<'_, ItemType, MAX_STREAMS, DerivativeItemType> {}
+

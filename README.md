@@ -60,6 +60,7 @@ Core components:
 
 
 **NOTE: This crate is new, but actively used in production: no known bugs exist (and MIRI says we're fine), speed is amazing, API is reasonably stable, but improved docs & code cleanup will still be (slowly) improved, along with any evolutions from community feedback**
+**MIRI: Not all parts of this crate are testable with MIRI, as of 2023-06-14: "ready events from epoll_wait is not yet implemented"; "mmap syscalls" and some other functionalities are not available in MIRI -- but what is able to be tested, passes.**
 
 
 # Performance

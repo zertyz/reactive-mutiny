@@ -123,8 +123,8 @@ OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Deref
-for OgreArc<DataType, OgreAllocatorType> {
+Deref for
+OgreArc<DataType, OgreAllocatorType> {
 
     type Target = DataType;
 
@@ -138,8 +138,8 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-DerefMut
-for OgreArc<DataType, OgreAllocatorType> {
+DerefMut for
+OgreArc<DataType, OgreAllocatorType> {
 
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -151,8 +151,8 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:         Debug + Send + Sync,
     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Clone
-for OgreArc<DataType, OgreAllocatorType> {
+Clone for
+OgreArc<DataType, OgreAllocatorType> {
 
     #[inline(always)]
     fn clone(&self) -> Self {
@@ -167,8 +167,8 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync + Display,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Display
-for OgreArc<DataType, OgreAllocatorType> {
+Display for
+OgreArc<DataType, OgreAllocatorType> {
 
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.deref(), f)
@@ -178,8 +178,8 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Debug
-for OgreArc<DataType, OgreAllocatorType> {
+Debug for
+OgreArc<DataType, OgreAllocatorType> {
 
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let inner = unsafe { self.inner.as_ref() };
@@ -190,8 +190,8 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-PartialEq<Self>
-for OgreArc<DataType, OgreAllocatorType>
+PartialEq<Self> for
+OgreArc<DataType, OgreAllocatorType>
 where DataType: PartialEq {
 
     fn eq(&self, other: &Self) -> bool {
@@ -202,8 +202,8 @@ where DataType: PartialEq {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Drop
-for OgreArc<DataType, OgreAllocatorType> {
+Drop for
+OgreArc<DataType, OgreAllocatorType> {
 
     #[inline(always)]
     fn drop(&mut self) {
@@ -213,7 +213,6 @@ for OgreArc<DataType, OgreAllocatorType> {
             return;
         }
         atomic::fence(Acquire);
-        //unsafe { ptr::drop_in_place(Self::get_mut_unchecked(self)) };     // does this belong here on on the allocator? Do a test (using string) to prove its necessity: no leaks should occur
         inner.allocator.dealloc_id(inner.data_id);
         let boxed = unsafe { Box::from_raw(inner) };
         drop(boxed);
@@ -223,13 +222,13 @@ for OgreArc<DataType, OgreAllocatorType> {
 
 unsafe impl<DataType:          Debug + Send + Sync,
             OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Send
-for OgreArc<DataType, OgreAllocatorType> {}
+Send for
+OgreArc<DataType, OgreAllocatorType> {}
 
 unsafe impl<DataType:          Debug + Send + Sync,
             OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Sync
-for OgreArc<DataType, OgreAllocatorType> {}
+Sync for
+OgreArc<DataType, OgreAllocatorType> {}
 
 
 /// This is the Unique part that cloned [OgreArc]s reference to
@@ -244,8 +243,8 @@ struct InnerOgreArc<DataType:          Debug + Send + Sync,
 
 impl<DataType:         Debug + Send + Sync,
     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Debug
-for InnerOgreArc<DataType, OgreAllocatorType> {
+Debug for
+InnerOgreArc<DataType, OgreAllocatorType> {
 
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "InnerOgreArc {{allocator: {:?}, data_id: #{}:{:?}, references_count: {}}}",

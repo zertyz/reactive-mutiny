@@ -312,7 +312,7 @@ FastSender<MessagesType, DisconnectionReasonType> {
     /// should be called just once
     pub fn stream(self: Arc<Self>) -> impl Stream<Item=MessagesType> {
         stream::poll_fn(move |cx| {
-            let mutable_self = unsafe {&mut *((Arc::as_ptr(&self)) as *mut Self)};
+            let mut mutable_self = unsafe { &mut *(&*(Arc::as_ptr(&self) as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
             mutable_self.waker.get_or_insert_with(|| cx.waker().clone());
             if let Ok(mut mutable_to_send_messages) = self.to_send_messages.try_lock() {
                 match mutable_to_send_messages.pop_front() {
@@ -336,7 +336,7 @@ FastSender<MessagesType, DisconnectionReasonType> {
 
     /// Marks this sender as closed, which should cause the connection to be dropped
     pub fn close(&self) {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         mutable_self.closed = true;
         // wake the stream
         if let Some(waker) = &self.waker {

@@ -25,6 +25,7 @@ use std::{
     fmt::Debug,
     task::{Waker},
 };
+use std::mem::MaybeUninit;
 use async_trait::async_trait;
 
 
@@ -62,7 +63,11 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager:     StreamsManagerBase::new(name),
             allocator:           OgreAllocatorType::new(),
-            dispatcher_managers: [0; MAX_STREAMS].map(|_| AtomicMove::<OgreArc<ItemType, OgreAllocatorType>, BUFFER_SIZE>::new()),
+            dispatcher_managers: [0; MAX_STREAMS].map(|_| AtomicMove::<OgreArc<ItemType, OgreAllocatorType>, BUFFER_SIZE>::with_initializer(|| unsafe {
+                let mut slot = MaybeUninit::<OgreArc<ItemType, OgreAllocatorType>>::uninit();
+                slot.as_mut_ptr().write_bytes(1u8, 1);  // initializing with a non-zero value makes MIRI happily state there isn't any UB involved (actually, any value is equally good)
+                slot.assume_init()
+            })),
         })
     }
 

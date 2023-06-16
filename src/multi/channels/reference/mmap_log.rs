@@ -98,7 +98,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
     fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) where Self: ChannelConsumer<'a, &'static ItemType> {
         let ref_self: &Self = self;
-        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let mutable_self = unsafe { &mut *(&*(ref_self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let stream_id = self.streams_manager.create_stream_id();
         mutable_self.subscribers[stream_id as usize] = MMapMetaSubscriber::Fixed(self.log_queue.subscribe_to_old_events_only());
         (MutinyStream::new(stream_id, self), stream_id)
@@ -106,7 +106,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
     fn create_stream_for_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) {
         let ref_self: &Self = self;
-        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let mutable_self = unsafe { &mut *(&*(ref_self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let stream_id = self.streams_manager.create_stream_id();
         mutable_self.subscribers[stream_id as usize] = MMapMetaSubscriber::Dynamic(self.log_queue.subscribe_to_new_events_only());
         (MutinyStream::new(stream_id, self), stream_id)
@@ -114,7 +114,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
     fn create_streams_for_old_and_new_events(self: &Arc<Self>) -> ((MutinyStream<'a, ItemType, Self, &'static ItemType>, u32), (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32)) where Self: ChannelConsumer<'a, &'static ItemType> {
         let ref_self: &Self = self;
-        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let mutable_self = unsafe { &mut *(&*(ref_self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let (stream_of_oldies, stream_of_newies) = self.log_queue.subscribe_to_separated_old_and_new_events();
         let stream_of_oldies_id = self.streams_manager.create_stream_id();
         let stream_of_newies_id = self.streams_manager.create_stream_id();
@@ -126,7 +126,7 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
     fn create_stream_for_old_and_new_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) where Self: ChannelConsumer<'a, &'static ItemType> {
         let ref_self: &Self = self;
-        let mutable_self = unsafe { &mut *((ref_self as *const Self) as *mut Self) };
+        let mutable_self = unsafe { &mut *(&*(ref_self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let stream_id = self.streams_manager.create_stream_id();
         mutable_self.subscribers[stream_id as usize] = MMapMetaSubscriber::Dynamic(self.log_queue.subscribe_to_joined_old_and_new_events());
         (MutinyStream::new(stream_id, self), stream_id)

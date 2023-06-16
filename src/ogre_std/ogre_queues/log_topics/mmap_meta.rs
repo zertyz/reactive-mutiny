@@ -63,7 +63,7 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
     /// Even if the mmapped data grow, the returned reference is always valid, as the data never shrinks.
     fn buffer_as_slice_mut(&self) -> &'a mut [SlotType] {
         unsafe {
-            let mutable_self = &mut *((self as *const Self) as *mut Self);
+            let mutable_self = &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get();
             std::slice::from_raw_parts_mut(&mut mutable_self.mmap_contents.first_buffer_element as *mut SlotType, mutable_self.mmap_contents.slice_length.load(Relaxed))
         }
     }
@@ -172,7 +172,7 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
 
     #[inline(always)]
     fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> Option<NonZeroU32> {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
         let slot = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
         setter(slot);
@@ -262,7 +262,7 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaDynamicS
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let head = self.head.fetch_add(1, Relaxed);
         let tail = self.meta_mmap_log_topic.mmap_contents.consumer_tail.load(Relaxed);
         // check if there is an element available
@@ -320,7 +320,7 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaFixedSub
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let head = self.head.fetch_add(1, Relaxed);
         // check if there is an element available
         if head >= self.fixed_tail {

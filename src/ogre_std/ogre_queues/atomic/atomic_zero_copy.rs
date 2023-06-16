@@ -164,7 +164,7 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn release_leaked_ref(&'a self, slot: &'a SlotType) {
-        let mutable_slot = unsafe {&mut *((slot as *const SlotType) as *mut SlotType)};
+        let mutable_slot = unsafe { &mut *(&*(slot as *const SlotType as *const std::cell::UnsafeCell<SlotType>)).get() };
         self.allocator.dealloc_ref(mutable_slot);
     }
 

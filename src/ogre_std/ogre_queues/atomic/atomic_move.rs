@@ -14,6 +14,7 @@ use std::{
     mem::MaybeUninit,
     ptr,
 };
+use std::cell::UnsafeCell;
 use std::mem::ManuallyDrop;
 use std::num::NonZeroU32;
 use std::pin::Pin;
@@ -35,7 +36,7 @@ pub struct AtomicMove<SlotType:          Debug,
     /// -- may receed if exceeded the buffer capacity
     pub(crate) enqueuer_tail: CachePadded<AtomicU32>,
     /// holder for the queue elements
-    pub(crate) buffer: Pin<Box<[ManuallyDrop<SlotType>; BUFFER_SIZE]>>,
+    pub(crate) buffer: UnsafeCell<Pin<Box<[ManuallyDrop<SlotType>; BUFFER_SIZE]>>>,
     /// increase-before-load field, marking where the next element should be retrieved from
     /// -- may receed if it gets ahead of the published `tail`
     pub(crate) dequeuer_head: CachePadded<AtomicU32>,
@@ -49,6 +50,10 @@ MoveContainer<SlotType> for
 AtomicMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
+        Self::with_initializer(|| unsafe { MaybeUninit::zeroed().assume_init() })
+    }
+
+    fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // ignore the compiler warning regarding this 'path statement having no effect' -- it does: assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
@@ -58,7 +63,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
             tail:                 CachePadded::new(AtomicU32::new(0)),
             dequeuer_head:        CachePadded::new(AtomicU32::new(0)),
             enqueuer_tail:        CachePadded::new(AtomicU32::new(0)),
-            buffer:               Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
+            buffer:               UnsafeCell::new(Box::pin([0; BUFFER_SIZE].map(|_| ManuallyDrop::new(slot_initializer())))),
         }
     }
 }
@@ -149,15 +154,13 @@ AtomicMove<SlotType, BUFFER_SIZE> {
             [&[],&[]]
         } else if head_index < tail_index {
             unsafe {
-                let const_ptr = self.buffer.as_ptr();
-                let ptr = const_ptr as *const [SlotType; BUFFER_SIZE];
+                let ptr = self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>;
                 let array = &*ptr;
                 [&array[head_index ..tail_index], &[]]
             }
         } else {
             unsafe {
-                let const_ptr = self.buffer.as_ptr();
-                let ptr = const_ptr as *const [SlotType; BUFFER_SIZE];
+                let ptr = self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>;
                 let array = &*ptr;
                 [&array[head_index..BUFFER_SIZE], &array[0..tail_index]]
             }
@@ -182,11 +185,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&mut SlotType, /*slot_id:*/ u32, /*len_before:*/ u32)> {
-        let mutable_buffer = unsafe {
-            let const_ptr = self.buffer.as_ptr();
-            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
-            &mut *mut_ptr
-        };
+        let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
         let mut slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
         let mut len_before;
         loop {
@@ -245,11 +244,8 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn consume_leaking_internal(&self, report_empty_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*slot_id:*/ u32, /*len_before:*/ i32)> {
-        let mutable_buffer = unsafe {
-            let const_ptr = self.buffer.as_ptr();
-            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
-            &mut *mut_ptr
-        };
+        let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
+
         let mut slot_id = self.dequeuer_head.fetch_add(1, Relaxed);
         let mut len_before;
         loop {
@@ -294,13 +290,16 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     /// returns the id (within the Ring Buffer) that the given `slot` reference occupies
     #[inline(always)]
     fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
-        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.as_ptr() as *const SlotType) } ) as usize) as u32
+        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.get() as *const SlotType) } ) as usize) as u32
     }
 
     /// returns a reference to the slot pointed to by `slot_id`
     #[inline(always)]
     fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
-        unsafe { self.buffer.get_unchecked(slot_id as usize % BUFFER_SIZE) }
+        unsafe {
+            let buffer = &*self.buffer.get();
+            buffer.get_unchecked(slot_id as usize % BUFFER_SIZE)
+        }
     }
 }
 
@@ -319,6 +318,18 @@ AtomicMove<SlotType, BUFFER_SIZE> {
         }
     }
 }
+
+// TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
+unsafe impl<SlotType:          Debug,
+            const BUFFER_SIZE: usize>
+Sync for
+AtomicMove<SlotType, BUFFER_SIZE> {}
+
+// TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
+unsafe impl<SlotType:          Debug,
+            const BUFFER_SIZE: usize>
+Send for
+AtomicMove<SlotType, BUFFER_SIZE> {}
 
 
 #[inline(always)]

@@ -16,6 +16,7 @@ use std::{
     },
     pin::Pin,
     num::NonZeroU32,
+    cell::UnsafeCell,
 };
 
 
@@ -30,12 +31,12 @@ use std::{
 pub struct FullSyncMove<SlotType:          Debug,
                         const BUFFER_SIZE: usize> {
 
-    head: u32,
-    tail: u32,
+    head: UnsafeCell<u32>,
+    tail: UnsafeCell<u32>,
     /// guards critical regions to allow concurrency
     concurrency_guard: AtomicBool,
     /// holder for the elements
-    buffer: Pin<Box<[ManuallyDrop<SlotType>; BUFFER_SIZE]>>,
+    buffer: UnsafeCell<Pin<Box<[ManuallyDrop<SlotType>; BUFFER_SIZE]>>>,
 
 }
 
@@ -45,18 +46,21 @@ MoveContainer<SlotType> for
 FullSyncMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
+        Self::with_initializer(|| unsafe { MaybeUninit::zeroed().assume_init() })
+    }
+
+    fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // ignore the compiler warning regarding 'path statement having no effect' -- it does: assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
         // }
         Self {
-            head:              0,
-            tail:              0,
+            head:              UnsafeCell::new(0),
+            tail:              UnsafeCell::new(0),
             concurrency_guard: AtomicBool::new(false),
-            buffer:            Box::pin(unsafe { MaybeUninit::zeroed().assume_init() }),
+            buffer:            UnsafeCell::new(Box::pin([0; BUFFER_SIZE].map(|_| ManuallyDrop::new(slot_initializer())))),
         }
     }
-
 }
 
 impl<'a, SlotType:          'a + Debug,
@@ -100,7 +104,9 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn available_elements_count(&self) -> usize {
-        self.tail.overflowing_sub(self.head).0 as usize
+        let tail = unsafe { &* self.tail.get() };
+        let head = unsafe { &* self.head.get() };
+        tail.overflowing_sub(*head).0 as usize
     }
 
     #[inline(always)]
@@ -110,6 +116,8 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
     fn debug_info(&self) -> String {
         let Self {concurrency_guard, tail, buffer: _, head} = self;
+        let tail = unsafe { &* tail.get() };
+        let head = unsafe { &* head.get() };
         let concurrency_guard = concurrency_guard.load(Relaxed);
         format!("ogre_queues::full_sync_meta's state: {{head: {head}, tail: {tail}, (len: {}), locked: {concurrency_guard}, elements: {{{}}}'}}",
                 self.available_elements_count(),
@@ -141,21 +149,23 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
     unsafe fn peek_remaining(&self) -> [&[SlotType];2] {
-        let head_index = self.head as usize % BUFFER_SIZE;
-        let tail_index = self.tail as usize % BUFFER_SIZE;
-        if self.head == self.tail {
+        let tail = *unsafe { &* self.tail.get() };
+        let head = *unsafe { &* self.head.get() };
+        let head_index = head as usize % BUFFER_SIZE;
+        let tail_index = tail as usize % BUFFER_SIZE;
+        if head == tail {
             [&[],&[]]
         } else if head_index < tail_index {
             unsafe {
-                let const_ptr = self.buffer.as_ptr();
-                let ptr = const_ptr as *const [SlotType; BUFFER_SIZE];
+                let const_ptr = self.buffer.get();
+                let ptr = const_ptr as *const Box<[SlotType; BUFFER_SIZE]>;
                 let array = &*ptr;
                 [&array[head_index ..tail_index], &[]]
             }
         } else {
             unsafe {
-                let const_ptr = self.buffer.as_ptr();
-                let ptr = const_ptr as *const [SlotType; BUFFER_SIZE];
+                let const_ptr = self.buffer.get();
+                let ptr = const_ptr as *const Box<[SlotType; BUFFER_SIZE]>;
                 let array = &*ptr;
                 [&array[head_index..BUFFER_SIZE], &array[0..tail_index]]
             }
@@ -180,17 +190,15 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ u32)> {
-        let mutable_buffer = unsafe {
-            let const_ptr = self.buffer.as_ptr();
-            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
-            &mut *mut_ptr
-        };
+        let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
         let mut len_before;
         loop {
             ogre_sync::lock(&self.concurrency_guard);
-            len_before = self.tail.overflowing_sub(self.head).0;
+            let tail = *unsafe { &* self.tail.get() };
+            let head = *unsafe { &* self.head.get() };
+            len_before = tail.overflowing_sub(head).0;
             if len_before < BUFFER_SIZE as u32 {
-                break unsafe { Some( (mutable_buffer.get_unchecked_mut(self.tail as usize % BUFFER_SIZE), len_before) ) }
+                break unsafe { Some( (mutable_buffer.get_unchecked_mut(tail as usize % BUFFER_SIZE), len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_full = report_full_fn();
@@ -206,16 +214,16 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// -- assumes the lock is in the acquired state
     #[inline(always)]
     fn publish_leaked_internal(&self) {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        mutable_self.tail = self.tail.overflowing_add(1).0;
+        let tail = unsafe { &mut * self.tail.get() };
+        *tail = tail.overflowing_add(1).0;
     }
 
     /// adds back to the pool the slot just acquired by [leak_slot_internal()], disrupting the publishing pattern\
     /// -- assumes the lock is in the acquired state, leaving it untouched
     #[inline(always)]
     fn unleak_internal(&self) {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        mutable_self.tail = self.tail.overflowing_sub(1).0;
+        let tail = unsafe { &mut * self.tail.get() };
+        *tail = tail.overflowing_sub(1).0;
     }
 
     /// gets hold of a reference to the slot containing the next data to be processed, LEAVING THE LOCK IN THE ACQUIRED STATE IN CASE IT SUCCEEDS,\
@@ -226,17 +234,14 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
     fn consume_leaking_internal(&self, report_empty_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ i32)> {
-        let mutable_buffer = unsafe {
-            let const_ptr = self.buffer.as_ptr();
-            let mut_ptr = const_ptr as *mut [SlotType; BUFFER_SIZE];
-            &mut *mut_ptr
-        };
+        let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
         let mut len_before;
         loop {
             ogre_sync::lock(&self.concurrency_guard);
+            let head = *unsafe { &mut * self.head.get() };
             len_before = self.available_elements_count() as i32;
             if len_before > 0 {
-                break unsafe { Some( (mutable_buffer.get_unchecked_mut(self.head as usize % BUFFER_SIZE), len_before) ) }
+                break unsafe { Some( (mutable_buffer.get_unchecked_mut(head as usize % BUFFER_SIZE), len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_empty = report_empty_fn();
@@ -251,20 +256,23 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// -- assumes the lock is in the acquire state, leaving it untouched
     #[inline(always)]
     fn release_leaked_internal(&self) {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
-        mutable_self.head = self.head.overflowing_add(1).0;
+        let head = unsafe { &mut * self.head.get() };
+        *head = head.overflowing_add(1).0;
     }
 
     /// returns the id (within the Ring Buffer) that the given `slot` reference occupies
     #[inline(always)]
     fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
-        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.as_ptr() as *const SlotType) } ) as usize) as u32
+        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.get() as *const SlotType) } ) as usize) as u32
     }
 
     /// returns a reference to the slot pointed to by `slot_id`
     #[inline(always)]
     fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
-        unsafe { self.buffer.get_unchecked(slot_id as usize % BUFFER_SIZE) }
+        unsafe {
+            let buffer = &*self.buffer.get();
+            buffer.get_unchecked(slot_id as usize % BUFFER_SIZE)
+        }
     }
 
 }
@@ -284,6 +292,19 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
         }
     }
 }
+
+// TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
+unsafe impl<SlotType:          Debug,
+            const BUFFER_SIZE: usize>
+Send for
+FullSyncMove<SlotType, BUFFER_SIZE> {}
+
+// TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
+unsafe impl<SlotType:          Debug,
+    const BUFFER_SIZE: usize>
+Sync for
+FullSyncMove<SlotType, BUFFER_SIZE> {}
+
 
 #[cfg(any(test,doc))]
 mod tests {

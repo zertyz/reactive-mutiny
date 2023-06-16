@@ -43,7 +43,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channels:        [Pin<Box<FullSyncMove<Arc<ItemType>, BUFFER_SIZE>>>; MAX_STREAMS],
+    channels:        [FullSyncMove<Arc<ItemType>, BUFFER_SIZE>; MAX_STREAMS],
 }
 
 
@@ -57,7 +57,11 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(streams_manager_name),
-            channels:        [0; MAX_STREAMS].map(|_| Box::pin(FullSyncMove::<Arc<ItemType>, BUFFER_SIZE>::new())),
+            channels:        [0; MAX_STREAMS].map(|_| FullSyncMove::<Arc<ItemType>, BUFFER_SIZE>::with_initializer(|| unsafe {
+                let mut slot = MaybeUninit::<Arc<ItemType>>::uninit();
+                slot.as_mut_ptr().write_bytes(1u8, 1);  // initializing with a non-zero value makes MIRI happily state there isn't any UB involved (actually, any value is equally good)
+                slot.assume_init()
+            })),
         })
     }
 

@@ -48,7 +48,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
 
     #[inline(always)]
     fn push(&self, element: SlotType) -> bool {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
         if self.head >= BUFFER_SIZE as u32 {
             if METRICS {
@@ -71,7 +71,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
 
     #[inline(always)]
     fn pop(&self) -> Option<SlotType> {
-        let mutable_self = unsafe {&mut *((self as *const Self) as *mut Self)};
+        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
         while self.head == 0 {
             if METRICS {

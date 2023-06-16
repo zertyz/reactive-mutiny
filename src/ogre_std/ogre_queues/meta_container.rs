@@ -20,7 +20,10 @@ pub trait MetaContainer<'a, SlotType: 'a>: MetaPublisher<'a, SlotType> + MetaSub
 /// See [ZeroCopyContainer]
 pub trait MoveContainer<SlotType>: MovePublisher<SlotType> + MoveSubscriber<SlotType> {
 
-    /// Instantiates the container of movable data
+    /// Instantiates the container of movable data with all zeroes
     fn new() -> Self;
+
+    /// Instantiates the container of movable data with the initial, empty, slots filled by the `slot_initializer()` function
+    fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self;
 
 }

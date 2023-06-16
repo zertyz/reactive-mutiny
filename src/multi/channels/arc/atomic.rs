@@ -25,6 +25,7 @@ use std::{
 };
 use async_trait::async_trait;
 use log::{warn};
+use tokio::io::AsyncWriteExt;
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
@@ -41,7 +42,7 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channels:        [Pin<Box<AtomicMove<Arc<ItemType>, BUFFER_SIZE>>>; MAX_STREAMS],
+    channels:        [AtomicMove<Arc<ItemType>, BUFFER_SIZE>; MAX_STREAMS],
 
 }
 
@@ -56,7 +57,11 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
-            channels:        [0; MAX_STREAMS].map(|_| Box::pin(AtomicMove::<Arc<ItemType>, BUFFER_SIZE>::new())),
+            channels:        [0; MAX_STREAMS].map(|_| AtomicMove::<Arc<ItemType>, BUFFER_SIZE>::with_initializer(|| unsafe {
+                let mut slot = MaybeUninit::<Arc<ItemType>>::uninit();
+                slot.as_mut_ptr().write_bytes(1u8, 1);  // initializing with a non-zero value makes MIRI happily state there isn't any UB involved (actually, any value is equally good)
+                slot.assume_init()
+            })),
         })
     }
 
