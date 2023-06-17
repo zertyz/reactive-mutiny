@@ -48,9 +48,9 @@ async fn elaborated_generics_on_call_chains() {
     // notice the simple `pipeline_builder`, that is able to make it down the chain of `with_generics()` call only in the `Uni` / `Multi` form
     // (as opposed to passing the `pipeline_builder` as a parameter to `with_generics()`, which would, then, create the `Uni` / `Multi` there)
     let uni = Uni::<CustomType<bool>>::new("advanced generics")
-            .spawn_non_futures_non_fallibles_executor(1,
-                                                      |remote_messages_stream| remote_messages_stream.map(|in_msg| CustomType {data: true}),
-                                                      |_executor| async {});
+            .spawn_non_futures_non_fallibles_executors(1,
+                                                       |remote_messages_stream| remote_messages_stream.map(|in_msg| CustomType {data: true}),
+                                                       |_executor| async {});
     with_generics(uni, CustomType {data: false}).await;
 
 }

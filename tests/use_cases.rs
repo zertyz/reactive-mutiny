@@ -32,9 +32,12 @@ async fn unis_of_arcs() {
     let sum_ref = Arc::clone(&sum);
     let executor_status_ref = Arc::clone(&executor_status);
     let uni = UniMoveFullSync::<Arc<u32>, 1024>::new("uni of arcs")
-        .spawn_non_futures_non_fallibles_executor(1,
-                                                  move |payloads| payloads.map(move | payload| sum_ref.fetch_add(*payload, Relaxed)),
-                                                  move |executor| async move {
+        .spawn_non_futures_non_fallibles_executors(1,
+                                                   move |payloads| {
+                                                      let sum_ref = Arc::clone(&sum_ref);
+                                                      payloads.map(move | payload| sum_ref.fetch_add(*payload, Relaxed))
+                                                  },
+                                                   move |executor| async move {
                                                      executor_status_ref.lock().await.push_str(&format!("count: {}", executor.ok_events_avg_future_duration.lightweight_probe().0));
                                                  });
     let _ = uni.try_send_movable(Arc::new(123));
@@ -103,9 +106,12 @@ async fn unis_with_any_resulting_type() {
     let observed_raw_type_value = Arc::new(AtomicU32::new(0));
     let observed_raw_type_value_ref = Arc::clone(&observed_raw_type_value);
     let raw_type_uni = UniMoveAtomic::<u32, 1024>::new("Raw types results")
-        .spawn_non_futures_non_fallibles_executor(1,
-                                                  move |payloads| payloads.map(move | payload| observed_raw_type_value_ref.store(payload, Relaxed)),
-                                                  |_| async {});
+        .spawn_non_futures_non_fallibles_executors(1,
+                                                   move |payloads| {
+                                                      let observed_raw_type_value_ref = Arc::clone(&observed_raw_type_value_ref);
+                                                      payloads.map(move | payload| observed_raw_type_value_ref.store(payload, Relaxed))
+                                                  },
+                                                   |_| async {});
     assert!(raw_type_uni.try_send_movable(EXPECTED_RAW_VALUE), "couldn't send a raw value that would remain raw");
     assert!(raw_type_uni.close(Duration::from_millis(100)).await, "couldn't close the raw Uni in time");
     assert_eq!(observed_raw_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `raw_type_uni`");
@@ -114,9 +120,10 @@ async fn unis_with_any_resulting_type() {
     let observed_future_type_value = Arc::new(AtomicU32::new(0));
     let observed_future_type_value_ref = Arc::clone(&observed_future_type_value);
     let future_type_uni = UniMoveAtomic::<u32, 1024>::new("Future types results")
-        .spawn_futures_executor(1,
-                                Duration::ZERO,
-                                move |payloads| {
+        .spawn_futures_executors(1,
+                                 Duration::ZERO,
+                                 move |payloads| {
+                                    let observed_future_type_value_ref = Arc::clone(&observed_future_type_value_ref);
                                     payloads.map(move | payload| {
                                         let observed_future_type_value_ref = Arc::clone(&observed_future_type_value_ref);
                                         async move {
@@ -124,7 +131,7 @@ async fn unis_with_any_resulting_type() {
                                         }
                                     })
                                 },
-                                |_| async {});
+                                 |_| async {});
     assert!(future_type_uni.try_send_movable(EXPECTED_RAW_VALUE), "couldn't send a value that would become a future");
     assert!(future_type_uni.close(Duration::from_millis(100)).await, "couldn't close the future Uni in time");
     assert_eq!(observed_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `future_type_uni`");
@@ -133,10 +140,13 @@ async fn unis_with_any_resulting_type() {
     let observed_fallible_type_value = Arc::new(AtomicU32::new(0));
     let observed_fallible_type_value_ref = Arc::clone(&observed_fallible_type_value);
     let fallible_type_uni = UniMoveAtomic::<u32, 1024>::new("Fallible types results")
-        .spawn_fallibles_executor(1,
-                                  move |payloads| payloads.map(move | payload| Ok(observed_fallible_type_value_ref.store(payload, Relaxed)) ),
-                                  |_| {},
-                                  |_| async {});
+        .spawn_fallibles_executors(1,
+                                   move |payloads| {
+                                      let observed_fallible_type_value_ref = Arc::clone(&observed_fallible_type_value_ref);
+                                      payloads.map(move | payload| Ok(observed_fallible_type_value_ref.store(payload, Relaxed)) )
+                                  },
+                                   |_| {},
+                                   |_| async {});
     assert!(fallible_type_uni.try_send_movable(EXPECTED_RAW_VALUE), "couldn't send a value that would become fallible");
     assert!(fallible_type_uni.close(Duration::from_millis(100)).await, "couldn't close the fallible Uni in time");
     assert_eq!(observed_fallible_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_type_uni`");
@@ -145,9 +155,9 @@ async fn unis_with_any_resulting_type() {
     let observed_fallible_future_type_value = Arc::new(AtomicU32::new(0));
     let observed_fallible_future_type_value_ref = Arc::clone(&observed_fallible_future_type_value);
     let fallible_future_type_uni = UniMoveAtomic::<u32, 1024>::new("Fallible future types results")
-        .spawn_executor(1,
-                        Duration::ZERO,
-                        move |payloads| {
+        .spawn_executors(1,
+                         Duration::ZERO,
+                         move |payloads| {
                             let observed_fallible_future_type_value_ref = Arc::clone(&observed_fallible_future_type_value_ref);
                             payloads.map(move | payload| {
                                 let observed_fallible_future_type_value_ref = Arc::clone(&observed_fallible_future_type_value_ref);
@@ -157,8 +167,8 @@ async fn unis_with_any_resulting_type() {
                                 }
                             })
                         },
-                        |_| async {},
-                        |_| async {});
+                         |_| async {},
+                         |_| async {});
     assert!(fallible_future_type_uni.try_send_movable(EXPECTED_RAW_VALUE), "couldn't send a value that would become a fallible future");
     assert!(fallible_future_type_uni.close(Duration::from_millis(100)).await, "couldn't close the fallible future Uni in time");
     assert_eq!(observed_fallible_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_future_type_uni`");

@@ -76,7 +76,7 @@ mod tests {
                 .inspect(|message| println!("ZETA: Received a message: '{}'", message))
         }
         let uni = TestUni::<&str, 1024, 1>::new("doc_test()")
-            .spawn_non_futures_non_fallibles_executor(1, on_event, |_| async {});
+            .spawn_non_futures_non_fallibles_executors(1, on_event, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
@@ -94,13 +94,13 @@ mod tests {
 
         // this is the uni to work with our local variable
         let uni = TestUni::<u32, 1024, 1>::new("simple_pipeline()")
-            .spawn_non_futures_non_fallibles_executor(1,
-                                                      |stream| {
+            .spawn_non_futures_non_fallibles_executors(1,
+                                                       |stream| {
                                                           let observed_sum = Arc::clone(&observed_sum);
                                                           stream
                                                               .map(move |number| observed_sum.fetch_add(number, Relaxed))
                                                       },
-                                                      |_| async {});
+                                                       |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
 
         // now the consumer: lets suppose we share it among several different tasks -- sharing a reference is one way to do it
@@ -153,7 +153,7 @@ mod tests {
         };
 
         let uni = TestUni::<u32, 1024, 1>::new("async_elements()")
-            .spawn_executor(PARTS.len() as u32, Duration::from_secs(2), on_event, |_| async {}, |_| async {});
+            .spawn_executors(PARTS.len() as u32, Duration::from_secs(2), on_event, |_| async {}, |_| async {});
 
         let producer = |item| uni.try_send(|slot| *slot = item);
 
@@ -177,7 +177,7 @@ mod tests {
         // with counters, but without average futures resolution time measurements
         let event_name = "non_future/non_fallible event";
         let uni = TestUni::<String, 1024, 1>::new(event_name)
-            .spawn_non_futures_non_fallibles_executor(1, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executors(1, |stream| stream, |_| async {});
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer("'only count successes' payload".to_string());
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
@@ -195,9 +195,9 @@ mod tests {
         // with counters & with average futures resolution time measurements
         let event_name = "future & fallible event";
         let uni = TestUni::<String, 1024, 1>::new(event_name)
-            .spawn_executor(1,
-                            Duration::from_millis(150),
-                            |stream| {
+            .spawn_executors(1,
+                             Duration::from_millis(150),
+                             |stream| {
                                 stream.map(|payload: String| async move {
                                     if payload.contains("unsuccessful") {
                                         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -211,8 +211,8 @@ mod tests {
                                     }
                                 })
                             },
-                            |_| async {},
-                            |_| async {}
+                             |_| async {},
+                             |_| async {}
             );
         let producer = |item| uni.try_send(|slot| *slot = item);
         // for this test, produce each event twice
@@ -247,12 +247,13 @@ mod tests {
         // SIX event
         let six_fire_count_ref = Arc::clone(&six_fire_count);
         let on_six_event = move |stream: MutinyStream<'static, (), _, ()>| {
+            let six_fire_count_ref = Arc::clone(&six_fire_count_ref);
             stream.inspect(move |_| {
                 six_fire_count_ref.fetch_add(1, Relaxed);
             })
         };
         let six_uni = TestUni::<(), 1024, 1>::new("SIX event")
-            .spawn_non_futures_non_fallibles_executor(1, on_six_event, |_| async {});
+            .spawn_non_futures_non_fallibles_executors(1, on_six_event, |_| async {});
         // assures we'll close SIX only once
         let can_six_be_closed = Arc::new(AtomicBool::new(true));
         let six_uni_ref = Arc::clone(&six_uni);
@@ -300,7 +301,7 @@ mod tests {
             }
         };
         let two_uni = TestUni::<u32, 1024, 1>::new("TWO event")
-            .spawn_non_futures_non_fallibles_executor(1, on_two_event, on_two_close);
+            .spawn_non_futures_non_fallibles_executors(1, on_two_event, on_two_close);
         let two_producer = |item| two_uni.try_send(|slot| *slot = item);
 
         // FOUR event
@@ -337,7 +338,7 @@ mod tests {
             }
         };
         let four_uni = TestUni::<u32, 1024, 1>::new("FOUR event")
-            .spawn_non_futures_non_fallibles_executor(1, on_four_event, on_four_close);
+            .spawn_non_futures_non_fallibles_executors(1, on_four_event, on_four_close);
         let four_producer = |item| four_uni.try_send(|slot| *slot = item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
@@ -353,9 +354,9 @@ mod tests {
         two_producer(4);
         four_producer(5);
         tokio::time::sleep(Duration::from_millis(100)).await;     // flakiness protection: wait a tad before atomically closing `two` and `four` -- if not, `six` might be closed before the `six` event is sent, causing this test to fail.
-        unis_close_async!(two_uni, four_uni);  // notice SIX is closed here as well
-                                               // closing TWO (and, therefore, SIX) before all elements of FOUR are processed would cause the later consumer to try to publish to SIX (when it is already closed) --
-                                               // this is why both events should be closed atomically in this case -- both share the closeable resource SIX -- which happens to be another uni, but could be any other resource
+        unis_close_async!(Duration::ZERO, two_uni, four_uni);  // notice SIX is closed here as well
+                                                               // closing TWO (and, therefore, SIX) before all elements of FOUR are processed would cause the later consumer to try to publish to SIX (when it is already closed) --
+                                                               // this is why both events should be closed atomically in this case -- both share the closeable resource SIX -- which happens to be another uni, but could be any other resource
 
         assert_eq!(two_fire_count.load(Relaxed),  4, "Wrong number of events processed for TWO");
         assert_eq!(four_fire_count.load(Relaxed), 6, "Wrong number of events processed for FOUR");
@@ -411,17 +412,17 @@ mod tests {
         }
         let on_err_count_clone = Arc::clone(&on_err_count);
         let uni = TestUni::<u32, 1024, 1>::new("fallible event")
-            .spawn_executor(1,
-                            Duration::from_millis(100),
-                            on_fail_when_odd_event,
-                            move |err| {
+            .spawn_executors(1,
+                             Duration::from_millis(100),
+                             on_fail_when_odd_event,
+                             move |err| {
                                 let on_err_count_clone = Arc::clone(&on_err_count_clone);
                                 async move {
                                     on_err_count_clone.fetch_add(1, Relaxed);
                                     println!("ERROR CALLBACK WAS CALLED: '{:?}'", err);
                                 }
                             },
-                            |_| async {}
+                             |_| async {}
             );
         let producer = |item| uni.try_send(|slot| *slot = item);
         producer(0);
@@ -492,69 +493,69 @@ mod tests {
 
         let profiling_name = "metricfull_non_futures_non_fallible_uni:    ";
         let uni = TestUni::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new(profiling_name)
-            .spawn_non_futures_non_fallibles_executor(1, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executors(1, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_non_futures_non_fallible_uni:    ";
         let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
-            .spawn_non_futures_non_fallibles_executor(1, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executors(1, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "par_metricless_non_futures_non_fallible_uni:";
         let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
-            .spawn_non_futures_non_fallibles_executor(12, |stream| stream, |_| async {});
+            .spawn_non_futures_non_fallibles_executors(12, |stream| stream, |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricfull_futures_fallible_uni:            ";
         let uni = TestUni::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new(profiling_name)
-            .spawn_executor(1,
-                            Duration::ZERO,
-                            |stream| {
+            .spawn_executors(1,
+                             Duration::ZERO,
+                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
                             },
-                            |_err| async {},
-                            |_| async {});
+                             |_err| async {},
+                             |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "metricless_futures_fallible_uni:            ";
         let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
-            .spawn_executor(1,
-                            Duration::ZERO,
-                            |stream| {
+            .spawn_executors(1,
+                             Duration::ZERO,
+                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
                             },
-                            |_err| async {},
-                            |_| async {});
+                             |_err| async {},
+                             |_| async {});
         profile_uni(uni, profiling_name, 1024*FACTOR).await;
 
         let profiling_name = "timeoutable_metricfull_futures_fallible_uni:";
         let uni = TestUni::<u32, 8192, 1, {Instruments::MetricsWithoutLogs.into()}>::new(profiling_name)
-            .spawn_executor(1,
-                            Duration::from_millis(100),
-                            |stream| {
+            .spawn_executors(1,
+                             Duration::from_millis(100),
+                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
                             },
-                            |_err| async {},
-                            |_| async {});
+                             |_err| async {},
+                             |_| async {});
         profile_uni(uni, profiling_name, 768*FACTOR).await;
 
         let profiling_name = "timeoutable_metricless_futures_fallible_uni:";
         let uni = TestUni::<u32, 8192, 1, {Instruments::NoInstruments.into()}>::new(profiling_name)
-            .spawn_executor(1,
-                            Duration::from_millis(100),
-                            |stream| {
+            .spawn_executors(1,
+                             Duration::from_millis(100),
+                             |stream| {
                                 stream.map(|number| async move {
                                         Ok(number)
                                     })
                             },
-                            |_err| async {},
-                            |_| async {});
+                             |_err| async {},
+                             |_| async {});
         profile_uni(uni, profiling_name, 768*FACTOR).await;
 
         /*

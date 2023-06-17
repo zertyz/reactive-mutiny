@@ -84,12 +84,12 @@ async fn main() {
     // Somewhere, when the application starts, the Uni's event processing pipeline should be created
     // -- notice that it is here that that the answers are tied to "Queue B", but it could be anywhere else:
     let queue_a_events_handle = UniMove::<ExchangeEvent, 1024, 1>::new("Consumer of binary `ExchangeEvent`s @ Queue A / producer of binary `AnalysisEvent`s @ Queue B")
-        .spawn_non_futures_non_fallibles_executor(1,
-                                                  |exchange_events| {
+        .spawn_non_futures_non_fallibles_executors(1,
+                                                   |exchange_events| {
                                                      process(exchange_events)
                                                          .inspect(|outgoing_event| queue_b_send(outgoing_event))
                                                  },
-                                                  |_| async {});
+                                                   |_| async {});
 
     // demonstration
     ////////////////

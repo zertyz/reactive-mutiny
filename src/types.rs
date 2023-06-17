@@ -177,6 +177,8 @@ pub trait FullDuplexUniChannel<'a, ItemType:        'a + Debug + Send + Sync,
           ChannelProducer<'a, ItemType, DerivedItemType> +
           ChannelConsumer<'a, DerivedItemType> {
 
+    const MAX_STREAMS: usize;
+
     /// Returns this channel's name
     fn name(&self) -> &str;
 }
