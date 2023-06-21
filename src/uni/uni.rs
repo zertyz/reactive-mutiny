@@ -70,6 +70,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Sets this [Uni] to return `Stream`s instead of executing them
+    #[must_use = "By calling this method, the Uni gets converted into only providing Streams (rather than executing them) -- so the returned values of (self, Streams) must be used"]
     pub fn consumer_stream(self) -> (Arc<Self>, Vec<MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>>) {
         let streams = self.consumer_stream_internal();
         let arc_self = Arc::new(self);
@@ -77,6 +78,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// similar to [consumer_stream()], but without the transformation `self -> Arc<Self>`
+    #[must_use]
     fn consumer_stream_internal(&self) -> Vec<MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>> {
         let streams = (0..UniChannelType::MAX_STREAMS)
             .map(|_| {
@@ -95,7 +97,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// waiting for all events to be fully processed and calling the "on close" callback.\
     /// If this Uni share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
-    #[must_use]
+    #[must_use = "Returns true if the Uni could be closed within the given time"]
     pub async fn close(&self, timeout: Duration) -> bool {
         let start = Instant::now();
         if self.channel.gracefully_end_all_streams(timeout).await > 0 {
@@ -118,7 +120,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// (Actually, as many consumers as `MAX_STREAMS` will be spawned).\
     /// `on_close_callback(stats)` is called when this [Uni] (and all `Stream`s) are closed.\
     /// `on_err_callback(error)` is called whenever the `Stream` returns an `Err` element.
-    #[must_use]
+    #[must_use = "`Arc<self>` is returned back, so the return value must be used to send data to this `Uni` and to close it"]
     pub fn spawn_executors<OutItemType:            Send + Debug,
                            OutStreamType:          Stream<Item=OutType> + Send + 'static,
                            OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
@@ -170,7 +172,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// (Actually, as many consumers as `MAX_STREAMS` will be spawned).\
     /// `on_close_callback(stats)` is called when this [Uni] (and all `Stream`s) are closed.\
     /// `on_err_callback(error)` is called whenever the `Stream` returns an `Err` element.
-    #[must_use]
+    #[must_use = "`Arc<self>` is returned back, so the return value must be used to send data to this `Uni` and to close it"]
     pub fn spawn_fallibles_executors<OutItemType:            Send + Debug,
                                      OutStreamType:          Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
                                      CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
@@ -219,7 +221,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// Spawns an optimized executor for the `Stream` returned by `pipeline_builder()`, provided it produces elements which are `Future` & non-fallible
     /// (Actually, as many consumers as `MAX_STREAMS` will be spawned).\
     /// `on_close_callback(stats)` is called when this [Uni] (and all `Stream`s) are closed.
-    #[must_use]
+    #[must_use = "`Arc<self>` is returned back, so the return value must be used to send data to this `Uni` and to close it"]
     pub fn spawn_futures_executors<OutItemType:            Send + Debug,
                                    OutStreamType:          Stream<Item=OutType> + Send + 'static,
                                    OutType:                Future<Output=OutItemType> + Send,
@@ -266,7 +268,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// Spawns an optimized executor for the `Stream` returned by `pipeline_builder()`, provided it produces elements which are non-future & non-fallible
     /// (Actually, as many consumers as `MAX_STREAMS` will be spawned).\
     /// `on_close_callback(stats)` is called when this [Uni] (and all `Stream`s) are closed.
-    #[must_use]
+    #[must_use = "`Arc<self>` is returned back, so the return value must be used to send data to this `Uni` and to close it"]
     pub fn spawn_non_futures_non_fallibles_executors<OutItemType:            Send + Debug,
                                                      OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
                                                      CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
@@ -325,6 +327,7 @@ pub use unis_close_async;
 
 
 /// returns a closure (receiving 1 parameter) that must be called `latch_count` times before calling `callback(1 parameter)`
+#[must_use]
 fn latch_callback_1p<CallbackParameterType: Send + 'static,
                      CallbackAsyncType:     Send + Future<Output=()>>
                     (latch_count:    u32,

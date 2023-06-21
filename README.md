@@ -83,8 +83,8 @@ been created, offering a superior performance over the Rust's native & community
 
 Docs will still be improved. Meanwhile, the following sequence is suggested for new users of this crate:
   1) Look at the `examples/`;
-  2) Inspect the `reactive-socket` crate;
-  3) Study the type aliases in `reactive-mutiny::prelude::advanced::*` -- at this point, it is safe to trust the docs will provide everything you'll need. 
+  2) Study the type aliases in `reactive-mutiny::prelude::advanced::*` -- at this point, it is safe to trust the docs will provide everything you'll need;
+  3) For an advanced usage example, inspect the `reactive-messaging` crate -- in special, how easily & decoupled the reactive abstractions allow upgrading a processor that doesn't pass any answers back to one that does pass them back to the peers.
 
 # Comparisons
 

@@ -80,18 +80,19 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
+    #[must_use]
     pub fn buffer_size(&self) -> u32 {
         self.channel.buffer_size()
     }
 
     #[inline(always)]
+    #[must_use]
     pub fn pending_items_count(&self) -> u32 {
         self.channel.pending_items_count()
     }
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Futures & Fallible.
-    #[must_use]
     pub async fn spawn_executor<IntoString:             Into<String>,
                                 OutItemType:            Send + Debug,
                                 OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -120,7 +121,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// By using this method, it is assumed that both pipeline builders returns `Future<Result>` events. If this is not so, see one of the sibling methods.\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
-    #[must_use]
     pub async fn spawn_oldies_executor<IntoString:               Into<String>,
                                        OutItemType:              Send + Debug,
                                        OldiesOutStreamType:      Stream<Item=OldiesOutType> + Sync + Send + 'static,
@@ -190,7 +190,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Internal method with common code for [Self::spawn_executor()] & [Self::spawn_oldies_executor()].
-    #[must_use]
     async fn spawn_executor_from_stream<IntoString:             Into<String>,
                                         OutItemType:            Send + Debug,
                                         OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -223,7 +222,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Futures.
-    #[must_use]
     pub async fn spawn_futures_executor<IntoString:             Into<String>,
                                         OutItemType:            Send + Debug,
                                         OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -250,7 +248,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// By using this method, it is assumed that both pipeline builders returns `Future` events. If this is not so, see one of the sibling methods.\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
-    #[must_use]
     pub async fn spawn_futures_oldies_executor<IntoString:               Into<String>,
                                                OutItemType:              Send + Debug,
                                                OldiesOutStreamType:      Stream<Item=OldiesOutType> + Sync + Send + 'static,
@@ -311,7 +308,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Internal method with common code for [Self::spawn_futures_executor()] & [Self::spawn_futures_oldies_executor()].
-    #[must_use]
     async fn spawn_futures_executor_from_stream<IntoString:             Into<String>,
                                                 OutItemType:            Send + Debug,
                                                 OutStreamType:          Stream<Item=OutType> + Send + 'static,
@@ -341,7 +337,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Fallible.
-    #[must_use]
     pub async fn spawn_fallibles_executor<IntoString:             Into<String>,
                                           OutItemType:            Send + Debug,
                                           OutStreamType:          Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
@@ -367,7 +362,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// By using this method, it is assumed that both pipeline builders returns Fallible events. If this is not so, see one of the sibling methods.\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
-    #[must_use]
     pub async fn spawn_fallibles_oldies_executor<IntoString:               Into<String>,
                                                  OutItemType:              Send + Debug,
                                                  OldiesOutStreamType:      Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Sync + Send + 'static,
@@ -433,7 +427,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Internal method with common code for [Self::spawn_fallibles_executor()] & [Self::spawn_oldies_fallibles_executor()].
-    #[must_use]
     async fn spawn_fallibles_executor_from_stream<IntoString:             Into<String>,
                                                   OutItemType:            Send + Debug,
                                                   OutStreamType:          Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
@@ -463,7 +456,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Non-Futures & Non-Fallible.
-    #[must_use]
     pub async fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
                                                          OutItemType:            Send + Debug,
                                                          OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
@@ -488,7 +480,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// By using this method, it is assumed that both pipeline builders returns non-Futures & non-Fallible events. If this is not so, see [spawn_oldies_executor].\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
-    #[must_use]
     pub async fn spawn_non_futures_non_fallible_oldies_executor<IntoString:               Into<String>,
                                                                 OldiesOutItemType:        Send + Debug,
                                                                 NewiesOutItemType:        Send + Debug,
@@ -548,7 +539,6 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     /// Internal method with common code for [spawn_non_futures_non_fallible_executor()] & [spawn_non_futures_non_fallible_oldies_executor()].
-    #[must_use]
     async fn spawn_non_futures_non_fallible_executor_from_stream<IntoString:             Into<String>,
                                                                  OutItemType:            Send + Debug,
                                                                  OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
@@ -578,6 +568,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// waiting for all events to be fully processed and calling all executor's "on close" callbacks.\
     /// If this `Multi` share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [multis_close_async!()]
+    #[must_use = "futures do nothing unless you `.await` or poll them"]
     pub async fn close(self: &Self, timeout: Duration) -> bool {
         self.channel.gracefully_end_all_streams(timeout).await == 0
     }
@@ -591,6 +582,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// Note it might make sense to spawn this operation by a `Tokio task`, for it may block indefinitely if the Stream has no timeout.\
     /// Also note that timing out this operation is not advisable, for resources won't be freed until it reaches the last step.\
     /// Returns false if there was no executor associated with `pipeline_name`.
+    #[must_use = "futures do nothing unless you `.await` or poll them"]
     pub async fn flush_and_cancel_executor<IntoString: Into<String>>
                                           (self:          &Self,
                                            pipeline_name: IntoString,
