@@ -7,8 +7,7 @@ use super::{
         types::{FullDuplexUniChannel},
     },
 };
-use std::{fmt::Debug, time::Duration, sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}}, future};
-use std::cell::UnsafeCell;
+use std::{fmt::Debug, time::Duration, sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}}};
 use std::future::Future;
 use std::marker::PhantomData;
 use futures::future::BoxFuture;
@@ -24,7 +23,7 @@ pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
                const INSTRUMENTS: usize,
                DerivedItemType:   Debug + 'static = ItemType> {
     pub channel:                  Arc<UniChannelType>,
-    pub stream_executors:         Vec<Arc<StreamExecutor<INSTRUMENTS>>>,
+    pub stream_executors:         Vec<Arc<StreamExecutor>>,
     pub finished_executors_count: AtomicU32,
         _phantom:                 PhantomData<(&'static ItemType, &'static DerivedItemType)>,
 }
@@ -132,7 +131,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                            futures_timeout:           Duration,
                            pipeline_builder:          impl Fn(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
                            on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                         -> ErrVoidAsyncType   + Send + Sync + 'static,
-                           on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                             -> CloseVoidAsyncType + Send + Sync + 'static)
+                           on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                                          -> CloseVoidAsyncType + Send + Sync + 'static)
 
                           -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
@@ -153,7 +152,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let on_err_callback = Arc::clone(&on_err_callback);
                 let out_stream = pipeline_builder(in_stream);
                 Arc::clone(&executor)
-                    .spawn_executor(
+                    .spawn_executor::<INSTRUMENTS, _, _, _, _>(
                         concurrency_limit,
                         move |err| on_err_callback(err),
                         move |executor| {
@@ -181,7 +180,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                                      concurrency_limit:         u32,
                                      pipeline_builder:          impl Fn(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
                                      on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                                               + Send + Sync + 'static,
-                                     on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                             -> CloseVoidAsyncType + Send + Sync + 'static)
+                                     on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                                          -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                     -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
@@ -202,7 +201,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let on_err_callback = Arc::clone(&on_err_callback);
                 let out_stream = pipeline_builder(in_stream);
                 Arc::clone(&executor)
-                    .spawn_fallibles_executor(
+                    .spawn_fallibles_executor::<INSTRUMENTS, _, _>(
                         concurrency_limit,
                         move |err| on_err_callback(err),
                         move |executor| {
@@ -231,7 +230,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                                    concurrency_limit:         u32,
                                    futures_timeout:           Duration,
                                    pipeline_builder:          impl Fn(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
-                                   on_close_callback:         impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                             -> CloseVoidAsyncType + Send + Sync + 'static)
+                                   on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                                          -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                   -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
@@ -250,7 +249,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let on_close_callback = Arc::clone(&on_close_callback);
                 let out_stream = pipeline_builder(in_stream);
                 Arc::clone(&executor)
-                    .spawn_futures_executor(
+                    .spawn_futures_executor::<INSTRUMENTS, _, _, _>(
                         concurrency_limit,
                         move |executor| {
                             let arc_self = Arc::clone(&arc_self);
@@ -276,7 +275,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                                                     (mut self,
                                                      concurrency_limit:        u32,
                                                      pipeline_builder:         impl Fn(MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>) -> OutStreamType,
-                                                     on_close_callback:        impl FnOnce(Arc<StreamExecutor<INSTRUMENTS>>)                             -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                     on_close_callback:        impl FnOnce(Arc<StreamExecutor>)                                          -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                                     -> Arc<Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType>> {
 
@@ -295,7 +294,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let on_close_callback = Arc::clone(&on_close_callback);
                 let out_stream = pipeline_builder(in_stream);
                 Arc::clone(&executor)
-                    .spawn_non_futures_non_fallibles_executor(
+                    .spawn_non_futures_non_fallibles_executor::<INSTRUMENTS, _, _>(
                         concurrency_limit,
                         move |executor| {
                             let arc_self = Arc::clone(&arc_self);
@@ -327,7 +326,6 @@ pub use unis_close_async;
 
 
 /// returns a closure (receiving 1 parameter) that must be called `latch_count` times before calling `callback(1 parameter)`
-#[must_use]
 fn latch_callback_1p<CallbackParameterType: Send + 'static,
                      CallbackAsyncType:     Send + Future<Output=()>>
                     (latch_count:    u32,

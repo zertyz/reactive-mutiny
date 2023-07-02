@@ -34,11 +34,13 @@ pub type UniMove<InType,
 pub type MultiArc<ItemType,
                   const BUFFER_SIZE: usize,
                   const MAX_STREAMS: usize,
-                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> = MultiAtomicArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
+                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+    = MultiAtomicArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
 
 /// Default `Multi` for those who want the more performant [OgreArc] as the wrapping type for their payloads
 pub type MultiOgreArc<ItemType,
                   const BUFFER_SIZE: usize,
                   const MAX_STREAMS: usize,
-                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}> = MultiAtomicOgreArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
+                  const INSTRUMENTS: usize = {Instruments::LogsWithMetrics.into()}>
+    = MultiAtomicOgreArc<ItemType, BUFFER_SIZE, MAX_STREAMS, INSTRUMENTS>;
 

@@ -75,7 +75,7 @@ neat-date-time = "0.1"  # as of 2023-04-05: scheduled to be removed once ogre is
 # dependencies for benchmarks
 #############################
 
-criterion = { version = "0.3", features=["html_reports"] }
+criterion = { version = "0.5", features=["html_reports"] }
 
 [[bench]]
 name = "channels"

@@ -60,7 +60,7 @@ MutinyStream<'a, ItemType, ChannelConsumerType, DerivedItemType> {
             Some(_) => Poll::Ready(event),
             None => {
                 if self.events_source.keep_stream_running(self.stream_id) {
-                    self.events_source.register_stream_waker(self.stream_id, &cx.waker());
+                    self.events_source.register_stream_waker(self.stream_id, cx.waker());
                     Poll::Pending
                 } else {
                     Poll::Ready(None)
