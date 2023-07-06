@@ -92,8 +92,9 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         self.channel.flush(duration).await
     }
 
-    /// closes this Uni, in isolation -- flushing pending events, closing the producers,
+    /// Closes this Uni, in isolation -- flushing pending events, closing the producers,
     /// waiting for all events to be fully processed and calling the "on close" callback.\
+    /// Returns `false` if the timeout kicked-in before it could be attested that the closing was complete.\
     /// If this Uni share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
     #[must_use = "Returns true if the Uni could be closed within the given time"]
