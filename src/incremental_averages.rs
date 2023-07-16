@@ -3,12 +3,10 @@
 //!                                   that gets exercised in case of a -- nearly impossible in real workloads -- update collision.
 
 use std::{
-    sync::{
-        atomic::{
+    sync::atomic::{
             AtomicU64,
             Ordering::{self,Relaxed},
         },
-    },
     mem::ManuallyDrop,
     fmt::{Debug, Formatter},
 };

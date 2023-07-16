@@ -1,13 +1,11 @@
 //! Resting place for [OgreUnique<>]
 
-use crate::{
-    ogre_std::ogre_alloc::{
+use crate::ogre_std::ogre_alloc::{
         ogre_arc::OgreArc,
         OgreAllocator,
-    },
-};
+    };
 use std::{
-    ops::{Deref, DerefMut},
+    ops::Deref,
     fmt::{Debug, Display, Formatter},
 };
 
@@ -147,9 +145,7 @@ mod tests {
     //! Unit tests for [ogre_arc](super) module
 
     use super::*;
-    use crate::{
-        prelude::advanced::AllocatorAtomicArray,
-    };
+    use crate::prelude::advanced::AllocatorAtomicArray;
 
 
     #[cfg_attr(not(doc),test)]

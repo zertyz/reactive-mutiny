@@ -1,31 +1,25 @@
 //! Resting place for the Arc based [Atomic] Zero-Copy Multi Channel
 
 use crate::{
-    ogre_std::{
-        ogre_queues::{
+    ogre_std::ogre_queues::{
             atomic::atomic_move::AtomicMove,
             meta_publisher::MovePublisher,
             meta_subscriber::MoveSubscriber,
             meta_container::MoveContainer,
         },
-    },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
     types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
 };
 use std::{
     time::Duration,
-    sync::{
-        Arc,
-    },
-    pin::Pin,
+    sync::Arc,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
     mem::MaybeUninit,
 };
 use async_trait::async_trait;
-use log::{warn};
-use tokio::io::AsyncWriteExt;
+use log::warn;
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and

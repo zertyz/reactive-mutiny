@@ -43,9 +43,7 @@ mod tests {
         future::Future,
         io::Write,
     };
-    use futures::{
-        stream::{self, Stream, StreamExt}
-    };
+    use futures::stream::{self, Stream, StreamExt};
     use minstant::Instant;
 
 

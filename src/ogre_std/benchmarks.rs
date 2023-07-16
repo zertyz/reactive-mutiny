@@ -315,11 +315,9 @@ mod benchmark_queues {
     use super::*;
     use super::super::{
         instruments::Instruments,
-        ogre_queues::{OgreQueue}
+        ogre_queues::OgreQueue
     };
-    use std::{
-        fmt::Debug,
-    };
+    use std::fmt::Debug;
 
     macro_rules! impl_benchmarkable_container_for {
         ($queue_type: ty) => {

@@ -7,37 +7,15 @@
 //!
 
 use std::{
-    pin::Pin,
-    sync::{
-        Arc,
-        atomic::{
-            AtomicBool,
-            AtomicU32,
-            AtomicU8,
-            Ordering::Relaxed,
-        },
-    },
+    sync::Arc,
     hint::black_box,
 };
-use reactive_mutiny::{
-    uni,
-    multi,
-    ogre_std::{
-        ogre_queues::{
-            full_sync::full_sync_move::FullSyncMove,
-            atomic::atomic_move::AtomicMove,
-        },
-    },
-    prelude::advanced::*,
-};
+use reactive_mutiny::prelude::advanced::*;
 use criterion::{
     criterion_group,
     criterion_main,
     Criterion,
-    BenchmarkGroup,
-    measurement::WallTime,
 };
-use futures::{Stream, stream};
 
 
 // The size of 1 diminishes the effects of CPU caches. On these tests, we simply alloc/dealloc, so
@@ -180,7 +158,7 @@ fn bench_sized_payloads(criterion: &mut Criterion) {
     }
 
     let bench_id = format!("Mem-filling Baseline");
-    let mut payload_array = [SizedPayload { value: 0, payload: [0; 32764] }; 1];
+    let payload_array = [SizedPayload { value: 0, payload: [0; 32764] }; 1];
     let mut sum = 0;
     group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
         let mutable_array = unsafe {
@@ -201,7 +179,7 @@ fn bench_sized_payloads(criterion: &mut Criterion) {
     let allocator = AllocatorFullSyncArray::<SizedPayload, BUFFER_SIZE>::new();
     let mut sum = 0;
     group.bench_function(bench_id, |bencher| bencher.iter(|| black_box({
-        if let Some((mut slot_ref, slot_id)) = allocator.alloc_ref() {
+        if let Some((slot_ref, slot_id)) = allocator.alloc_ref() {
             *slot_ref = SizedPayload {
                 value: sum,
                 payload: [127; 32764],

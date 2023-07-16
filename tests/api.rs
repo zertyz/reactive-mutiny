@@ -4,17 +4,15 @@
 //! NOTE: many "tests" here have no real assertions, as they are used only to verify the API is able to represent certain models
 
 
-use std::cell::UnsafeCell;
 use std::fmt::Debug;
-use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
-use futures::{Stream, StreamExt};
-use reactive_mutiny::mutiny_stream::MutinyStream;
-use reactive_mutiny::ogre_std::{ogre_alloc, ogre_queues};
-use reactive_mutiny::prelude::advanced::{OgreAllocator, OgreUnique, UniZeroCopyAtomic, Instruments, UniMoveAtomic, ChannelUniMoveAtomic};
-use reactive_mutiny::prelude::{ChannelConsumer, Uni};
-use reactive_mutiny::uni;
+use futures::StreamExt;
+use reactive_mutiny::prelude::advanced::{
+    UniZeroCopyAtomic,
+    Instruments,
+};
+
 
 #[ctor::ctor]
 fn suite_setup() {
@@ -49,7 +47,7 @@ async fn elaborated_generics_on_call_chains() {
     // (as opposed to passing the `pipeline_builder` as a parameter to `with_generics()`, which would, then, create the `Uni` / `Multi` there)
     let uni = Uni::<CustomType<bool>>::new("advanced generics")
             .spawn_non_futures_non_fallibles_executors(1,
-                                                       |remote_messages_stream| remote_messages_stream.map(|in_msg| CustomType {data: true}),
+                                                       |remote_messages_stream| remote_messages_stream.map(|_in_msg| CustomType {data: true}),
                                                        |_executor| async {});
     with_generics(uni, CustomType {data: false}).await;
 

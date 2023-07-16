@@ -1,8 +1,6 @@
 //! Resting place for [MutinyStream]
 
-use crate::{
-    types::ChannelConsumer,
-};
+use crate::types::ChannelConsumer;
 use std::{
     pin::Pin,
     sync::Arc,

@@ -1,8 +1,7 @@
 //! Resting place for [StreamsManager]
 
 
-use crate::{
-    ogre_std::{
+use crate::ogre_std::{
         ogre_queues::{
             full_sync::full_sync_move::FullSyncMove,
             meta_container::MoveContainer,
@@ -10,15 +9,12 @@ use crate::{
             meta_subscriber::MoveSubscriber,
         },
         ogre_sync,
-    },
-};
+    };
 use std::{
     time::Duration,
-    sync::{
-        atomic::{AtomicU32, AtomicBool, Ordering::{Relaxed}},
-    },
+    sync::atomic::{AtomicU32, AtomicBool, Ordering::Relaxed},
     pin::Pin,
-    task::{Waker},
+    task::Waker,
     marker::PhantomData,
 };
 use std::cell::UnsafeCell;
@@ -100,7 +96,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             None => panic!("StreamsManager: '{}' has a MAX_STREAMS of {MAX_STREAMS} -- which just got exhausted: stats: {} streams were created; {} dropped. Please, increase the limit or fix the LOGIC BUG!",
                            self.streams_manager_name, self.created_streams_count.load(Relaxed), self.finished_streams_count.load(Relaxed)),
         };
-        let mut keep_streams_running = unsafe { &mut * self.keep_streams_running.get() };
+        let keep_streams_running = unsafe { &mut * self.keep_streams_running.get() };
         keep_streams_running[stream_id as usize] = true;
         self.sync_vacant_and_used_streams();
         stream_id
@@ -145,7 +141,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// Signals `stream_id` to end, as soon as possible -- making it reach its end-of-life.\
     /// Also guarantees that it will be awoken to react to the command immediately
     pub fn cancel_stream(&self, stream_id: u32) {
-        let mut keep_streams_running = unsafe { &mut * self.keep_streams_running.get() };
+        let keep_streams_running = unsafe { &mut * self.keep_streams_running.get() };
         keep_streams_running[stream_id as usize] = false;
         self.wake_stream(stream_id);
     }
@@ -165,7 +161,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     #[inline(always)]
     pub fn register_stream_waker(&self, stream_id: u32, waker: &Waker) {
 
-        let mut wakers = unsafe { &mut * self.wakers.get() };
+        let wakers = unsafe { &mut * self.wakers.get() };
 
         macro_rules! set {
             () => {
@@ -203,7 +199,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     ///   3) Eventually, a second item is sent: now the queue has length 2 and the send logic will wake consumer #1
     ///   4) Consumer #1, since it was not dropped, will be awaken and will run until the channel is empty again -- consuming both elements.
     pub fn report_stream_dropped(&self, stream_id: u32) {
-        let mut wakers = unsafe { &mut * self.wakers.get() };
+        let wakers = unsafe { &mut * self.wakers.get() };
         ogre_sync::lock(&self.wakers_lock);
         wakers[stream_id as usize] = None;
         ogre_sync::unlock(&self.wakers_lock);
@@ -223,7 +219,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     /// rebuilds the `used_streams` list based of the current `vacant_items`
     #[inline(always)]
     fn sync_vacant_and_used_streams(&self) {
-        let mut used_streams = unsafe { &mut * self.used_streams.get() };
+        let used_streams = unsafe { &mut * self.used_streams.get() };
         ogre_sync::lock(&self.streams_lock);
         let mut vacant = unsafe { self.vacant_streams.peek_remaining().concat() };
         vacant.sort_unstable();

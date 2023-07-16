@@ -3,7 +3,7 @@
 use super::super::{
     stream_executor::StreamExecutor,
     mutiny_stream::MutinyStream,
-    types::{FullDuplexMultiChannel},
+    types::FullDuplexMultiChannel,
 };
 use std::{
     sync::Arc,
@@ -13,10 +13,8 @@ use std::{
     marker::PhantomData,
 };
 use indexmap::IndexMap;
-use futures::{Stream};
-use tokio::{
-    sync::{RwLock},
-};
+use futures::Stream;
+use tokio::sync::RwLock;
 
 
 /// `Multi` is an event handler capable of having several "listeners" -- all of which receives all events.\
@@ -567,8 +565,8 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// Closes this `Multi`, in isolation -- flushing pending events, closing the producers,
     /// waiting for all events to be fully processed and calling all executor's "on close" callbacks.\
     /// If this `Multi` share resources with another one (which will get dumped by the "on close"
-    /// callback), most probably you want to close them atomically -- see [multis_close_async!()]
-    #[must_use = "futures do nothing unless you `.await` or poll them"]
+    /// callback), most probably you want to close them atomically -- see [multis_close_async!()].\
+    /// Returns `true` if all events could be flushed within the given `timeout`.
     pub async fn close(self: &Self, timeout: Duration) -> bool {
         self.channel.gracefully_end_all_streams(timeout).await == 0
     }

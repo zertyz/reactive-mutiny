@@ -1,32 +1,25 @@
 //! Resting place for the Arc based [FullSync] Zero-Copy Multi Channel
 
 use crate::{
-    ogre_std::{
-        ogre_queues::{
-            full_sync::{
-                full_sync_move::FullSyncMove,
-            },
+    ogre_std::ogre_queues::{
+            full_sync::full_sync_move::FullSyncMove,
             meta_publisher::MovePublisher,
             meta_subscriber::MoveSubscriber,
             meta_container::MoveContainer,
         },
-    },
     streams_manager::StreamsManagerBase,
     mutiny_stream::MutinyStream,
     types::{ChannelCommon, ChannelMulti, ChannelProducer, ChannelConsumer, FullDuplexMultiChannel},
 };
 use std::{
     time::Duration,
-    sync::{
-        Arc,
-    },
-    pin::Pin,
+    sync::Arc,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
     mem::MaybeUninit,
 };
 use async_trait::async_trait;
-use log::{warn};
+use log::warn;
 
 
 /// This channel uses the queues [FullSyncMove] (the highest throughput among all in 'benches/'), which are the fastest for general purpose use and for most hardware but requires that elements are copied when dequeueing,

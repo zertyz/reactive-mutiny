@@ -1,11 +1,9 @@
 //! See [super]
 
-use super::{
-    super::{
-        stream_executor::StreamExecutor,
-        mutiny_stream::MutinyStream,
-        types::{FullDuplexUniChannel},
-    },
+use super::super::{
+    stream_executor::StreamExecutor,
+    mutiny_stream::MutinyStream,
+    types::FullDuplexUniChannel,
 };
 use std::{fmt::Debug, time::Duration, sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}}};
 use std::future::Future;
@@ -332,10 +330,10 @@ fn latch_callback_1p<CallbackParameterType: Send + 'static,
                     (latch_count:    u32,
                      async_callback: impl FnOnce(CallbackParameterType) -> CallbackAsyncType + Send + Sync + 'static)
                     -> impl Fn(CallbackParameterType) -> BoxFuture<'static, ()> {
-    let mut async_callback = Arc::new(Mutex::new(Some(async_callback)));
+    let async_callback = Arc::new(Mutex::new(Some(async_callback)));
     let latch_counter = Arc::new(AtomicU32::new(latch_count));
     move |p1| {
-        let mut async_callback = Arc::clone(&async_callback);
+        let async_callback = Arc::clone(&async_callback);
         let latch_counter = Arc::clone(&latch_counter);
         Box::pin(async move {
             if latch_counter.fetch_sub(1, Relaxed) == 1 {

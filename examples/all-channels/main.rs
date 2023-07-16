@@ -2,7 +2,7 @@
 
 #[path = "../common/mod.rs"] mod common;
 
-use common::{ExchangeEvent};
+use common::ExchangeEvent;
 use std::{
     time::Duration,
     io::Write,
@@ -17,7 +17,7 @@ use std::{
     time::Instant,
 };
 use reactive_mutiny::prelude::advanced::*;
-use futures::{StreamExt};
+use futures::StreamExt;
 
 
 const BUFFER_SIZE: usize = 1<<12;

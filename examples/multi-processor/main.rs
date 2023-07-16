@@ -22,9 +22,7 @@
 use common::*;
 use reactive_mutiny::prelude::advanced::*;
 use std::{
-    sync::{
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
     fmt::Debug,
 };

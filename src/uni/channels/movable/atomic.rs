@@ -2,14 +2,12 @@
 
 use crate::{
     types::ChannelConsumer,
-    ogre_std::{
-        ogre_queues::{
+    ogre_std::ogre_queues::{
             atomic::atomic_move::AtomicMove,
             meta_publisher::MovePublisher,
             meta_subscriber::MoveSubscriber,
             meta_container::MoveContainer,
         },
-    },
     types::{
         ChannelCommon,
         ChannelUni,
@@ -21,9 +19,8 @@ use crate::{
 };
 use std::{
     time::Duration,
-    pin::Pin,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
     sync::Arc,
 };
 use async_trait::async_trait;

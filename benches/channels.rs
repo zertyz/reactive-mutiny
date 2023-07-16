@@ -18,21 +18,36 @@
 //!     - The Same-thread measurements follow the same tendency
 //!
 
-use std::hint::black_box;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8};
-use std::sync::atomic::Ordering::Relaxed;
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkGroup};
-use criterion::measurement::WallTime;
+use std::{
+    hint::black_box,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicBool,
+            AtomicU8,
+            Ordering::Relaxed,
+        },
+    },
+};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+    BenchmarkGroup,
+    measurement::WallTime,
+};
 use ogre_std::ogre_queues::{
     full_sync::full_sync_move::FullSyncMove,
     atomic::atomic_move::AtomicMove,
 };
-use reactive_mutiny::{uni, multi, ogre_std};
-use futures::{Stream, stream};
-use reactive_mutiny::ogre_std::ogre_queues::meta_publisher::{MetaPublisher, MovePublisher};
-use reactive_mutiny::ogre_std::ogre_queues::meta_container::{MetaContainer, MoveContainer};
-use reactive_mutiny::ogre_std::ogre_queues::meta_subscriber::{MetaSubscriber, MoveSubscriber};
+use reactive_mutiny::ogre_std::{
+    ogre_queues::{
+        meta_subscriber::MoveSubscriber,
+        meta_container::MoveContainer,
+        meta_publisher::MovePublisher,
+    },
+    self
+};
 
 
 /// Represents a reasonably sized event, similar to production needs

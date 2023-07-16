@@ -1,14 +1,10 @@
 //! Resting place for [OgreArrayPoolAllocator]
 
-use crate::{
-    ogre_std::{
-        ogre_queues::{
-            meta_container::MoveContainer,
-        },
+use crate::ogre_std::{
+        ogre_queues::meta_container::MoveContainer,
         ogre_alloc::types::OgreAllocator,
-    },
-};
-use std::{fmt::{Debug, Formatter}, mem::{MaybeUninit}, ptr};
+    };
+use std::{fmt::{Debug, Formatter}, mem::MaybeUninit, ptr};
 use std::cell::UnsafeCell;
 use std::mem::ManuallyDrop;
 use std::pin::Pin;
@@ -90,8 +86,8 @@ OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
     fn dealloc_id(&self, slot_id: u32) {
         if std::mem::needs_drop::<DataType>() {
             unsafe {
-                let mut pool = &mut *(self.pool.get() as *mut Box<[DataType; POOL_SIZE]>);
-                let mut slot = pool.get_unchecked_mut(slot_id as usize);
+                let pool = &mut *(self.pool.get() as *mut Box<[DataType; POOL_SIZE]>);
+                let slot = pool.get_unchecked_mut(slot_id as usize);
                 ptr::drop_in_place(slot);
             }
         }

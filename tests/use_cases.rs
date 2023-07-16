@@ -13,7 +13,12 @@ use std::{
         },
     }
 };
-use reactive_mutiny::prelude::advanced::{MultiAtomicArc, MultiAtomicOgreArc, MultiMmapLog, UniMoveAtomic, UniMoveFullSync};
+use reactive_mutiny::prelude::advanced::{
+    MultiAtomicOgreArc,
+    MultiMmapLog,
+    UniMoveAtomic,
+    UniMoveFullSync,
+};
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
 
