@@ -149,7 +149,7 @@ mod tests {
 
 
     #[cfg_attr(not(doc),test)]
-    pub fn ssas() {
+    pub fn happy_path_usage() {
         let allocator = AllocatorAtomicArray::<u128, 128>::new();
         let unique = OgreUnique::new(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
         println!("unique is {unique} -- {:?}", unique);

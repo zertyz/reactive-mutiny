@@ -2,16 +2,14 @@
 
 use super::types::OgreAllocator;
 use std::{
-    sync::{
-        atomic::{
+    sync::atomic::{
             self,
             AtomicU32,
             Ordering::{Acquire, Relaxed, Release},
         },
-    },
     ops::{Deref, DerefMut},
     fmt::{Debug, Display, Formatter},
-    marker::{PhantomData},
+    marker::PhantomData,
     ptr::NonNull,
 };
 
@@ -257,13 +255,11 @@ mod tests {
     //! Unit tests for [ogre_arc](super) module
 
     use super::*;
-    use crate::{
-        prelude::advanced::AllocatorAtomicArray,
-    };
+    use crate::prelude::advanced::AllocatorAtomicArray;
 
 
     #[cfg_attr(not(doc),test)]
-    pub fn ssas() {
+    pub fn happy_path_usage() {
         let allocator = AllocatorAtomicArray::<u128, 128>::new();
         let arc1 = OgreArc::new(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
         println!("arc1 is {arc1} -- {:?}", arc1);

@@ -19,8 +19,32 @@ This file contains the backlog & implementation plans for all foreseable feature
     r2.4) Write benchmarks and tune it to perfection (using the appropriate Channels and internal structures)
   n9) Include benchmarks for tokio::sync::broadcast -- a Multi channel. If they have good performance, include this channel in our Multi. They also have a "watch" in addition to "broadcast", but it is unknown if watch attends to our requisites
 
+
 # Backlog
   
+  b4) 2023-05-30: fix the broken tests for the broken queues after the last abstractions added to it in early May
+  r5) 2023-05-30: add the github actions for CI/CD
+  r3) 2023-05-30: Complete the documentation and beautify the code, with attention not to copy & paste any text (use referencing instead)
+    r3.1) Remove code duplication, introducing new abstractions when needed
+    r3.2) Plot the code diagrams and improve them to their best
+    r3.3) Walk through all the examples, making sure all entities are documented in the first level (if references are done in deeper levels, they should be moved to the top levels)
+    r3.4) Walk through all code artifacts, making sure nobody is missing any minimal documentation
+    r3.5) Provide documentation examples wherever that is applicable
+  f6) 2023-05-30: add channels for Stacks
+  f7) 2023-05-30: add the Box allocator
+
+
+# Done
+
+  0) 2022/2023: ((past improvements were not documented here yet))
+  r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
+  f10) 2023-06-05: Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures -- the same for Multi
+  b11) 2023-06-14: there seems to be no known way of passing the stream processing logic down a complex call chain
+  r12) 2023-06-14: Unify `UniBuilder` & `Uni`, for types simplification & symmetry with how `Multi`s work -- causing a MAJOR version upgrade
+
+
+# Unable to reproduce bug reports
+
   b13) 2023-07-15: investigate a possible bug: make sure OgreUnique is not crashing here due to the wrapped type doesn't need dropping (no internal strings in it)... 
                    also, there is the remote possibility of a double-dropping... which should be impossible, but, anyway... do unit tests for those scenarios
                     thread 'tokio-runtime-worker' panicked at 'assertion failed: 0 < pointee_size && pointee_size <= isize::MAX as usize', /rustc/90c541806f23a127002de5b4038be731ba1458ca/library/core/src/ptr/const_ptr.rs:694:9
@@ -44,22 +68,3 @@ This file contains the backlog & implementation plans for all foreseable feature
                       8: reactive_messaging::socket_server::tests::shutdown_process::{{closure}}::{{closure}}::{{closure}}
                                 at ./src/socket_server.rs:281:17
 
-
-  b4) 2023-05-30: fix the broken tests for the broken queues after the last abstractions added to it in early May
-  r5) 2023-05-30: add the github actions for CI/CD
-  r3) 2023-05-30: Complete the documentation and beautify the code, with attention not to copy & paste any text (use referencing instead)
-    r3.1) Remove code duplication, introducing new abstractions when needed
-    r3.2) Plot the code diagrams and improve them to their best
-    r3.3) Walk through all the examples, making sure all entities are documented in the first level (if references are done in deeper levels, they should be moved to the top levels)
-    r3.4) Walk through all code artifacts, making sure nobody is missing any minimal documentation
-    r3.5) Provide documentation examples wherever that is applicable
-  f6) 2023-05-30: add channels for Stacks
-  f7) 2023-05-30: add the Box allocator
-
-# Done
-
-  0) 2022/2023: ((past improvements were not documented here yet))
-  r1) 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
-  f10) 2023-06-05: Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures -- the same for Multi
-  b11) 2023-06-14: there seems to be no known way of passing the stream processing logic down a complex call chain
-  r12) 2023-06-14: Unify `UniBuilder` & `Uni`, for types simplification & symmetry with how `Multi`s work -- causing a MAJOR version upgrade
