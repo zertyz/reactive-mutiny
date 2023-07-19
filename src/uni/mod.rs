@@ -75,7 +75,7 @@ mod tests {
         }
         let uni = TestUni::<&str, 1024, 1>::new("doc_test()")
             .spawn_non_futures_non_fallibles_executors(1, on_event, |_| async {});
-        let producer = |item| uni.try_send(|slot| *slot = item);
+        let producer = |item| uni.try_send(move |slot| *slot = item);
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
         assert!(uni.close(Duration::from_secs(10)).await, "Uni wasn't properly closed");
@@ -99,7 +99,7 @@ mod tests {
                                                               .map(move |number| observed_sum.fetch_add(number, Relaxed))
                                                       },
                                                        |_| async {});
-        let producer = |item| uni.try_send(|slot| *slot = item);
+        let producer = |item| uni.try_send(move |slot| *slot = item);
 
         // now the consumer: lets suppose we share it among several different tasks -- sharing a reference is one way to do it
         // (in this case, wrapping it in an Arc is not needed)
@@ -153,7 +153,7 @@ mod tests {
         let uni = TestUni::<u32, 1024, 1>::new("async_elements()")
             .spawn_executors(PARTS.len() as u32, Duration::from_secs(2), on_event, |_| async {}, |_| async {});
 
-        let producer = |item| uni.try_send(|slot| *slot = item);
+        let producer = |item| uni.try_send(move |slot| *slot = item);
 
         let shared_producer = &producer;
         stream::iter(PARTS)
@@ -281,7 +281,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(2, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                assert!(six_uni.try_send(|slot| *slot = ()), "couldn't send");
+                                assert!(six_uni.try_send(|slot| *slot = ()).is_none(), "couldn't send");
                             }
                         } else if event == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -300,7 +300,7 @@ mod tests {
         };
         let two_uni = TestUni::<u32, 1024, 1>::new("TWO event")
             .spawn_non_futures_non_fallibles_executors(1, on_two_event, on_two_close);
-        let two_producer = |item| two_uni.try_send(|slot| *slot = item);
+        let two_producer = |item| two_uni.try_send(move |slot| *slot = item);
 
         // FOUR event
         let on_four_event = |stream: MutinyStream<'static, u32, _, u32>| {
@@ -318,7 +318,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(4, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                assert!(six_uni.try_send(|slot| *slot = ()), "couldn't send");
+                                assert!(six_uni.try_send(|slot| *slot = ()).is_none(), "couldn't send");
                             }
                         } else if event == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -337,7 +337,7 @@ mod tests {
         };
         let four_uni = TestUni::<u32, 1024, 1>::new("FOUR event")
             .spawn_non_futures_non_fallibles_executors(1, on_four_event, on_four_close);
-        let four_producer = |item| four_uni.try_send(|slot| *slot = item);
+        let four_producer = |item| four_uni.try_send(move |slot| *slot = item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
         //       so we can test race conditions for the 'close producer' functions
@@ -422,7 +422,7 @@ mod tests {
                             },
                              |_| async {}
             );
-        let producer = |item| uni.try_send(|slot| *slot = item);
+        let producer = |item| uni.try_send(move |slot| *slot = item);
         producer(0);
         producer(1);
         producer(2);
@@ -453,7 +453,7 @@ mod tests {
             let mut full_count = 0u32;
             let start = Instant::now();
             for e in 0..count {
-                while !uni.try_send(|slot| *slot = e) {
+                while uni.try_send(|slot| *slot = e).is_some() {
                     std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
                     full_count += 1;
                     if full_count % (1<<28) == 0 {

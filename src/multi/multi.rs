@@ -57,7 +57,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     #[inline(always)]
     #[must_use]
-    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
         self.channel.try_send(setter)
     }
 
@@ -67,13 +67,13 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
-    pub fn send_derived(&self, arc_item: &DerivedItemType) {
-        self.channel.send_derived(arc_item);
+    pub fn send_derived(&self, arc_item: &DerivedItemType) -> bool {
+        self.channel.send_derived(arc_item)
     }
 
     #[inline(always)]
     #[must_use]
-    pub fn try_send_movable(&self, item: ItemType) -> bool {
+    pub fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
         self.channel.try_send_movable(item)
     }
 

@@ -17,7 +17,7 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
     /// IMPLEMENTORS: #[inline(always)]
     fn publish<F: FnOnce(&mut SlotType)>
-              (&self, setter: F) -> Option<NonZeroU32>;
+              (&self, setter: F) -> (Option<NonZeroU32>, Option<F>);
 
     /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
     /// move the data (copy & forget) rather than zero-copying it -- which may be useful for data that
@@ -25,7 +25,7 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
     /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
     /// IMPLEMENTORS: #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32>;
+    fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>);
 
     /// Advanced method to publish an element: allocates a slot from the pool, returning a reference to it.\
     /// Once called, either [publish_leaked()] or [unleak_slot()] should also be, eventually, called
@@ -81,7 +81,7 @@ pub trait MovePublisher<SlotType> {
     /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
     /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
     /// IMPLEMENTORS: #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32>;
+    fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>);
 
     /// Store an item, to be later retrieved with [MoveSubscriber<>], in a way that
     /// no copying nor moving around would ever be made:
@@ -107,7 +107,7 @@ pub trait MovePublisher<SlotType> {
                setter_fn:                      SetterFn,
                report_full_fn:                 ReportFullFn,
                report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
-              -> bool;
+              -> Option<SetterFn>;
 
 
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\

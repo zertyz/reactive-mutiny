@@ -14,7 +14,8 @@ pub trait OgreQueue<SlotType> {
     fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self;
     /// Attempts to add `element` to queue, returning immediately for non-blocking queues... possibly blocking otherwise.
     /// Returns `true` if the element was added, `false` if the queue was full... blocking queues might never return `false`.
-    fn enqueue(&self, element: SlotType) -> bool;
+    /// TODO f14 update docs
+    fn enqueue(&self, element: SlotType) -> Option<SlotType>;
     /// Attempts to dequeue an element from the queue, returning immediately for non-blocking queues... possibly blocking otherwise.
     /// Returns `Some(element)` if it was possible to dequeue, `None` if the queue was empty... blocking queues might never return `None`.
     fn dequeue(&self) -> Option<SlotType>;
@@ -38,7 +39,7 @@ pub trait OgreBlockingQueue<'a, SlotType>: OgreQueue<SlotType> {
     /// -- if multiple queues use the same mutex for the full_guard guard,
     fn set_empty_guard_ref(&mut self, empty_guard_ref: &'a RawMutex);
     /// similar to [enqueue()], but is guaranteed to return immediately (never blocks)
-    fn try_enqueue(&self, element: SlotType) -> bool;
+    fn try_enqueue(&self, element: SlotType) -> Option<SlotType>;
     /// similar to [dequeue()], but is guaranteed to return immediately (never blocks)
     fn try_dequeue(&self) -> Option<SlotType>;
 }

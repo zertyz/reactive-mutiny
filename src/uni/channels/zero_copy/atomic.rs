@@ -123,9 +123,9 @@ ChannelProducer<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
         match self.channel.publish(setter) {
-            Some(len_after) => {
+            (Some(len_after), _none_setter) => {
                 let len_after = len_after.get();
                 if len_after <= MAX_STREAMS as u32 {
                     self.streams_manager.wake_stream(len_after-1)
@@ -136,16 +136,16 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                     // the Stream had returned, leaving an element stuck. This code works around this and is required only for the Atomic Queue.
                     self.streams_manager.wake_stream(len_after - 2)
                 }
-                true
+                None
             },
-            None => false,
+            (None, optional_setter) => optional_setter,
         }
     }
 
     #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> bool {
+    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
         match self.channel.publish_movable(item) {
-            Some(len_after) => {
+            (Some(len_after), _none_item) => {
                 let len_after = len_after.get();
                 if len_after <= MAX_STREAMS as u32 {
                     self.streams_manager.wake_stream(len_after-1)
@@ -156,9 +156,9 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                     // the Stream had returned, leaving an element stuck. This code works around this and is required only for the Atomic Queue.
                     self.streams_manager.wake_stream(len_after - 2)
                 }
-                true
+                None
             },
-            None => false,
+            (None, some_item) => some_item,
         }
     }
 }

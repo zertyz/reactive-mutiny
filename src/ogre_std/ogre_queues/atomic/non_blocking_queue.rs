@@ -84,9 +84,9 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
     // TODO 2023-05-17: Make it zero-copy? <F: FnOnce(&mut ItemType)>
     #[inline(always)]
-    fn enqueue(&self, element: SlotType) -> bool {
-        match self.base_queue.publish(|slot| *slot = element) {
-            Some( _len_after ) => {
+    fn enqueue(&self, element: SlotType) -> Option<SlotType> {
+        match self.base_queue.publish_movable(element) {
+            ( Some(_len_after), _none_element ) => {
                 if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("### '{}' ENQUEUE: enqueueing element '{:?}'", self.queue_name, element);
                 }
@@ -96,9 +96,9 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                 if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                     self.metrics_diagnostics();
                 }
-                true
+                None
             },
-            None => {
+            ( None, some_element ) => {
                 if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("### '{}' ENQUEUE: queue is full when attempting to enqueue element '{:?}'", self.queue_name, element);
                 }
@@ -108,7 +108,7 @@ for NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
                 if Instruments::from(INSTRUMENTS).metrics_diagnostics() {
                     self.metrics_diagnostics();
                 }
-                false
+                some_element
             },
         }
     }
@@ -184,34 +184,34 @@ mod tests {
     fn basic_queue_use_cases() {
         let queue = NonBlockingQueue::<i32, 16, {Instruments::NoInstruments.into()}>::new("basic_use_cases' test queue".to_string());
         test_commons::basic_container_use_cases(queue.queue_name(), ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+                                                |e| queue.enqueue(e).is_none(), || queue.dequeue(), || queue.len());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn single_producer_multiple_consumers() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("single_producer_multiple_consumers' test queue".to_string());
-        test_commons::container_single_producer_multiple_consumers(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_single_producer_multiple_consumers(queue.queue_name(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn multiple_producers_single_consumer() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("multiple_producers_single_consumer' test queue".to_string());
-        test_commons::container_multiple_producers_single_consumer(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_single_consumer(queue.queue_name(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = NonBlockingQueue::<u32, {1024*64}, {Instruments::NoInstruments.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(), Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(), Blocking::NonBlocking, queue.max_size(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_single_in_and_out() {
         let queue = NonBlockingQueue::<u32, 65536, {Instruments::NoInstruments.into()}>::new("multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 }

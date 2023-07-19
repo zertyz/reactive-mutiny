@@ -187,10 +187,12 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
 
     /// TODO 2023-05-17: make it zero-copy <F: FnOnce(&mut ItemType)>
     #[inline(always)]
-    fn enqueue(&self, element: SlotType) -> bool {
+    fn enqueue(&self, element: SlotType) -> Option<SlotType> {
+        let mut some_element = Some(element);
         loop {
-            match self.base_queue.publish(|slot| *slot = element) {
-                Some(len_after) => {
+            let element = some_element.unwrap();
+            some_element = match self.base_queue.publish_movable(element) {
+                ( Some(len_after), _none_element ) => {
                     if Instruments::from(INSTRUMENTS).tracing() {
                         trace!("### QUEUE '{}' enqueued element '{:?}'", self.queue_name, element);
                     }
@@ -203,14 +205,16 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                     if len_after.get() == 1 {
                         self.report_no_longer_empty();
                     }
-                    break true
+                    break None
                 },
-                None => {
+                (None, some_element) => {
                     if !self.report_full() {
-                        break false
+                        break some_element
+                    } else {
+                        some_element
                     }
                 },
-            }
+            };
         }
     }
 
@@ -281,9 +285,9 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
     }
 
     /// TODO 2023-05-17: make it zero-copy <F: FnOnce(&mut ItemType)>
-    fn try_enqueue(&self, element: SlotType) -> bool {
-        match self.base_queue.publish(|slot| *slot = element) {
-            Some(len_after) => {
+    fn try_enqueue(&self, element: SlotType) -> Option<SlotType> {
+        match self.base_queue.publish_movable(element) {
+            ( Some(len_after), _none_element ) => {
                 if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("### QUEUE '{}' enqueued element '{:?}' in non-blocking mode", self.queue_name, element);
                 }
@@ -296,9 +300,9 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                 if len_after.get() == 1 {
                     self.report_no_longer_empty();
                 }
-                true
+                None
             },
-            None => {
+            ( None, some_element ) => {
                 if Instruments::from(INSTRUMENTS).tracing() {
                     trace!("### QUEUE '{}' is full when enqueueing element '{:?}' in non-blocking mode", self.queue_name, element);
                 }
@@ -309,7 +313,7 @@ for BlockingQueue<SlotType, BUFFER_SIZE, LOCK_TIMEOUT_MILLIS, INSTRUMENTS> {
                     self.metrics_diagnostics();
                 }
                 self.full_guard.try_lock();
-                false
+                some_element
             },
         }
     }
@@ -358,35 +362,35 @@ mod tests {
     fn basic_queue_use_cases() {
         let queue = BlockingQueue::<i32, 16, {Instruments::MetricsWithDiagnostics.into()}>::new("basic_use_cases' test queue".to_string());
         test_commons::basic_container_use_cases(queue.queue_name(), ContainerKind::Queue, Blocking::Blocking, queue.max_size(),
-                                                |e| queue.enqueue(e), || queue.dequeue(), || queue.len());
+                                                |e| queue.enqueue(e).is_none(), || queue.dequeue(), || queue.len());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn single_producer_multiple_consumers() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("single_producer_multiple_consumers' test queue".to_string());
-        test_commons::container_single_producer_multiple_consumers(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_single_producer_multiple_consumers(queue.queue_name(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     fn multiple_producers_single_consumer() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_single_consumer' test queue".to_string());
-        test_commons::container_multiple_producers_single_consumer(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_single_consumer(queue.queue_name(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_all_in_and_out() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_and_consumers_all_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(), Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out(queue.queue_name(), Blocking::Blocking, queue.max_size(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // flaky if ran in multi-thread?
     pub fn multiple_producers_and_consumers_single_in_and_out() {
         let queue = BlockingQueue::<u32, 65536, {Instruments::MetricsWithDiagnostics.into()}>::new("multiple_producers_and_consumers_single_in_and_out' test queue".to_string());
-        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(), |e| queue.enqueue(e), || queue.dequeue());
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out(queue.queue_name(), |e| queue.enqueue(e).is_none(), || queue.dequeue());
     }
 
     #[cfg_attr(not(doc),test)]
@@ -398,9 +402,9 @@ mod tests {
 
         test_commons::blocking_behavior(queue.queue_name(),
                                         QUEUE_SIZE,
-                                        |e| queue.enqueue(e),
+                                        |e| queue.enqueue(e).is_none(),
                                         || queue.dequeue(),
-                                        |e| queue.try_enqueue(e),
+                                        |e| queue.try_enqueue(e).is_none(),
                                         || queue.try_dequeue(),
                                         false, || {});
     }

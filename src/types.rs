@@ -118,9 +118,11 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
                               DerivedItemType: 'a + Debug> {
 
     /// Calls `setter`, passing a slot so the payload may be filled, then sends the event through this channel asynchronously.\
-    /// -- returns `false` if the buffer was full and the `item` wasn't sent; `true` otherwise.\
+    /// -- returns `None` if the sending was successful, otherwise (if the buffer was full and the `item` wasn't sent), returns
+    ///    the `setter` FnOnce() wrapped in an `Option`, so the sending can be retried without copying.\
     /// IMPLEMENTORS: #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool;
+    #[must_use = "The return type should be examined in case a retry is needed"]
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F>;
 
     /// Sends an event through this channel, after calling `setter` to fill the payload.\
     /// If the channel is full, this function may wait until sending it is possible.\
@@ -135,16 +137,19 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     /// The default implementation, though, is made for types that don't have a derived item type.\
     /// IMPLEMENTORS: #[inline(always)]
     #[inline(always)]
-    fn send_derived(&self, _derived_item: &DerivedItemType) {
+    #[must_use = "The return type should be examined in case a retry is needed"]
+    fn send_derived(&self, _derived_item: &DerivedItemType) -> bool {
         todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
 
-    /// Similar to [try_send()], but accepts the penalty that the compiler may impose of copying / moving the data around,
-    /// in opposition to set it only once, in its resting place -- useful to send cloned items and other objects with a custom drop
+    /// Similar to [try_send()], but accepts the penalty that the compiler may impose of copying / moving the data around when transmitting it,
+    /// in opposition to set it only once, in its resting place -- useful to send cloned items and other objects with a custom drop, like `Arc`s and `String`s.
+    /// Returns `None` if the sending was successful, otherwise (if the buffer was full and the `item` wasn't sent), returns
+    ///         the `item` wrapped in an `Option`, so the sending can be retried without further copying.\
     /// IMPLEMENTORS: #[inline(always)]
     /// TODO 2023-05-17: consider restricting this entry for types that require dropping, and the zero-copy versions for those who don't
-    #[must_use]
-    fn try_send_movable(&self, item: ItemType) -> bool;
+    #[must_use = "The return type should be examined in case a retry is needed"]
+    fn try_send_movable(&self, item: ItemType) -> Option<ItemType>;
 
 }
 

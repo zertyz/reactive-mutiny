@@ -22,6 +22,7 @@ use std::{
     fmt::Debug,
     task::{Waker},
 };
+use std::num::NonZeroU32;
 use async_trait::async_trait;
 
 
@@ -143,37 +144,40 @@ ChannelProducer<'a, ItemType, &'static ItemType>
 for MmapLog<'a, ItemType, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
-        if let Some(_tail) = self.log_queue.publish(setter) {
-            let running_streams_count = self.streams_manager.running_streams_count();
-            let used_streams = self.streams_manager.used_streams();
-            for i in 0..running_streams_count {
-                let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
-                if stream_id != u32::MAX {
-                    self.streams_manager.wake_stream(stream_id);
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
+        match self.log_queue.publish(setter) {
+            (Some(_tail), _none_setter) => {
+                let running_streams_count = self.streams_manager.running_streams_count();
+                let used_streams = self.streams_manager.used_streams();
+                for i in 0..running_streams_count {
+                    let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
+                    if stream_id != u32::MAX {
+                        self.streams_manager.wake_stream(stream_id);
+                    }
                 }
-            }
-            true
-        } else {
-            false
+                None
+            },
+            (None, some_setter) => some_setter,
         }
     }
 
     #[inline(always)]
     fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
-        if !self.try_send(setter) {
+        if self.try_send(setter).is_some() {
             panic!("reactive_mutiny::multi::channels::references::MMapLog: `send()` detected that the mmap file is full for channel named '{}' -- its tail is at #{}. Try increasing this limit.", self.streams_manager.name(), self.log_queue.available_elements_count())
         }
     }
 
     #[inline(always)]
-    fn send_derived(&self, _derived_item: &&'static ItemType) {
+    fn send_derived(&self, _derived_item: &&'static ItemType) -> bool {
         todo!("reactive_mutiny::multi::channels::references::MMapLog: `send_derived()` is not implemented for the MMapLog Multi channel '{}' -- it doesn't make sense to place a reference in an mmap", self.streams_manager.name())
     }
 
     #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> bool {
-        self.try_send(|slot| *slot = item)
+    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
+        self.try_send(|slot| unsafe { std::ptr::write(slot, item) } )
+            .map(|_| panic!("This will never happen, as an Mmap Topic always grows (never deny new elements"))
+
     }
 }
 

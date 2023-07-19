@@ -130,9 +130,9 @@ ChannelProducer<'a, ItemType, Arc<ItemType>>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
         self.send(setter);
-        true
+        None
     }
 
     #[inline(always)]
@@ -144,14 +144,14 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn send_derived(&self, arc_item: &Arc<ItemType>) {
+    fn send_derived(&self, arc_item: &Arc<ItemType>) -> bool {
         for stream_id in self.streams_manager.used_streams() {
             if *stream_id == u32::MAX {
                 break
             }
             loop {
                 let channel = unsafe { self.channels.get_unchecked(*stream_id as usize) };
-                match channel.publish_movable(arc_item.clone()) {
+                match channel.publish_movable(arc_item.clone()).0 {
                     Some(len_after_publishing) => {
                         if len_after_publishing.get() <= 1 {
                             self.streams_manager.wake_stream(*stream_id);
@@ -160,20 +160,22 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                     },
                     None => {
                         self.streams_manager.wake_stream(*stream_id);
-                        warn!("Multi Channel's FullSync (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
-                              channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
-                        std::thread::sleep(Duration::from_millis(500));
+// TODO f14: this code is supposed to be part of the caller or the contention strategy: this method can simply return false in this case, indicating that sending was not possible
+warn!("Multi Channel's FullSync (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+      channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
+std::thread::sleep(Duration::from_millis(500));
                     },
                 }
             }
         }
+        true
     }
 
     #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> bool {
+    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
         let arc_item = Arc::new(item);
         self.send_derived(&arc_item);
-        true
+        None
     }
 }
 

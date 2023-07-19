@@ -17,6 +17,7 @@ use std::{
     fmt::Debug,
     num::NonZeroU32,
 };
+use futures::TryFutureExt;
 use memmap::{
     MmapOptions,
     MmapMut,
@@ -171,7 +172,7 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
 impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, SlotType> {
 
     #[inline(always)]
-    fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> Option<NonZeroU32> {
+    fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> (Option<NonZeroU32>, Option<F>) {
         let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
         let slot = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
@@ -179,12 +180,13 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
         while self.mmap_contents.consumer_tail.compare_exchange_weak(tail, tail+1, Relaxed, Relaxed).is_err() {
             std::hint::spin_loop();
         }
-        NonZeroU32::new(1 + tail as u32)
+        (NonZeroU32::new(1 + tail as u32), None)
     }
 
     #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
-        self.publish(|slot| *slot = item)
+    fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>) {
+        self.publish(|slot| unsafe { std::ptr::write(slot, item) } ).1
+            .map_or((None, None), |_item| panic!("This will never happen, as an Mmap Topic always grows (never deny new elements"))
     }
 
     fn leak_slot(&self) -> Option<(/*ref:*/ &'a mut SlotType, /*id: */u32)> {
@@ -387,7 +389,7 @@ mod tests {
             age: expected_age,
         };
         let publishing_result = meta_log_topic.publish(|slot| *slot = my_data);
-        assert!(publishing_result.is_some(), "Publishing failed");
+        assert!(publishing_result.0.is_some(), "Publishing failed");
 
         // dequeue
         //////////
@@ -426,7 +428,7 @@ mod tests {
             age: 100 - expected_age,
         };
         let publishing_result = meta_log_topic.publish(|slot| *slot = my_data);
-        assert!(publishing_result.is_some(), "Publishing of a second element failed");
+        assert!(publishing_result.0.is_some(), "Publishing of a second element failed");
         let observed_slot_1: &MyData = consumer_1.consume(|slot| unsafe {&*(slot as *const MyData)},
                                                           || false,
                                                           |_| {})
@@ -470,7 +472,7 @@ mod tests {
         //////////
         for i in 0..N_ELEMENTS {
             let publishing_result = meta_log_topic.publish(|slot| *slot = create_expected_element(i));
-            assert!(publishing_result.is_some(), "Publishing of event #{i} failed");
+            assert!(publishing_result.0.is_some(), "Publishing of event #{i} failed");
         }
 
         // dequene & assert

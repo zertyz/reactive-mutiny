@@ -54,7 +54,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
 
     let start = Instant::now();
     for e in 1..=ITERATIONS {
-        while !uni.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128, time: e as u64 }) {
+        while uni.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128, time: e as u64 }).is_some() {
             std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
         }
     }
@@ -114,7 +114,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
     'done: loop {
         for _ in 0..(multi.buffer_size() - multi.pending_items_count()) {
             if e < ITERATIONS {
-                if multi.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128 + 1, time: e as u64 }) {
+                if multi.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128 + 1, time: e as u64 }).is_none() {
                     e += 1;
                 }
             } else {

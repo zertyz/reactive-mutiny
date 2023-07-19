@@ -16,7 +16,7 @@ use std::{
     mem::{MaybeUninit},
     task::Waker,
 };
-use crossbeam_channel::{Sender, Receiver, TryRecvError};
+use crossbeam_channel::{Sender, Receiver, TryRecvError, TrySendError};
 use async_trait::async_trait;
 
 
@@ -97,24 +97,43 @@ ChannelProducer<'a, ItemType, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+    // this method uses a little hack due to crossbeam not having zero-copy APIs...
+    // taking the crossbeam channel out of Tier-1 channels for this lib
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
+        if self.tx.is_full() {
+            return Some(setter)
+        }
+        // from this point on, this method never returns Some, meaning it may block
+
         // the following value-filling sequence avoids UB for droppable types & references (like `&str`)
         let mut item = MaybeUninit::uninit();
         let item_ref = unsafe { &mut *item.as_mut_ptr() };
         setter(item_ref);
-        self.try_send_movable(unsafe { item.assume_init() })
+        let mut some_item = Some( unsafe { item.assume_init() } );
+        loop {
+            let item = some_item.unwrap();
+            some_item = match self.try_send_movable(item) {
+                None => break None,
+                some_item => some_item,
+            };
+            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+        }
     }
 
     #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> bool {
-        match self.tx.len() {
+    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
+        let send_result = match self.tx.len() {
             len_before if len_before <= 2 => {
-                let ret = self.tx.try_send(item).is_ok();
+                let ret = self.tx.try_send(item);
                 self.streams_manager.wake_stream(0);
                 ret
             },
-            _ => self.tx.try_send(item).is_ok(),
-        }
+            _ => self.tx.try_send(item),
+        };
+        send_result
+            .map_or_else(|item| match item { TrySendError::Full(item) | TrySendError::Disconnected(item) => Some(item) },
+                      |_ok| None)
     }
 }
 

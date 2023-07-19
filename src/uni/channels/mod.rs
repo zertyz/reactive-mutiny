@@ -54,7 +54,7 @@ mod tests {
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
                 let (mut stream, _stream_id) = channel.create_stream();
-                let send_result = channel.try_send(|slot| *slot = "a");
+                let send_result = channel.try_send(|slot| *slot = "a").is_none();
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
             }
@@ -154,7 +154,7 @@ mod tests {
 
                 // send
                 for i in 0..PARALLEL_STREAMS as u32 {
-                    while !channel.try_send(|slot| *slot = i) {
+                    while channel.try_send(|slot| *slot = i).is_some() {
                         std::hint::spin_loop();
                     };
                 }
@@ -230,7 +230,7 @@ mod tests {
 
                 let sender_future = async {
                     for e in 0..count {
-                        while !channel.try_send(|slot| *slot = e) {
+                        while channel.try_send(|slot| *slot = e).is_some() {
                             tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                         }
                     }
@@ -271,7 +271,7 @@ if counter == count {
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     for e in 0..count {
-                        while !channel.try_send(|slot| *slot = e) {
+                        while channel.try_send(|slot| *slot = e).is_some() {
                             std::hint::spin_loop();
                         }
                     }

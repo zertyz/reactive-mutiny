@@ -24,7 +24,7 @@ log               = "0.4"
 tokio             = { version = "1", features = ["full", "rt-multi-thread"] }
 futures           = "0.3"     # brings in "Streams" / async iterators
 minstant          = "0.1"     # as fast as possible time measurements on X86_64 using TSC / RDTSC instructions -- avoiding system calls & context switches
-indexmap          = "1.9"     # hashmaps as fast as vectors to traverse through values (preserves the insertion order in a vector)
+indexmap          = "2"       # hashmaps as fast as vectors to traverse through values (preserves the insertion order in a vector)
 atomic_enum       = "0.2"
 async-trait       = "0.1"     # non-zero-cost async traits
 parking_lot       = "0.12"    # way faster than std mutex (and tokio mutexes as well)
@@ -58,8 +58,8 @@ minstant       = "0.1"  # (real) time measurements through RDTSC instruction (wi
 
 # command-line parsing
 structopt    = "0.3"                                            # command line parsing
-strum        = { version = "0.24", features = ["derive"] }      # enums serialization/deserialization
-strum_macros = "0.24"
+strum        = { version = "0.25", features = ["derive"] }      # enums serialization/deserialization
+strum_macros = "0.25"
 chrono       = "0"
 
 # console UI

@@ -144,12 +144,13 @@ ChannelProducer<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
-        if let Some(ogre_arc_item) = OgreArc::new(setter, &self.allocator) {
+    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
+        if let Some((ogre_arc_item, mut slot)) = OgreArc::new(&self.allocator) {
+            setter(&mut slot);
             self.send_derived(&ogre_arc_item);
-            true
+            None
         } else {
-            false
+            Some(setter)
         }
     }
 
@@ -167,7 +168,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn send_derived(&self, ogre_arc_item: &OgreArc<ItemType, OgreAllocatorType>) {
+    fn send_derived(&self, ogre_arc_item: &OgreArc<ItemType, OgreAllocatorType>) -> bool {
         let running_streams_count = self.streams_manager.running_streams_count();
         unsafe { ogre_arc_item.increment_references(running_streams_count) };
         let used_streams = self.streams_manager.used_streams();
@@ -175,13 +176,14 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
             let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
             if stream_id != u32::MAX {
                 let dispatcher_manager = unsafe { self.dispatcher_managers.get_unchecked(stream_id as usize) };
-                match dispatcher_manager.publish_movable(unsafe { ogre_arc_item.raw_copy() }) {
+                match dispatcher_manager.publish_movable(unsafe { ogre_arc_item.raw_copy() }).0 {
                     Some(len_after_publishing) => {
                         if len_after_publishing.get() <= 2 {
                             self.streams_manager.wake_stream(stream_id);
                         }
                     },
                     None => {
+                        // TODO f14: re-evaluate if this is really not happening after the f14 changes
                         // WARNING: THIS SHOULD NEVER HAPPEN IF BUFFER_SIZE OF THE ALLOCATOR IS THE SAME AS THE DISPATCHER MANAGERS, as there is no way that there are more elements into a dispatcher manager than elements in the allocator
                         //          if this class ever gets to accept a bigger BUFFER_SIZE for the allocator, this situation may happen (and the loops should be brought back from the "movable" channels). For the time being, it could be replaced by a panic!() instead, saying it is a bug.
                         panic!("BUG! This should never happen! See the comment in the code -- Multi Channel's OgreArc/Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
@@ -190,11 +192,13 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                 }
             }
         }
+        true
     }
 
     #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> bool {
-        self.try_send(|slot| *slot = item)
+    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
+        todo!("If the refactoring works, copy & adjust the code from `try_send()`");
+        //self.try_send(|slot| unsafe { std::ptr::write(slot, item) } )
     }
 }
 

@@ -326,7 +326,7 @@ mod benchmark_queues {
                     OgreQueue::max_size(self)
                 }
                 fn add(&self, item: SlotType) -> bool {
-                    self.enqueue(item)
+                    self.enqueue(item).is_none()
                 }
                 fn remove(&self) -> Option<SlotType> {
                     self.dequeue()

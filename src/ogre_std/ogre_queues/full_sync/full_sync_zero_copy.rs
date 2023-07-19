@@ -61,24 +61,24 @@ MetaPublisher<'a, SlotType> for
 FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> Option<NonZeroU32> {
+    fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> (Option<NonZeroU32>, Option<F>) {
         match self.leak_slot() {
             Some( (slot_ref, slot_id) ) => {
                 setter(slot_ref);
-                self.publish_leaked_id(slot_id)
+                (self.publish_leaked_id(slot_id), None)
             },
-            None => None,
+            None => (None, Some(setter)),
         }
     }
 
     #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
+    fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>) {
         match self.leak_slot() {
             Some( (slot_ref, slot_id) ) => {
                 *slot_ref = item;
-                self.publish_leaked_id(slot_id)
+                (self.publish_leaked_id(slot_id), None)
             }
-            None => None,
+            None => (None, Some(item)),
         }
     }
 
@@ -94,7 +94,7 @@ FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn publish_leaked_id(&'a self, slot_id: u32) -> Option<NonZeroU32> {
-        self.queue.publish_movable(slot_id)
+        self.queue.publish_movable(slot_id).0
     }
 
     #[inline(always)]

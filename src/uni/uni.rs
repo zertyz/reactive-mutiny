@@ -51,7 +51,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     #[inline(always)]
     #[must_use]
-    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> bool {
+    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
         self.channel.try_send(setter)
     }
 
@@ -62,7 +62,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     #[inline(always)]
     #[must_use]
-    pub fn try_send_movable(&self, item: ItemType) -> bool {
+    pub fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
         self.channel.try_send_movable(item)
     }
 

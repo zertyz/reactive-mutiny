@@ -28,7 +28,20 @@ impl<DataType:          Debug + Send + Sync,
 OgreArc<DataType, OgreAllocatorType> {
 
 
-    /// Zero-copy the `data` into one of the slots provided by `allocator` -- which will be used to deallocate it when the time comes
+    /// DOC THIS NEW ONE
+    /// Returns an uninitialized `OgreAllocator` with a reference to set its value;\
+    /// `None` if the allocator is full
+    #[inline(always)]
+    pub fn new(allocator: &OgreAllocatorType) -> Option<(Self, &mut DataType)> {
+        allocator.alloc_ref()
+            .map(|(reference, data_id)| {
+                ( Self::from_allocated(data_id, allocator),
+                  reference )
+        })
+    }
+
+
+        /// Zero-copy the `data` into one of the slots provided by `allocator` -- which will be used to deallocate it when the time comes
     /// --  zero-copying will be enforced (if compiled in Release mode) due to this method being inlined in the caller.\
     /// `None` will be returned if there are, currently, no space available for the requested allocation.\
     /// A possible usage pattern for use cases that don't care if we're out of space is:
@@ -36,13 +49,13 @@ OgreArc<DataType, OgreAllocatorType> {
     ///         let allocator = <something from ogre_alloc::*>;
     ///         let data = <build your data here>;
     ///         let allocated_data = loop {
-    ///             match OgreBox::new(|slot| *slot = data, allocator) {
+    ///             match OgreBox::new_with(|slot| *slot = data, allocator) {
     ///                 Some(instance) => break instance,
     ///                 None => <<out_of_elements_code>>,   // sleep, warning, etc...
     ///             }
     ///         }
     #[inline(always)]
-    pub fn new<F: FnOnce(&mut DataType)>(setter: F, allocator: &OgreAllocatorType) -> Option<Self> {
+    pub fn new_with<F: FnOnce(&mut DataType)>(setter: F, allocator: &OgreAllocatorType) -> Option<Self> {
         Self::new_with_clones::<1, F>(setter, allocator)
             .map(|ogre_arcs| unsafe { ogre_arcs.into_iter().next().unwrap_unchecked() })
     }
@@ -261,7 +274,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     pub fn happy_path_usage() {
         let allocator = AllocatorAtomicArray::<u128, 128>::new();
-        let arc1 = OgreArc::new(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
+        let arc1 = OgreArc::new_with(|slot| *slot = 128, &allocator).expect("Allocation should have been done");
         println!("arc1 is {arc1} -- {:?}", arc1);
         assert_eq!((*arc1.deref(), arc1.references_count()), (128, 1), "Starting Value and Reference Counts don't match for `arc1`");
         let arc2 = arc1.clone();

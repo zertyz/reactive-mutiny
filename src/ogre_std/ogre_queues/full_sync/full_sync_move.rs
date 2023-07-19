@@ -69,15 +69,15 @@ MovePublisher<SlotType> for
 FullSyncMove<SlotType, BUFFER_SIZE> {
 
     #[inline(always)]
-    fn publish_movable(&self, item: SlotType) -> Option<NonZeroU32> {
+    fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>) {
         match self.leak_slot_internal(|| false) {
             Some( (slot, len_before) ) => {
                 unsafe { ptr::write(slot, item); }
                 self.publish_leaked_internal();
                 ogre_sync::unlock(&self.concurrency_guard);
-                NonZeroU32::new(len_before+1)
+                (NonZeroU32::new(len_before+1), None)
             },
-            None => None,
+            None => (None, Some(item)),
         }
     }
 
@@ -88,7 +88,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
               (&self, setter_fn:                      SetterFn,
                       report_full_fn:                 ReportFullFn,
                       report_len_after_enqueueing_fn: ReportLenAfterEnqueueingFn)
-              -> bool {
+              -> Option<SetterFn> {
 
         match self.leak_slot_internal(report_full_fn) {
             Some( (slot_ref, len_before) ) => {
@@ -96,9 +96,9 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
                 self.publish_leaked_internal();
                 ogre_sync::unlock(&self.concurrency_guard);
                 report_len_after_enqueueing_fn(len_before+1);
-                true
+                None
             }
-            None => false
+            None => Some(setter_fn)
         }
     }
 
@@ -318,12 +318,12 @@ mod tests {
         let queue = FullSyncMove::<i32, 16>::new();
         test_commons::basic_container_use_cases("Movable API",
                                                 ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish_movable(e).is_some(),
+                                                |e| queue.publish_movable(e).0.is_some(),
                                                 || queue.consume_movable(),
                                                 || queue.available_elements_count());
         test_commons::basic_container_use_cases("Zero-Copy Producer/Movable Subscriber API",
                                                 ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}),
+                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                                 || queue.consume_movable(),
                                                 || queue.available_elements_count());
     }
@@ -333,10 +333,10 @@ mod tests {
     fn single_producer_multiple_consumers() {
         let queue = FullSyncMove::<u32, 65536>::new();
         test_commons::container_single_producer_multiple_consumers("Movable API",
-                                                                   |e| queue.publish_movable(e).is_some(),
+                                                                   |e| queue.publish_movable(e).0.is_some(),
                                                                    || queue.consume_movable());
         test_commons::container_single_producer_multiple_consumers("Zero-Copy Producer/Movable Subscriber API",
-                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
+                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                                                    || queue.consume_movable());
     }
 
@@ -345,10 +345,10 @@ mod tests {
     fn multiple_producers_single_consumer() {
         let queue = FullSyncMove::<u32, 65536>::new();
         test_commons::container_multiple_producers_single_consumer("Movable API",
-                                                                   |e| queue.publish_movable(e).is_some(),
+                                                                   |e| queue.publish_movable(e).0.is_some(),
                                                                    || queue.consume_movable());
         test_commons::container_multiple_producers_single_consumer("Zero-Copy Producer/Movable Subscriber API",
-                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
+                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                                                    || queue.consume_movable());
     }
 
@@ -359,12 +359,12 @@ mod tests {
         test_commons::container_multiple_producers_and_consumers_all_in_and_out("Movable API",
                                                                                 Blocking::NonBlocking,
                                                                                 queue.max_size(),
-                                                                                |e| queue.publish_movable(e).is_some(),
+                                                                                |e| queue.publish_movable(e).0.is_some(),
                                                                                 || queue.consume_movable());
         test_commons::container_multiple_producers_and_consumers_all_in_and_out("Zero-Copy Producer/Movable Subscriber API",
                                                                                 Blocking::NonBlocking,
                                                                                 queue.max_size(),
-                                                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}),
+                                                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                                                                 || queue.consume_movable());
     }
 
@@ -373,10 +373,10 @@ mod tests {
     pub fn multiple_producers_and_consumers_single_in_and_out() {
         let queue = FullSyncMove::<u32, 65536>::new();
         test_commons::container_multiple_producers_and_consumers_single_in_and_out("Movable API",
-                                                                                   |e| queue.publish_movable(e).is_some(),
+                                                                                   |e| queue.publish_movable(e).0.is_some(),
                                                                                    || queue.consume_movable());
         test_commons::container_multiple_producers_and_consumers_single_in_and_out("Zero-Copy Producer/Movable Subscriber API",
-                                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}),
+                                                                                   |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                                                                    || queue.consume_movable());
     }
 
@@ -384,11 +384,11 @@ mod tests {
     pub fn peek_test() {
         let queue = FullSyncMove::<u32, 16>::new();
         test_commons::peak_remaining("Movable API",
-                                     |e| queue.publish_movable(e).is_some(),
+                                     |e| queue.publish_movable(e).0.is_some(),
                                      || queue.consume_movable(),
                                      || unsafe { queue.peek_remaining() } );
         test_commons::peak_remaining("Zero-Copy Producer/Movable Subscriber API",
-                                     |e| queue.publish(|slot| *slot = e, || false, |_| {}),
+                                     |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                      || queue.consume_movable(),
                                      || unsafe { queue.peek_remaining() } );
     }
