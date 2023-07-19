@@ -252,8 +252,8 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     pub async fn flush(&self, timeout: Duration, pending_items_count: impl Fn() -> u32) -> u32 {
         let mut start: Option<Instant> = None;
         loop {
-            let pending_count = pending_items_count();
-            if pending_count > 0 {
+            let pending_items_count = pending_items_count();
+            if pending_items_count > 0 {
                 self.wake_all_streams();
                 tokio::time::sleep(Duration::from_millis(1)).await;
             } else {
@@ -263,7 +263,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             if timeout != Duration::ZERO {
                 if let Some(start) = start {
                     if start.elapsed() > timeout {
-                        break pending_count
+                        break pending_items_count
                     }
                 } else {
                     start = Some(Instant::now());
@@ -298,17 +298,14 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
     }
 
     pub async fn end_all_streams(&self, timeout: Duration, pending_items_count: impl Fn() -> u32) -> u32 {
-        let start = Instant::now();
-        self.flush(timeout, &pending_items_count).await;
-        self.cancel_all_streams();
-        self.flush(timeout, &pending_items_count).await;
-        loop {
-            let running_streams = self.running_streams_count();
-            if running_streams == 0 || timeout != Duration::ZERO && start.elapsed() > timeout {
-                break running_streams
-            }
-            self.wake_all_streams();
-            tokio::time::sleep(Duration::from_millis(1)).await;
+        if self.flush(timeout, &pending_items_count).await > 0 {
+            self.cancel_all_streams();
+            self.flush(timeout, &pending_items_count).await;
+            self.running_streams_count()
+        } else {
+            self.cancel_all_streams();
+            tokio::task::yield_now().await;
+            0
         }
     }
 

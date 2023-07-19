@@ -43,11 +43,9 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
                                                    |stream| {
                                                       let sum = Arc::clone(&sum);
                                                       stream.map(move |exchange_event| {
-                                                          let val = match *exchange_event {
-                                                              ExchangeEvent::TradeEvent { quantity, .. } => quantity,
-                                                              _ => 0,
-                                                          };
-                                                          sum.fetch_add(val as u64, Relaxed)
+                                                          if let ExchangeEvent::TradeEvent { quantity, .. } = *exchange_event {
+                                                              sum.fetch_add(quantity as u64, Relaxed);
+                                                          }
                                                       })
                                                   },
                                                    |_| async {});
@@ -61,12 +59,19 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
         }
     }
     debug_assert!(uni.close(Duration::from_secs(5)).await, "Uni wasn't properly closed");
+    std::thread::sleep(Duration::from_millis(10));
     let elapsed = start.elapsed();
     let observed = sum.load(Relaxed);
     let expected = (1 + ITERATIONS) as u64 * (ITERATIONS / 2) as u64;
     println!("{:10.2}/s {}",
              ITERATIONS as f64 / elapsed.as_secs_f64(),
-             if observed == expected { format!("✓") } else { format!("∅ -- SUM of the first {ITERATIONS} natural numbers differ! Expected: {expected}; Observed: {observed}") });
+             if observed == expected {
+                 format!("✓")
+             } else {
+                 // if the observed iteractions is zero, remember to enable metrics in the `INSTRUMENTS` config at the top of this file
+                 format!("∅ -- SUM of the first {ITERATIONS} natural numbers differ! Expected: {expected}; Observed: {observed} (observed iteractions: {}; expected: {})",
+                         uni.stream_executors[0].ok_events_avg_future_duration.probe().0, ITERATIONS)
+             });
 }
 
 async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<Target = ExchangeEvent>,
@@ -94,11 +99,9 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
                 let counter: &u64 = counters.get(8 * listener_id as usize).unwrap();
                 let counter = unsafe {&mut *((counter as *const u64) as *mut u64)};
                 stream.map(move |exchange_event| {
-                    let val = match *exchange_event {
-                        ExchangeEvent::TradeEvent { quantity, .. } => quantity,
-                        _ => 0,
-                    };
-                    *counter = *counter + val as u64;
+                    if let ExchangeEvent::TradeEvent { quantity, .. } = *exchange_event {
+                        *counter = *counter + quantity as u64;
+                    }
                 })
             }, |_| async {}).await
             .map_err(|err| format!("Couldn't spawn a new executor for Multi named '{}', listener #{}: {}", multi.multi_name, listener_number, err))?;

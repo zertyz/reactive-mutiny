@@ -97,21 +97,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
     #[must_use = "Returns true if the Uni could be closed within the given time"]
     pub async fn close(&self, timeout: Duration) -> bool {
-        let start = Instant::now();
-        if self.channel.gracefully_end_all_streams(timeout).await > 0 {
-            false
-        } else {
-            loop {
-                if self.finished_executors_count.load(Relaxed) > 0 {
-                    break true;
-                }
-                // enforce timeout
-                if timeout != Duration::ZERO && start.elapsed() > timeout {
-                    break false
-                }
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-        }
+        self.channel.gracefully_end_all_streams(timeout).await == 0
     }
 
     /// Spawns an optimized executor for the `Stream` returned by `pipeline_builder()`, provided it produces elements which are `Future` & fallible

@@ -11,6 +11,13 @@ This file contains the backlog & implementation plans for all foreseable feature
 
 # TODO
 
+  f14) 2023-07-16: Some API changes due to user feedback: 
+                     1) `try_send_movable()`, `try_send()` & friends should not return just a bool. They should return:
+                          * `Option<T>`, being None if the sending was successful and `Some(T)` if it was not, so retrying could be attempted without copying;
+                          * `Option<FnOnce>`, like above, for `try_send(FnOnce)` -- which might be renamed to `try_send_with()`
+                          * Introduce `send_movable()` and `send_with()`, receiving an additional callback `on_full: Fn() -> bool`, into which one may add sleep, spin, log, etc.
+                        --> we must confirm this API change doesn't copy values when retrying (if compiled for Release).
+                     2) Introduce Uni/Multi Channels `is_channel_open()` and, possibly, review the name `keep_streams_running()` / `close_streams()/close_channel()`
   b8) 2023-05-30: No function should panic! for non-bug scenarios: `Result<>`s should be returned instead
   r2) 2023-05-30: Complete the socket-server example with fully working server and client sides (with benchmraks)
     r2.1) Simplify / redocument the existing code based on the latest improvements of the reactive-mutiny library
