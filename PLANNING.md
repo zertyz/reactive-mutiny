@@ -13,9 +13,13 @@ This file contains the backlog & implementation plans for all foreseable feature
 
   f14) 2023-07-16: Some API changes due to user feedback: 
                      1) `try_send_movable()`, `try_send()` & friends should not return just a bool. They should return:
-                          * `Option<T>`, being None if the sending was successful and `Some(T)` if it was not, so retrying could be attempted without copying;
-                          * `Option<FnOnce>`, like above, for `try_send(FnOnce)` -- which might be renamed to `try_send_with()`
-                          * Introduce `send_movable()` and `send_with()`, receiving an additional callback `on_full: Fn() -> bool`, into which one may add sleep, spin, log, etc.
+                          * `Result<(), T>`, being Ok(()) if the sending was successful and `Err(T)` if it was not, so retrying could be attempted without copying
+                            (notice some types do return a value on success... for these cases, `Result<S,T>` where `S` is the currently returned success value);
+                          * `Result<(), FnOnce>`, like above, for `try_send(FnOnce)` -- which might be renamed to `try_send_with()`
+                          * Introduce `send_movable()` and repurpose `send()`, to receive an additional callback `on_full: Fn(T) -> Result<(), T>`, into which one may add sleep, spin, log, etc
+                            (notice the `send_*()` variants may also result in `Err(T)`, like their uncorrectable `try_send_*()` counterparts -- the difference being the formers allow for a correction/reattempt).
+                            Implementation tip: make these functions the basis for all `try_send_*()` counterparts: their `on_full(T)` callback will just return `Err(T)`, which would cause the function not to retry,
+                            yielding the error to the caller.
                         --> we must confirm this API change doesn't copy values when retrying (if compiled for Release).
                      2) Introduce Uni/Multi Channels `is_channel_open()` and, possibly, review the name `keep_streams_running()` / `close_streams()/close_channel()`
   b8) 2023-05-30: No function should panic! for non-bug scenarios: `Result<>`s should be returned instead
