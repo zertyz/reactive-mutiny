@@ -191,9 +191,9 @@ AtomicMove<SlotType, BUFFER_SIZE> {
         loop {
             let head = self.head.load(Relaxed);
             len_before = slot_id.overflowing_sub(head).0;
-            // is queue full?
+            // is queue not full?
             if len_before < BUFFER_SIZE as u32 {
-                break
+                break unsafe { Some( (mutable_buffer.get_unchecked_mut(slot_id as usize % BUFFER_SIZE), slot_id, len_before) ) }
             } else {
                 // queue is full: reestablish the correct `enqueuer_tail` (receding it to its original value)
                 if self.try_unleak_slot_internal(slot_id) {
@@ -206,7 +206,6 @@ AtomicMove<SlotType, BUFFER_SIZE> {
                 }
             }
         }
-        unsafe { Some( (mutable_buffer.get_unchecked_mut(slot_id as usize % BUFFER_SIZE), slot_id, len_before) ) }
     }
 
     /// marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
@@ -355,7 +354,7 @@ mod tests {
                                                 || queue.available_elements_count());
         test_commons::basic_container_use_cases("Zero-Copy Producer/Movable Subscriber API",
                                                 ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
-                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_some(),
+                                                |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                                 || queue.consume_movable(),
                                                 || queue.available_elements_count());
     }

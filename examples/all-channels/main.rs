@@ -54,9 +54,9 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
 
     let start = Instant::now();
     for e in 1..=ITERATIONS {
-        while uni.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128, time: e as u64 }).is_some() {
-            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-        }
+        uni.send_with(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128, time: e as u64 })
+            .retry_with(|setter| uni.send_with(setter))
+            .spinning_forever();
     }
     debug_assert!(uni.close(Duration::from_secs(5)).await, "Uni wasn't properly closed");
     std::thread::sleep(Duration::from_millis(10));
@@ -114,14 +114,17 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
     'done: loop {
         for _ in 0..(multi.buffer_size() - multi.pending_items_count()) {
             if e < ITERATIONS {
-                if multi.try_send(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128 + 1, time: e as u64 }).is_none() {
+                if multi.send_with(|slot| *slot = ExchangeEvent::TradeEvent { unitary_value: 10.05, quantity: e as u128 + 1, time: e as u64 }).is_ok() {
                     e += 1;
                 }
             } else {
                 break 'done;
             }
         }
-        std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+        std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+        std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+        std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
+        std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
     }
     multi.close(Duration::from_secs(5)).await;
     let elapsed = start.elapsed();

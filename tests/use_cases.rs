@@ -45,9 +45,9 @@ async fn unis_of_arcs() {
                                                    move |executor| async move {
                                                      executor_status_ref.lock().await.push_str(&format!("count: {}", executor.ok_events_avg_future_duration.lightweight_probe().0));
                                                  });
-    let _ = uni.try_send_movable(Arc::new(123));
-    let _ = uni.try_send_movable(Arc::new(321));
-    let _ = uni.try_send_movable(Arc::new(444));
+    let _ = uni.send(Arc::new(123));
+    let _ = uni.send(Arc::new(321));
+    let _ = uni.send(Arc::new(444));
     // TODO: 2023-05-23: for an improved API, uni.try_send() & other functions must be denied (compilation error) if the type is `std::mem::needs_drop()`
     assert!(uni.close(Duration::from_secs(5)).await, "couldn't close");
     assert_eq!(sum.load(Relaxed), 888, "Wrong payloads received");
@@ -58,9 +58,9 @@ async fn unis_of_arcs() {
 #[cfg_attr(not(doc),tokio::test)]
 async fn replayable_events() -> Result<(), Box<dyn std::error::Error>> {
     let multi = Arc::new(MultiMmapLog::<u32, 16>::new("replayable_events_integration_test"));
-    let _ = multi.try_send_movable(123);
-    let _ = multi.try_send_movable(321);
-    let _ = multi.try_send_movable(444);
+    let _ = multi.send(123);
+    let _ = multi.send(321);
+    let _ = multi.send(444);
 
     // first listener -- will receive all elements. No big deal: `Uni`s does that.
     let first_sum = Arc::new(AtomicU32::new(0));
@@ -94,7 +94,7 @@ async fn replayable_events() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(second_sum.load(Relaxed), 888, "Wrong payloads received by the second listener");
 
     // a new event, to shake the sums up to 999
-    let _ = multi.try_send_movable(111);
+    let _ = multi.send(111);
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(first_sum.load(Relaxed), 999, "First listener failed to process a new event");
     assert_eq!(second_sum.load(Relaxed), 999, "Second listener failed to process a new event");
@@ -117,7 +117,7 @@ async fn unis_with_any_resulting_type() {
                                                       payloads.map(move | payload| observed_raw_type_value_ref.store(payload, Relaxed))
                                                   },
                                                    |_| async {});
-    assert!(raw_type_uni.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a raw value that would remain raw");
+    assert!(raw_type_uni.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a raw value that would remain raw");
     assert!(raw_type_uni.close(Duration::from_millis(100)).await, "couldn't close the raw Uni in time");
     assert_eq!(observed_raw_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `raw_type_uni`");
 
@@ -137,7 +137,7 @@ async fn unis_with_any_resulting_type() {
                                     })
                                 },
                                  |_| async {});
-    assert!(future_type_uni.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become a future");
+    assert!(future_type_uni.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become a future");
     assert!(future_type_uni.close(Duration::from_millis(100)).await, "couldn't close the future Uni in time");
     assert_eq!(observed_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `future_type_uni`");
 
@@ -152,7 +152,7 @@ async fn unis_with_any_resulting_type() {
                                   },
                                    |_| {},
                                    |_| async {});
-    assert!(fallible_type_uni.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become fallible");
+    assert!(fallible_type_uni.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become fallible");
     assert!(fallible_type_uni.close(Duration::from_millis(100)).await, "couldn't close the fallible Uni in time");
     assert_eq!(observed_fallible_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_type_uni`");
 
@@ -174,7 +174,7 @@ async fn unis_with_any_resulting_type() {
                         },
                          |_| async {},
                          |_| async {});
-    assert!(fallible_future_type_uni.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become a fallible future");
+    assert!(fallible_future_type_uni.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become a fallible future");
     assert!(fallible_future_type_uni.close(Duration::from_millis(100)).await, "couldn't close the fallible future Uni in time");
     assert_eq!(observed_fallible_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_future_type_uni`");
 
@@ -193,7 +193,7 @@ async fn multi_with_any_resulting_type_for_newies() -> Result<(), Box<dyn std::e
                                                            "Processor resulting in raw types",
                                                            move |payloads| payloads.map(move | payload| observed_raw_type_value_ref.store(*payload, Relaxed)),
                                                            |_| async {}).await?;
-    assert!(raw_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a raw value that would remain raw");
+    assert!(raw_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a raw value that would remain raw");
     assert!(raw_type_multi.close(Duration::from_millis(100)).await, "couldn't close the raw Multi in time");
     assert_eq!(observed_raw_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `raw_type_multi`");
 
@@ -213,7 +213,7 @@ async fn multi_with_any_resulting_type_for_newies() -> Result<(), Box<dyn std::e
                                                  })
                                              },
                                              |_| async {}).await?;
-    assert!(future_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become a future");
+    assert!(future_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become a future");
     assert!(future_type_multi.close(Duration::from_millis(100)).await, "couldn't close the future Multi in time");
     assert_eq!(observed_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `future_type_multi`");
 
@@ -226,7 +226,7 @@ async fn multi_with_any_resulting_type_for_newies() -> Result<(), Box<dyn std::e
                                                  move |payloads| payloads.map(move | payload| Ok(observed_fallible_type_value_ref.store(*payload, Relaxed)) ),
                                                  |_| {},
                                                  |_| async {}).await?;
-    assert!(fallible_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become fallible");
+    assert!(fallible_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become fallible");
     assert!(fallible_type_multi.close(Duration::from_millis(100)).await, "couldn't close the fallible Multi in time");
     assert_eq!(observed_fallible_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_type_multi`");
 
@@ -249,7 +249,7 @@ async fn multi_with_any_resulting_type_for_newies() -> Result<(), Box<dyn std::e
                                               },
                                               |_| async {},
                                               |_| async {}).await?;
-    assert!(fallible_future_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become a fallible future");
+    assert!(fallible_future_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become a fallible future");
     assert!(fallible_future_type_multi.close(Duration::from_millis(100)).await, "couldn't close the fallible future Multi in time");
     assert_eq!(observed_fallible_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_future_type_multi`");
 
@@ -274,7 +274,7 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
                                                                   "Newies processor resulting in raw types",
                                                                   move |payloads| payloads.map(move | payload| observed_raw_type_value_ref2.store(*payload, Relaxed)),
                                                                   |_| async {}).await?;
-    assert!(raw_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a raw value that would remain raw");
+    assert!(raw_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a raw value that would remain raw");
     assert!(raw_type_multi.close(Duration::from_millis(100)).await, "couldn't close the raw Multi in time");
     assert_eq!(observed_raw_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `raw_type_multi`");
 
@@ -306,7 +306,7 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
                                                         })
                                                     },
                                                     |_| async {}).await?;
-    assert!(future_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become a future");
+    assert!(future_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become a future");
     assert!(future_type_multi.close(Duration::from_millis(100)).await, "couldn't close the future Multi in time");
     assert_eq!(observed_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `future_type_multi`");
 
@@ -324,7 +324,7 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
                                                         move |payloads| payloads.map(move | payload| Ok(observed_fallible_type_value_ref2.store(*payload, Relaxed)) ),
                                                         |_| async {},
                                                         |_| {}).await?;
-    assert!(fallible_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become fallible");
+    assert!(fallible_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become fallible");
     assert!(fallible_type_multi.close(Duration::from_millis(100)).await, "couldn't close the fallible Multi in time");
     assert_eq!(observed_fallible_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_type_multi`");
 
@@ -359,7 +359,7 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
                                                      },
                                                      |_| async {},
                                                      |_| async {}).await?;
-    assert!(fallible_future_type_multi.try_send_movable(EXPECTED_RAW_VALUE).is_none(), "couldn't send a value that would become a fallible future");
+    assert!(fallible_future_type_multi.send(EXPECTED_RAW_VALUE).is_ok(), "couldn't send a value that would become a fallible future");
     assert!(fallible_future_type_multi.close(Duration::from_millis(100)).await, "couldn't close the fallible future Multi in time");
     assert_eq!(observed_fallible_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_future_type_multi`");
 

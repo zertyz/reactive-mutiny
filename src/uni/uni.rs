@@ -30,6 +30,18 @@ impl<ItemType:          Send + Sync + Debug + 'static,
      UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync>
+UniGenericTypes for
+Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
+    type ItemType = ItemType;
+    type UniChannelType = UniChannelType;
+    type DerivedItemType = DerivedItemType;
+    type MutinyStreamType = MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>;
+}
+
+impl<ItemType:          Send + Sync + Debug + 'static,
+     UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+     const INSTRUMENTS: usize,
+     DerivedItemType:   Debug + Sync>
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Creates a [Uni], which implements the `consumer pattern`, capable of:
@@ -50,20 +62,15 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
-    #[must_use]
-    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
-        self.channel.try_send(setter)
+    #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
+    pub fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
+        self.channel.send(item)
     }
 
     #[inline(always)]
-    pub fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
-        self.channel.send(setter)
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
-        self.channel.try_send_movable(item)
+    #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), F>`"]
+    pub fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        self.channel.send_with(setter)
     }
 
     /// Sets this [Uni] to return `Stream`s instead of executing them
@@ -295,6 +302,26 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
 }
+
+
+/// This trait exists only to overcome some Rust's limitations (as of 2023-08-01), where it is not possible to infer the types of generic parameters directly.
+/// Since having access to internal generic types (of intricate types) my greatly economize typing and increase code readability, this trait justifies its existence for now.\
+/// See also [MultiGenericTypes].\
+/// Usage:
+/// ```nocompile
+///     let my_uni = CustomUniType::new();
+///     let another_channel = <CustomUniType as UniGenericTypes>::UniChannelTypes::new();
+pub trait UniGenericTypes {
+    /// Define it as the homonymous generic parameter
+    type ItemType;
+    /// Define it as the homonymous generic parameter
+    type UniChannelType;
+    /// Define it as the homonymous generic parameter
+    type DerivedItemType;
+    /// Defined as `MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>`
+    type MutinyStreamType;
+}
+
 
 /// Macro to close, atomically-ish, all [Uni]s passed as parameters
 #[macro_export]

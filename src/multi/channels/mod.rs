@@ -46,7 +46,7 @@ mod tests {
             async fn $fn_name() {
                 let channel = <$multi_channel_type>::new("doc_test");
                 let (mut stream, _stream_id) = channel.create_stream_for_new_events();
-                assert!(channel.try_send_movable("a").is_none(), "could not send an event");
+                assert!(channel.send("a").is_ok(), "could not send an event");
                 println!("received: {}", stream.next().await.unwrap());
             }
         }
@@ -76,7 +76,7 @@ mod tests {
                     assert_eq!(Arc::strong_count(&channel), 2, "Creating a stream should increase the ref count by 1");
                     let (mut stream_2, _stream_id_2) = channel.create_stream_for_new_events();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating a stream should increase the ref count by 1");
-                    assert!(channel.try_send_movable("a").is_none(), "could not send an event");
+                    assert!(channel.send("a").is_ok(), "could not send an event");
                     println!("received: stream_1: {}; stream_2: {}", stream_1.next().await.unwrap(), stream_2.next().await.unwrap());
                     // dropping the streams & channel will decrease the Arc reference count to 1
                     drop(stream_1);
@@ -93,7 +93,7 @@ mod tests {
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
                     let (mut stream, _stream_id) = channel.create_stream_for_new_events();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
-                    assert!(channel.try_send_movable("a").is_none(), "could not send an event");
+                    assert!(channel.send("a").is_ok(), "could not send an event");
                     println!("received: {}", stream.next().await.unwrap());
                     // dropping the stream & channel will decrease the Arc reference count to 1
                     drop(stream);
@@ -139,7 +139,7 @@ mod tests {
                 let message = "to `stream1` and `stream2`".to_string();
                 let (stream1, _stream1_id) = channel.create_stream_for_new_events();
                 let (stream2, _stream2_id) = channel.create_stream_for_new_events();
-                assert!(channel.try_send_movable(message.clone()).is_none(), "could not send an event");
+                assert!(channel.send(message.clone()).is_ok(), "could not send an event");
                 assert_received(stream1, message.clone(), "`stream1` didn't receive the right message").await;
                 assert_received(stream2, message.clone(), "`stream2` didn't receive the right message").await;
 
@@ -151,7 +151,7 @@ mod tests {
                 for i in 0..10240 {
                     let message = format!("gremling #{}", i);
                     let (gremlin_stream, _gremlin_stream_id) = channel.create_stream_for_new_events();
-                    assert!(channel.try_send_movable(message.clone()).is_none(), "could not send event");
+                    assert!(channel.send(message.clone()).is_ok(), "could not send event");
                     assert_received(gremlin_stream, message, "`gremling_stream` didn't receive the right message").await;
                 }
 
@@ -206,7 +206,7 @@ mod tests {
 
                 // send (one copy to each stream)
                 for i in 0..ELEMENTS as u32 {
-                    channel.send(|slot| *slot = i);
+                    channel.send_with(|slot| *slot = i).expect_ok("couldn't send");
                 }
 
                 // check each stream gets all elements
@@ -319,7 +319,7 @@ mod tests {
                 let channel = <$multi_channel_type>::new("payload_dropping");
                 let (mut stream_1, _stream_id) = channel.create_stream_for_new_events();
                 let (mut stream_2, _stream_id) = channel.create_stream_for_new_events();
-                assert!(channel.try_send_movable(String::from(PAYLOAD_TEXT)).is_none(), "could not send");
+                assert!(channel.send(String::from(PAYLOAD_TEXT)).is_ok(), "could not send");
 
                 let payload_1 = stream_1.next().await.unwrap();
                 assert_eq!(payload_1.as_str(), PAYLOAD_TEXT, "sanity check failed: wrong payload received");
@@ -362,7 +362,7 @@ mod tests {
 
                 let start = Instant::now();
                 for e in 0..count {
-                    channel.send(|slot| *slot = e);
+                    channel.send_with(|slot| *slot = e).expect_ok("couldn't send");
                     if let Some(consumed_e) = stream.next().await {
                         assert_eq!(*consumed_e, e, "{profiling_name}: produced and consumed items differ");
                     } else {
@@ -390,7 +390,7 @@ mod tests {
                     while e < count {
                         let buffer_entries_left = channel.buffer_size() - channel.pending_items_count();
                         for _ in 0..buffer_entries_left {
-                            channel.send(|slot| *slot = e);
+                            channel.send_with(|slot| *slot = e).expect_ok("couldn't send");
                             e += 1;
                         }
                         tokio::task::yield_now().await;
@@ -432,7 +432,7 @@ mod tests {
                     while e < count {
                         let buffer_entries_left = channel.buffer_size() - channel.pending_items_count();
                         for _ in 0..buffer_entries_left {
-                            channel.send(|slot| *slot = e);
+                            channel.send_with(|slot| *slot = e).expect_ok("couldn't send");
                             e += 1;
                         }
                         std::hint::spin_loop();

@@ -42,8 +42,8 @@ pub struct MmapLog<'a, ItemType:          Send + Sync + Debug,
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, &'static ItemType>
-for MmapLog<'a, ItemType, MAX_STREAMS> {
+ChannelCommon<'a, ItemType, &'static ItemType> for
+MmapLog<'a, ItemType, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         let name = name.into();
@@ -97,8 +97,8 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const MAX_STREAMS: usize>
-ChannelMulti<'a, ItemType, &'static ItemType>
-for MmapLog<'a, ItemType, MAX_STREAMS> {
+ChannelMulti<'a, ItemType, &'static ItemType> for
+MmapLog<'a, ItemType, MAX_STREAMS> {
 
     fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, &'static ItemType>, u32) where Self: ChannelConsumer<'a, &'static ItemType> {
         let ref_self: &Self = self;
@@ -140,11 +140,31 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const MAX_STREAMS: usize>
-ChannelProducer<'a, ItemType, &'static ItemType>
-for MmapLog<'a, ItemType, MAX_STREAMS> {
+ChannelProducer<'a, ItemType, &'static ItemType> for
+MmapLog<'a, ItemType, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
+        match self.log_queue.publish_movable(item) {
+            (Some(_tail), _none_item) => {
+                let running_streams_count = self.streams_manager.running_streams_count();
+                let used_streams = self.streams_manager.used_streams();
+                for i in 0..running_streams_count {
+                    let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
+                    if stream_id != u32::MAX {
+                        self.streams_manager.wake_stream(stream_id);
+                    }
+                }
+                keen_retry::RetryResult::Ok { reported_input: (), output: () }
+            },
+            (None, some_item) => {
+                keen_retry::RetryResult::Retry { input: some_item.expect("reactive-mutiny: mmap_log::send() BUG! None `some_item`"), error: () }
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         match self.log_queue.publish(setter) {
             (Some(_tail), _none_setter) => {
                 let running_streams_count = self.streams_manager.running_streams_count();
@@ -155,29 +175,17 @@ for MmapLog<'a, ItemType, MAX_STREAMS> {
                         self.streams_manager.wake_stream(stream_id);
                     }
                 }
-                None
+                keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
-            (None, some_setter) => some_setter,
-        }
-    }
-
-    #[inline(always)]
-    fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
-        if self.try_send(setter).is_some() {
-            panic!("reactive_mutiny::multi::channels::references::MMapLog: `send()` detected that the mmap file is full for channel named '{}' -- its tail is at #{}. Try increasing this limit.", self.streams_manager.name(), self.log_queue.available_elements_count())
+            (None, some_setter) => {
+                keen_retry::RetryResult::Retry { input: some_setter.expect("reactive-mutiny: mmap_log::send_with() BUG! None `some_setter`"), error: () }
+            },
         }
     }
 
     #[inline(always)]
     fn send_derived(&self, _derived_item: &&'static ItemType) -> bool {
         todo!("reactive_mutiny::multi::channels::references::MMapLog: `send_derived()` is not implemented for the MMapLog Multi channel '{}' -- it doesn't make sense to place a reference in an mmap", self.streams_manager.name())
-    }
-
-    #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
-        self.try_send(|slot| unsafe { std::ptr::write(slot, item) } )
-            .map(|_| panic!("This will never happen, as an Mmap Topic always grows (never deny new elements"))
-
     }
 }
 
@@ -242,5 +250,5 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
 
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const MAX_STREAMS: usize>
-FullDuplexMultiChannel<'a, ItemType, &'static ItemType>
-for MmapLog<'a, ItemType, MAX_STREAMS> {}
+FullDuplexMultiChannel<'a, ItemType, &'static ItemType> for
+MmapLog<'a, ItemType, MAX_STREAMS> {}

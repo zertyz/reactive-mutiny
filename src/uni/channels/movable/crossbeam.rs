@@ -97,43 +97,42 @@ ChannelProducer<'a, ItemType, ItemType>
 for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    // this method uses a little hack due to crossbeam not having zero-copy APIs...
-    // taking the crossbeam channel out of Tier-1 channels for this lib
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
-        if self.tx.is_full() {
-            return Some(setter)
-        }
-        // from this point on, this method never returns Some, meaning it may block
-
-        // the following value-filling sequence avoids UB for droppable types & references (like `&str`)
-        let mut item = MaybeUninit::uninit();
-        let item_ref = unsafe { &mut *item.as_mut_ptr() };
-        setter(item_ref);
-        let mut some_item = Some( unsafe { item.assume_init() } );
-        loop {
-            let item = some_item.unwrap();
-            some_item = match self.try_send_movable(item) {
-                None => break None,
-                some_item => some_item,
-            };
-            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-            std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-        }
-    }
-
-    #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
-        let send_result = match self.tx.len() {
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
+        match self.tx.len() {
             len_before if len_before <= 2 => {
                 let ret = self.tx.try_send(item);
                 self.streams_manager.wake_stream(0);
                 ret
             },
             _ => self.tx.try_send(item),
-        };
-        send_result
-            .map_or_else(|item| match item { TrySendError::Full(item) | TrySendError::Disconnected(item) => Some(item) },
-                      |_ok| None)
+        }
+            .map_or_else(|item| match item {
+                                                                TrySendError::Full(item) => keen_retry::RetryResult::Retry { input: item, error: () },
+                                                                TrySendError::Disconnected(item) => keen_retry::RetryResult::Fatal { input: item, error: () }
+                                                            },
+                         |_ok| keen_retry::RetryResult::Ok { reported_input: (), output: () })
+    }
+
+    #[inline(always)]
+    // this method uses a little hack due to crossbeam not having zero-copy APIs...
+    // taking the crossbeam channel out of Tier-1 channels for this lib
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if self.tx.is_full() {
+            return keen_retry::RetryResult::Retry { input: setter, error: () }
+        }
+        // from this point on, this method never returns Some, meaning it may block
+        // (crossbeam channels don't have an API that plays nice with setting the value from a closure)
+
+        // the following value-filling sequence avoids UB for droppable types & references (like `&str`)
+        let mut item = MaybeUninit::uninit();
+        let item_ref = unsafe { &mut *item.as_mut_ptr() };
+        setter(item_ref);
+        let mut some_item = Some( unsafe { item.assume_init() } );
+        let item = some_item.unwrap();
+        self.send(item)
+            .retry_with(|item| self.send(item))
+            .spinning_forever();
+        keen_retry::RetryResult::Ok { reported_input: (), output: () }
     }
 }
 

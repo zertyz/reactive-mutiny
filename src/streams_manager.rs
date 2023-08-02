@@ -272,7 +272,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         }
     }
 
-    pub async fn end_stream(&self, stream_id: u32, timeout: Duration, pending_items_count: impl Fn() -> u32) -> bool {
+    pub async fn end_stream(&self, stream_id: u32, timeout: Duration, pending_items_counter: impl Fn() -> u32) -> bool {
 
         // true if `stream_id` is not running
         let is_vacant = || unsafe { self.vacant_streams.peek_remaining().iter() }
@@ -284,7 +284,7 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
                                              unsafe { &*self.used_streams.get() } .iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
 
         let start = Instant::now();
-        self.flush(timeout, pending_items_count).await;
+        self.flush(timeout, pending_items_counter).await;
         self.cancel_stream(stream_id);
         loop {
             self.wake_stream(stream_id);
@@ -297,16 +297,20 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         }
     }
 
-    pub async fn end_all_streams(&self, timeout: Duration, pending_items_count: impl Fn() -> u32) -> u32 {
-        if self.flush(timeout, &pending_items_count).await > 0 {
+    pub async fn end_all_streams(&self, timeout: Duration, pending_items_counter: impl Fn() -> u32) -> u32 {
+        let start = Instant::now();
+        if self.flush(timeout, &pending_items_counter).await > 0 {
             self.cancel_all_streams();
-            self.flush(timeout, &pending_items_count).await;
-            self.running_streams_count()
-        } else {
-            self.cancel_all_streams();
-            tokio::task::yield_now().await;
-            0
+            self.flush(timeout, &pending_items_counter).await;
         }
+        self.cancel_all_streams();
+        while self.running_streams_count() > 0 {
+            if timeout != Duration::ZERO && start.elapsed() > timeout {
+                break
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        self.running_streams_count()
     }
 
     #[inline(always)]

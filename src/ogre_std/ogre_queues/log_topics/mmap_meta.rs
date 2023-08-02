@@ -185,8 +185,8 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
 
     #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>) {
-        self.publish(|slot| unsafe { std::ptr::write(slot, item) } ).1
-            .map_or((None, None), |_item| panic!("This will never happen, as an Mmap Topic always grows (never deny new elements"))
+        let result = self.publish(|slot| unsafe { std::ptr::write(slot, item) } );
+        (result.0, result.1.map(|_item| panic!("BUG!!! This will never happen, as an Mmap Topic always grows (never deny new elements")))
     }
 
     fn leak_slot(&self) -> Option<(/*ref:*/ &'a mut SlotType, /*id: */u32)> {

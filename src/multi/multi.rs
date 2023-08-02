@@ -39,6 +39,18 @@ impl<ItemType:          Debug + Send + Sync + 'static,
      MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync + Send + 'static>
+MultiGenericTypes for
+Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
+    type ItemType = ItemType;
+    type MultiChannelType = MultiChannelType;
+    type DerivedItemType = DerivedItemType;
+    type MutinyStreamType = MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>;
+}
+
+impl<ItemType:          Debug + Send + Sync + 'static,
+     MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
+     const INSTRUMENTS: usize,
+     DerivedItemType:   Debug + Sync + Send + 'static>
 Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
@@ -56,25 +68,21 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
     #[inline(always)]
-    #[must_use]
-    pub fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
-        self.channel.try_send(setter)
+    #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
+    pub fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
+        self.channel.send(item)
     }
 
     #[inline(always)]
-    pub fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
-        self.channel.send(setter);
+    #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), F>`"]
+    pub fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        self.channel.send_with(setter)
     }
 
     #[inline(always)]
+    #[must_use = "The return type should be examined in case retrying is needed"]
     pub fn send_derived(&self, arc_item: &DerivedItemType) -> bool {
         self.channel.send_derived(arc_item)
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
-        self.channel.try_send_movable(item)
     }
 
     #[inline(always)]
@@ -613,6 +621,26 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     }
 
 }
+
+
+/// This trait exists only to overcome some Rust's limitations (as of 2023-08-01), where it is not possible to infer the types of generic parameters directly.
+/// Since having access to internal generic types (of intricate types) my greatly economize typing and increase code readability, this trait justifies its existence for now.\
+/// See also [UniGenericTypes].\
+/// Usage:
+/// ```nocompile
+///     let my_multi = CustomMultiType::new();
+///     let another_channel = <CustomMultiType as MultiGenericTypes>::MultiChannelTypes::new();
+pub trait MultiGenericTypes {
+    /// Define it as the homonymous generic parameter
+    type ItemType;
+    /// Define it as the homonymous generic parameter
+    type MultiChannelType;
+    /// Define it as the homonymous generic parameter
+    type DerivedItemType;
+    /// Defined as `MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>`
+    type MutinyStreamType;
+}
+
 
 /// Macro to close, atomically-ish, all [Multi]s passed in as parameters
 #[macro_export]

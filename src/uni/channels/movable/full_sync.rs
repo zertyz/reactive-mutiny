@@ -114,25 +114,32 @@ ChannelProducer<'a, ItemType, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
-        self.container.publish(setter, || false, |len_after| {
-            if len_after <= MAX_STREAMS as u32 {
-                self.streams_manager.wake_stream(len_after - 1)
-            }
-        })
-    }
-
-    #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
         match self.container.publish_movable(item) {
             (Some(len_after), _none_item) => {
                 let len_after = len_after.get();
                 if len_after <= MAX_STREAMS as u32 {
                     self.streams_manager.wake_stream(len_after-1)
                 }
-                None
+                keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
-            (None, some_item) => some_item,
+            (None, some_item) => {
+                keen_retry::RetryResult::Retry { input: some_item.expect("reactive-mutiny: uni movable full_sync::send() BUG! None `some_setter`"), error: () }
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        let setter_option = self.container.publish(setter, || false, |len_after| {
+            if len_after <= MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_after - 1)
+            }
+        });
+        // implementation note: superior branch prediction over using `.map_or_else()` directly, as `None` is more likely
+        match setter_option {
+            None => keen_retry::RetryResult::Ok { reported_input: (), output: () },
+            Some(setter) => keen_retry::RetryResult::Retry { input: setter, error: () }
         }
     }
 }

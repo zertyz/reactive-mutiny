@@ -274,7 +274,6 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
             buffer.get_unchecked(slot_id as usize % BUFFER_SIZE)
         }
     }
-
 }
 
 // buffered elements are `ManuallyDrop<SlotType>`, so here is where we drop any unconsumed ones
@@ -312,6 +311,7 @@ mod tests {
 
     use super::*;
     use crate::ogre_std::test_commons::{self, ContainerKind,Blocking};
+
 
     #[cfg_attr(not(doc),test)]
     fn basic_queue_use_cases() {

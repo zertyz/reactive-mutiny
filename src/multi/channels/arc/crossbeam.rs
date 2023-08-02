@@ -33,8 +33,8 @@ pub struct Crossbeam<'a, ItemType:          Send + Sync + Debug,
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, Arc<ItemType>>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelCommon<'a, ItemType, Arc<ItemType>> for
+Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
         let (mut senders, mut receivers): (Vec<_>, Vec<_>) = (0 .. MAX_STREAMS).into_iter()
@@ -89,8 +89,8 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelMulti<'a, ItemType, Arc<ItemType>>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelMulti<'a, ItemType, Arc<ItemType>> for
+Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, Arc<ItemType>>, u32) where Self: ChannelConsumer<'a, Arc<ItemType>> {
         panic!("multi::channels::arc::Crossbeam: this channel doesn't implement the `.create_stream_for_old_events()` method. Use `.create_stream_for_new_events()` instead")
@@ -115,20 +115,23 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelProducer<'a, ItemType, Arc<ItemType>>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelProducer<'a, ItemType, Arc<ItemType>> for
+Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
-        self.send(setter);
-        None
+    #[inline(always)]
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
+        let arc_item = Arc::new(item);
+        self.send_derived(&arc_item);
+        keen_retry::RetryResult::Ok { reported_input: (), output: () }
     }
 
     #[inline(always)]
-    fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         let mut item = unsafe { MaybeUninit::uninit().assume_init() };
         setter(&mut item);
         let arc_item = Arc::new(item);
         self.send_derived(&arc_item);
+        keen_retry::RetryResult::Ok { reported_input: (), output: () }
     }
 
     #[inline(always)]
@@ -154,20 +157,14 @@ std::thread::sleep(Duration::from_millis(500));
         }
         true
     }
-
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
-        let arc_item = Arc::new(item);
-        self.send_derived(&arc_item);
-        None
-    }
 }
 
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelConsumer<'a, Arc<ItemType>>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelConsumer<'a, Arc<ItemType>> for
+Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn consume(&self, stream_id: u32) -> Option<Arc<ItemType>> {
@@ -206,5 +203,5 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 impl <'a, ItemType:          'a + Debug + Send + Sync,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexMultiChannel<'a, ItemType, Arc<ItemType>>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}
+FullDuplexMultiChannel<'a, ItemType, Arc<ItemType>> for
+Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}

@@ -56,8 +56,8 @@ impl<'a, ItemType:          Send + Sync + Debug + 'a,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
-for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelCommon<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>> for
+Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         Arc::new(Self {
@@ -109,12 +109,13 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
+
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelMulti<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
-for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelMulti<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>> for
+Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn create_stream_for_old_events(self: &Arc<Self>) -> (MutinyStream<'a, ItemType, Self, OgreArc<ItemType, OgreAllocatorType>>, u32) {
         panic!("multi::channels::ogre_arc::Atomic: this channel doesn't implement the `.create_stream_for_old_events()` method. Use `.create_stream_for_new_events()` instead")
@@ -136,34 +137,33 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 }
 
+
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelProducer<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
-for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+ChannelProducer<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>> for
+Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
         if let Some((ogre_arc_item, mut slot)) = OgreArc::new(&self.allocator) {
-            setter(&mut slot);
+            unsafe { std::ptr::write(slot, item) }
             self.send_derived(&ogre_arc_item);
-            None
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
         } else {
-            Some(setter)
+            keen_retry::RetryResult::Retry { input: item, error: () }
         }
     }
 
     #[inline(always)]
-    fn send<F: FnOnce(&mut ItemType)>(&self, setter: F) {
-        loop {
-            if let Some((mut slot_ref, slot_id)) = self.allocator.alloc_ref() {
-                setter(&mut slot_ref);
-                let ogre_arc_item = OgreArc::from_allocated(slot_id, &self.allocator);
-                self.send_derived(&ogre_arc_item);
-                break
-            }
-            std::hint::spin_loop();
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((ogre_arc_item, mut slot)) = OgreArc::new(&self.allocator) {
+            setter(&mut slot);
+            self.send_derived(&ogre_arc_item);
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Retry { input: setter, error: () }
         }
     }
 
@@ -194,13 +194,8 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
         }
         true
     }
-
-    #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
-        todo!("If the refactoring works, copy & adjust the code from `try_send()`");
-        //self.try_send(|slot| unsafe { std::ptr::write(slot, item) } )
-    }
 }
+
 
 impl<'a, ItemType:          'a + Send + Sync + Debug,
          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
@@ -248,5 +243,5 @@ impl <'a, ItemType:          'a + Debug + Send + Sync,
           OgreAllocatorType: OgreAllocator<ItemType> + 'a + Sync + Send,
           const BUFFER_SIZE: usize,
           const MAX_STREAMS: usize>
-FullDuplexMultiChannel<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>>
-for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}
+FullDuplexMultiChannel<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>> for
+Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {}

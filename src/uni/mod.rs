@@ -34,17 +34,13 @@ mod tests {
         instruments::Instruments,
         types::{ChannelCommon, FullDuplexUniChannel},
     };
-    use std::{
-        sync::{
-            Arc,
-            atomic::{AtomicBool, AtomicU32, Ordering::Relaxed},
-        },
-        time::Duration,
-        future::Future,
-        io::Write,
-    };
+    use std::{sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU32, Ordering::Relaxed},
+    }, time::Duration, future::Future, io::Write, future};
     use futures::stream::{self, Stream, StreamExt};
     use minstant::Instant;
+    use log::error;
 
 
     /// The `UniBuilder` specialization used for the tests to follow
@@ -75,7 +71,7 @@ mod tests {
         }
         let uni = TestUni::<&str, 1024, 1>::new("doc_test()")
             .spawn_non_futures_non_fallibles_executors(1, on_event, |_| async {});
-        let producer = |item| uni.try_send(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item);
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
         assert!(uni.close(Duration::from_secs(10)).await, "Uni wasn't properly closed");
@@ -99,7 +95,7 @@ mod tests {
                                                               .map(move |number| observed_sum.fetch_add(number, Relaxed))
                                                       },
                                                        |_| async {});
-        let producer = |item| uni.try_send(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item);
 
         // now the consumer: lets suppose we share it among several different tasks -- sharing a reference is one way to do it
         // (in this case, wrapping it in an Arc is not needed)
@@ -120,6 +116,8 @@ mod tests {
         const EXPECTED_SUM: u32 = 30;
         const PARTS: &[u32] = &[9, 8, 7, 6];
         let observed_sum = Arc::new(AtomicU32::new(0));
+        let properly_closed = Arc::new(AtomicBool::new(false));
+        let properly_closed_ref = Arc::clone(&properly_closed);
 
         // notice how to transform a regular event into a future event &
         // how to pass it down the pipeline. Also notice the required (as of Rust 1.63)
@@ -151,9 +149,11 @@ mod tests {
         };
 
         let uni = TestUni::<u32, 1024, 1>::new("async_elements()")
-            .spawn_executors(PARTS.len() as u32, Duration::from_secs(2), on_event, |_| async {}, |_| async {});
+            .spawn_executors(PARTS.len() as u32, Duration::from_secs(2), on_event,
+                             |err| async move { error!("on_err_callback(): cought error '{:?}'", err) },
+                             |executor| async move { properly_closed_ref.store(true, Relaxed); });
 
-        let producer = |item| uni.try_send(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item).expect_ok("couldn't send");
 
         let shared_producer = &producer;
         stream::iter(PARTS)
@@ -162,6 +162,7 @@ mod tests {
             }).await;
 
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
+        assert!(properly_closed.load(Relaxed), "the `on_close_callback()` wasn't called!");
         assert_eq!(observed_sum.load(Relaxed), EXPECTED_SUM, "not all events passed through our async pipeline");
     }
 
@@ -176,7 +177,7 @@ mod tests {
         let event_name = "non_future/non_fallible event";
         let uni = TestUni::<String, 1024, 1>::new(event_name)
             .spawn_non_futures_non_fallibles_executors(1, |stream| stream, |_| async {});
-        let producer = |item| uni.try_send(|slot| *slot = item);
+        let producer = |item| uni.send_with(|slot| *slot = item);
         producer("'only count successes' payload".to_string());
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
         let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executors[0].ok_events_avg_future_duration.lightweight_probe();
@@ -212,7 +213,7 @@ mod tests {
                              |_| async {},
                              |_| async {}
             );
-        let producer = |item| uni.try_send(|slot| *slot = item);
+        let producer = |item| uni.send_with(|slot| *slot = item);
         // for this test, produce each event twice
         for _i in 0..2 {
             producer("'successful' payload".to_string());
@@ -281,7 +282,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(2, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                assert!(six_uni.try_send(|slot| *slot = ()).is_none(), "couldn't send");
+                                assert!(six_uni.send_with(|slot| *slot = ()).is_ok(), "couldn't send");
                             }
                         } else if event == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -300,7 +301,7 @@ mod tests {
         };
         let two_uni = TestUni::<u32, 1024, 1>::new("TWO event")
             .spawn_non_futures_non_fallibles_executors(1, on_two_event, on_two_close);
-        let two_producer = |item| two_uni.try_send(move |slot| *slot = item);
+        let two_producer = |item| two_uni.send_with(move |slot| *slot = item);
 
         // FOUR event
         let on_four_event = |stream: MutinyStream<'static, u32, _, u32>| {
@@ -318,7 +319,7 @@ mod tests {
                             let previous_state = shared_state.fetch_or(4, Relaxed);
                             if previous_state & 6 == 6 {
                                 shared_state.store(0, Relaxed); // reset the triggering state
-                                assert!(six_uni.try_send(|slot| *slot = ()).is_none(), "couldn't send");
+                                assert!(six_uni.send_with(|slot| *slot = ()).is_ok(), "couldn't send");
                             }
                         } else if event == 97 {
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -337,7 +338,7 @@ mod tests {
         };
         let four_uni = TestUni::<u32, 1024, 1>::new("FOUR event")
             .spawn_non_futures_non_fallibles_executors(1, on_four_event, on_four_close);
-        let four_producer = |item| four_uni.try_send(move |slot| *slot = item);
+        let four_producer = |item| four_uni.send_with(move |slot| *slot = item);
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
         //       so we can test race conditions for the 'close producer' functions
@@ -422,7 +423,7 @@ mod tests {
                             },
                              |_| async {}
             );
-        let producer = |item| uni.try_send(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item);
         producer(0);
         producer(1);
         producer(2);
@@ -453,31 +454,17 @@ mod tests {
             let mut full_count = 0u32;
             let start = Instant::now();
             for e in 0..count {
-                while uni.try_send(|slot| *slot = e).is_some() {
-                    std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop();
-                    full_count += 1;
-                    if full_count % (1<<28) == 0 {
-                        let flushed = uni.flush(Duration::from_secs(5)).await;
-                        if flushed > 0 {
-                            let msg = format!("awakening the Stream via `flush()` -- consumed {flushed} elements. Chase the BUG preventing the Stream from being awaken");
-                            println!("({msg})");
-                            panic!("Hanging was recovered after {msg}");
-                        } else {
-                            print!("!");
+                uni.send_with(|slot| *slot = e)
+                    .retry_with(|setter| {
+                        full_count += 1;
+                        if full_count % (1<<26) == 0 {
+                            print!("(stuck at e #{e}?)"); std::io::stdout().flush().unwrap();
+                        } else if full_count % (1<<20) == 0 {
+                            print!("."); std::io::stdout().flush().unwrap();
                         }
-                        std::io::stdout().flush().unwrap();
-                    } else if full_count % (1<<27) == 0 {
-                        print!("(still stuck at e #{e}? reverting to tokio yield...)"); std::io::stdout().flush().unwrap();
-                        // if this fixes the hanging, means that tokio started the executor at the same thread the producer is executing
-                        for _i in 0..e {
-                            tokio::task::yield_now().await;
-                        }
-                    } else if full_count % (1<<24) == 0 {
-                        print!("(stuck at e #{e}?)"); std::io::stdout().flush().unwrap();
-                    } else if full_count % (1<<20) == 0 {
-                        print!("."); std::io::stdout().flush().unwrap();
-                    }
-                };
+                        uni.send_with(setter)
+                    })
+                    .spinning_forever();
             }
             assert!(uni.close(Duration::from_secs(5)).await, "Uni wasn't properly closed");
             let elapsed = start.elapsed();

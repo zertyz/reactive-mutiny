@@ -117,39 +117,37 @@ pub trait ChannelMulti<'a, ItemType:        Debug + Send + Sync,
 pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
                               DerivedItemType: 'a + Debug> {
 
-    /// Calls `setter`, passing a slot so the payload may be filled, then sends the event through this channel asynchronously.\
-    /// -- returns `None` if the sending was successful, otherwise (if the buffer was full and the `item` wasn't sent), returns
-    ///    the `setter` FnOnce() wrapped in an `Option`, so the sending can be retried without copying.\
+    /// Similar to [Self::send_with()], but for sending the already-built `item`.\
+    /// See there for how to deal with the returned type.
     /// IMPLEMENTORS: #[inline(always)]
-    #[must_use = "The return type should be examined in case a retry is needed"]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F>;
+    #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()>;
 
-    /// Sends an event through this channel, after calling `setter` to fill the payload.\
-    /// If the channel is full, this function may wait until sending it is possible.\
-    /// IMPLEMENTORS: #[inline(always]
-    #[inline(always)]
-    fn send<F: FnOnce(&mut ItemType)>(&self, _setter: F) {
-        todo!("The default `ChannelProducer.send()` was not re-implemented, meaning it is not available for this channel -- it is not available where it cannot be implemented as zero-copy")
-    }
+    /// Calls `setter`, passing a slot so the payload may be filled there, then sends the event through this channel asynchronously.\
+    /// The returned type is conversible to `Result<(), F>` by calling .into() on it, returning `Err<setter>` when the buffer is full,
+    /// to allow the caller to try again; otherwise you may add any retrying logic using the `keen-retry` crate's API like in:
+    /// ```nocompile
+    ///     xxxx.send_with(|slot| *slot = 42)
+    ///         .retry_with(|setter| xxxx.send_with(setter))
+    ///         .spinning_until_timeout(Duration::from_millis(300), ())     // go see the other options
+    ///         .map_errors(|_, setter| (setter, _), |e| e)                 // map the unconsumed `setter` payload into `Err(setter)` when converting to `Result` ahead
+    ///         .into()?;
+    /// ```
+    /// NOTE: this type may allow the compiler some extra optimization steps when compared to [Self::send()]. When tuning for performance,
+    /// it is advisable to try this method
+    /// IMPLEMENTORS: #[inline(always)]
+    #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), F>`"]
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
 
     /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
-    /// -- for instance: the Stream consumes Arc<String> (the derived item type) and the channel is for Strings. With this method one may send an Arc directly.\
+    /// -- for instance: if the Stream consumes `Arc<String>` (the derived item type) and the channel is for `Strings`, With this method one may send an `Arc` directly.\
     /// The default implementation, though, is made for types that don't have a derived item type.\
     /// IMPLEMENTORS: #[inline(always)]
     #[inline(always)]
-    #[must_use = "The return type should be examined in case a retry is needed"]
+    #[must_use = "The return type should be examined in case retrying is needed"]
     fn send_derived(&self, _derived_item: &DerivedItemType) -> bool {
-        todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose Streams will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
+        todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose `Stream` items will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
-
-    /// Similar to [try_send()], but accepts the penalty that the compiler may impose of copying / moving the data around when transmitting it,
-    /// in opposition to set it only once, in its resting place -- useful to send cloned items and other objects with a custom drop, like `Arc`s and `String`s.
-    /// Returns `None` if the sending was successful, otherwise (if the buffer was full and the `item` wasn't sent), returns
-    ///         the `item` wrapped in an `Option`, so the sending can be retried without further copying.\
-    /// IMPLEMENTORS: #[inline(always)]
-    /// TODO 2023-05-17: consider restricting this entry for types that require dropping, and the zero-copy versions for those who don't
-    #[must_use = "The return type should be examined in case a retry is needed"]
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType>;
 
 }
 

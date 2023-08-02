@@ -39,7 +39,7 @@ async fn elaborated_generics_on_call_chains() {
                           (events_sender: Arc<Uni<RemoteMessages>>,
                            value:         RemoteMessages)
                           -> bool {
-        assert!(events_sender.try_send(|slot| *slot = value).is_none(), "couldn't send value");
+        assert!(events_sender.send_with(|slot| *slot = value).is_ok(), "couldn't send value");
         events_sender.close(Duration::from_millis(100)).await
     }
 

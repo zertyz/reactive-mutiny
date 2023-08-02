@@ -124,30 +124,34 @@ ChannelProducer<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
-    fn try_send<F: FnOnce(&mut ItemType)>(&self, setter: F) -> Option<F> {
-        match self.channel.publish(setter) {
-            (Some(len_after), _none_setter) => {
-                let len_after = len_after.get();
-                if len_after <= MAX_STREAMS as u32 {
-                    self.streams_manager.wake_stream(len_after-1)
-                }
-                None
-            },
-            (None, some_setter) => some_setter,
-        }
-    }
-
-    #[inline(always)]
-    fn try_send_movable(&self, item: ItemType) -> Option<ItemType> {
+    fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
         match self.channel.publish_movable(item) {
             (Some(len_after), _none_item) => {
                 let len_after = len_after.get();
                 if len_after <= MAX_STREAMS as u32 {
                     self.streams_manager.wake_stream(len_after-1)
                 }
-                None
+                keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
-            (None, some_item) => some_item,
+            (None, some_item) => {
+                keen_retry::RetryResult::Retry { input: some_item.expect("reactive-mutiny: uni zero-copy full_sync::send() BUG! None `some_item`"), error: () }
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        match self.channel.publish(setter) {
+            (Some(len_after), _none_setter) => {
+                let len_after = len_after.get();
+                if len_after <= MAX_STREAMS as u32 {
+                    self.streams_manager.wake_stream(len_after-1)
+                }
+                keen_retry::RetryResult::Ok { reported_input: (), output: () }
+            },
+            (None, some_setter) => {
+                keen_retry::RetryResult::Retry { input: some_setter.expect("reactive-mutiny: uni zero-copy full_sync::send_with() BUG! None `some_setter`"), error: () }
+            },
         }
     }
 }

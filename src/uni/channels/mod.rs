@@ -54,7 +54,7 @@ mod tests {
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
                 let (mut stream, _stream_id) = channel.create_stream();
-                let send_result = channel.try_send(|slot| *slot = "a").is_none();
+                let send_result = channel.send_with(|slot| *slot = "a").is_ok();
                 assert!(send_result, "Even couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
             }
@@ -83,7 +83,7 @@ mod tests {
                     let (mut stream_1, _stream_id) = channel.create_stream();
                     let (stream_2, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 3, "Creating each stream should increase the ref count by 1");
-                    channel.try_send(|slot| *slot = "a");
+                    channel.send_with(|slot| *slot = "a").expect_ok("couldn't send");
                     exec_future(stream_1.next(), "receiving", 1.0, true).await;
                     // dropping the streams & channel will decrease the Arc reference count to 1
                     drop(stream_1);
@@ -100,7 +100,7 @@ mod tests {
                     assert_eq!(Arc::strong_count(&channel), 1, "Dropping a stream should decrease the ref count by 1");
                     let (mut stream, _stream_id) = channel.create_stream();
                     assert_eq!(Arc::strong_count(&channel), 2, "1 `channel` + 1 `stream` again, at this point: reference count should be 2");
-                    channel.try_send(|slot| *slot = "a");
+                    channel.send_with(|slot| *slot = "a").expect_ok("couldn't send");
                     exec_future(stream.next(), "receiving", 1.0, true).await;
                     // dropping the stream & channel will decrease the Arc reference count to 1
                     drop(stream);
@@ -154,9 +154,9 @@ mod tests {
 
                 // send
                 for i in 0..PARALLEL_STREAMS as u32 {
-                    while channel.try_send(|slot| *slot = i).is_some() {
-                        std::hint::spin_loop();
-                    };
+                    channel.send_with(|slot| *slot = i)
+                        .retry_with(|setter| channel.send_with(setter))
+                        .spinning_forever();
                 }
 
                 // check each stream gets a different item, in sequence
@@ -205,7 +205,7 @@ mod tests {
 
                 let start = Instant::now();
                 for e in 0..count {
-                    channel.try_send(|slot| *slot = e);
+                    channel.send_with(|slot| *slot = e).expect_ok("couldn't send");
                     if let Some(consumed_e) = stream.next().await {
                         assert_eq!(consumed_e, e, "{profiling_name}: produced and consumed items differ");
                     } else {
@@ -230,9 +230,9 @@ mod tests {
 
                 let sender_future = async {
                     for e in 0..count {
-                        while channel.try_send(|slot| *slot = e).is_some() {
-                            tokio::task::yield_now().await;     // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
-                        }
+                        channel.send_with(|slot| *slot = e)
+                            .retry_with_async(|setter| core::future::ready(channel.send_with(setter)))
+                            .yielding_forever();        // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                     }
                     channel.gracefully_end_all_streams(Duration::from_secs(1)).await;
                 };
@@ -271,9 +271,9 @@ if counter == count {
 
                 let sender_task = tokio::task::spawn_blocking(move || {
                     for e in 0..count {
-                        while channel.try_send(|slot| *slot = e).is_some() {
-                            std::hint::spin_loop();
-                        }
+                        channel.send_with(|slot| *slot = e)
+                            .retry_with(|setter| channel.send_with(setter))
+                            .spinning_forever();
                     }
                     //channel.end_all_streams(Duration::from_secs(5)).await;
                     channel.cancel_all_streams();
