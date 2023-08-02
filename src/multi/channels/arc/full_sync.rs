@@ -58,17 +58,19 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         })
     }
 
-    #[must_use = "futures do nothing unless you `.await` or poll them"]
     async fn flush(&self, timeout: Duration) -> u32 {
         self.streams_manager.flush(timeout, || self.pending_items_count()).await
     }
 
-    #[must_use = "futures do nothing unless you `.await` or poll them"]
+    #[inline(always)]
+    fn is_channel_open(&self) -> bool {
+        self.streams_manager.is_any_stream_running()
+    }
+
     async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool {
         self.streams_manager.end_stream(stream_id, timeout, || self.pending_items_count()).await
     }
 
-    #[must_use = "futures do nothing unless you `.await` or poll them"]
     async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32 {
         self.streams_manager.end_all_streams(timeout, || self.pending_items_count()).await
     }

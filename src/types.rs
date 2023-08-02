@@ -27,16 +27,23 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
 
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
+    #[must_use = "Returns 0 if all elements could be flushed within the given `timeout` or the number of elements yet flushing"]
     async fn flush(&self, timeout: Duration) -> u32;
+
+    /// Tells weather this channel is still enabled to process elements
+    /// (true before calling the "end stream" / "cancel stream" functions)
+    fn is_channel_open(&self) -> bool;
 
     /// Flushes & signals that the given `stream_id` should cease its activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
+    #[must_use = "Returns true if the Channel could be closed within the given time"]
     async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
 
     /// Flushes & signals that all streams should cease their activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
+    #[must_use = "Returns 0 if all elements could be flushed within the given `timeout` or the number of elements that got unsent after the channel closing"]
     async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32;
 
     /// Sends a signal to all streams, urging them to cease their operations.\

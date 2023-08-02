@@ -138,6 +138,20 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         }
     }
 
+    /// Returns `true` of the channel is still processing elements
+    #[inline(always)]
+    pub fn is_any_stream_running(&self) -> bool {
+        for stream_id in 0..MAX_STREAMS as u32 {
+            if stream_id == u32::MAX {
+                break
+            }
+            if self.keep_stream_running(stream_id) {
+                return true
+            }
+        }
+        false
+    }
+
     /// Signals `stream_id` to end, as soon as possible -- making it reach its end-of-life.\
     /// Also guarantees that it will be awoken to react to the command immediately
     pub fn cancel_stream(&self, stream_id: u32) {
