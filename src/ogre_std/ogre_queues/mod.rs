@@ -9,18 +9,24 @@ pub mod full_sync;
 pub mod log_topics;
 
 
-/// multi-producer / multi-consumer queue
+/// multi-producer / multi-consumer non-blocking queue
 pub trait OgreQueue<SlotType> {
     fn new<IntoString: Into<String>>(queue_name: IntoString) -> Self;
     /// Attempts to add `element` to queue, returning immediately for non-blocking queues... possibly blocking otherwise.
-    /// Returns `true` if the element was added, `false` if the queue was full... blocking queues might never return `false`.
-    /// TODO f14 update docs
+    /// Returns:
+    ///   - `None` if the element was added
+    ///   - `Some<element>` if the enqueueing was denied (queue full) -- returning back the element to the caller to allow zero-copy retrying actions.
+    /// TODO 2023-08-01 review this whole... is this a blocking or non-blocking queue? does it still make sense when put together with all the other queue traits?
     fn enqueue(&self, element: SlotType) -> Option<SlotType>;
     /// Attempts to dequeue an element from the queue, returning immediately for non-blocking queues... possibly blocking otherwise.
     /// Returns `Some(element)` if it was possible to dequeue, `None` if the queue was empty... blocking queues might never return `None`.
     fn dequeue(&self) -> Option<SlotType>;
     /// tells how many elements are awaiting on the queue
     fn len(&self) -> usize;
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     fn max_size(&self) -> usize;
     fn debug_enabled(&self) -> bool;
     fn metrics_enabled(&self) -> bool;

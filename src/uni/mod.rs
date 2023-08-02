@@ -71,7 +71,7 @@ mod tests {
         }
         let uni = TestUni::<&str, 1024, 1>::new("doc_test()")
             .spawn_non_futures_non_fallibles_executors(1, on_event, |_| async {});
-        let producer = |item| uni.send_with(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item).expect_ok("couldn't send");
         producer("I've just arrived!");
         producer("Nothing really interesting here... heading back home!");
         assert!(uni.close(Duration::from_secs(10)).await, "Uni wasn't properly closed");
@@ -95,7 +95,7 @@ mod tests {
                                                               .map(move |number| observed_sum.fetch_add(number, Relaxed))
                                                       },
                                                        |_| async {});
-        let producer = |item| uni.send_with(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item).expect_ok("couldn't send");
 
         // now the consumer: lets suppose we share it among several different tasks -- sharing a reference is one way to do it
         // (in this case, wrapping it in an Arc is not needed)
@@ -177,7 +177,7 @@ mod tests {
         let event_name = "non_future/non_fallible event";
         let uni = TestUni::<String, 1024, 1>::new(event_name)
             .spawn_non_futures_non_fallibles_executors(1, |stream| stream, |_| async {});
-        let producer = |item| uni.send_with(|slot| *slot = item);
+        let producer = |item| uni.send_with(|slot| *slot = item).expect_ok("couldn't send");
         producer("'only count successes' payload".to_string());
         assert!(uni.close(Duration::ZERO).await, "Uni wasn't properly closed");
         let (ok_counter, ok_avg_futures_resolution_duration) = uni.stream_executors[0].ok_events_avg_future_duration.lightweight_probe();
@@ -213,7 +213,7 @@ mod tests {
                              |_| async {},
                              |_| async {}
             );
-        let producer = |item| uni.send_with(|slot| *slot = item);
+        let producer = |item| uni.send_with(|slot| *slot = item).expect_ok("couldn't send");
         // for this test, produce each event twice
         for _i in 0..2 {
             producer("'successful' payload".to_string());
@@ -301,7 +301,7 @@ mod tests {
         };
         let two_uni = TestUni::<u32, 1024, 1>::new("TWO event")
             .spawn_non_futures_non_fallibles_executors(1, on_two_event, on_two_close);
-        let two_producer = |item| two_uni.send_with(move |slot| *slot = item);
+        let two_producer = |item| two_uni.send_with(move |slot| *slot = item).expect_ok("couldn't send `two`");
 
         // FOUR event
         let on_four_event = |stream: MutinyStream<'static, u32, _, u32>| {
@@ -338,7 +338,7 @@ mod tests {
         };
         let four_uni = TestUni::<u32, 1024, 1>::new("FOUR event")
             .spawn_non_futures_non_fallibles_executors(1, on_four_event, on_four_close);
-        let four_producer = |item| four_uni.send_with(move |slot| *slot = item);
+        let four_producer = |item| four_uni.send_with(move |slot| *slot = item).expect_ok("couldn't send `four`");
 
         // NOTE: the special value of 97 causes a sleep on both TWO and FOUR pipelines
         //       so we can test race conditions for the 'close producer' functions
@@ -423,7 +423,7 @@ mod tests {
                             },
                              |_| async {}
             );
-        let producer = |item| uni.send_with(move |slot| *slot = item);
+        let producer = |item| uni.send_with(move |slot| *slot = item).expect_ok("couldn't send");
         producer(0);
         producer(1);
         producer(2);

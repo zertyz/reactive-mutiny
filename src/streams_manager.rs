@@ -263,10 +263,10 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         ogre_sync::unlock(&self.streams_lock);
     }
 
-    pub async fn flush(&self, timeout: Duration, pending_items_count: impl Fn() -> u32) -> u32 {
+    pub async fn flush(&self, timeout: Duration, pending_items_counter: impl Fn() -> u32) -> u32 {
         let mut start: Option<Instant> = None;
         loop {
-            let pending_items_count = pending_items_count();
+            let pending_items_count = pending_items_counter();
             if pending_items_count > 0 {
                 self.wake_all_streams();
                 tokio::time::sleep(Duration::from_millis(1)).await;

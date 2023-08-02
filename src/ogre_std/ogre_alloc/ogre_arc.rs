@@ -28,7 +28,7 @@ impl<DataType:          Debug + Send + Sync,
 OgreArc<DataType, OgreAllocatorType> {
 
 
-    /// DOC THIS NEW ONE
+    /// Similar to [Self::new_with()].\
     /// Returns an uninitialized `OgreAllocator` with a reference to set its value;\
     /// `None` if the allocator is full
     #[inline(always)]
@@ -41,7 +41,7 @@ OgreArc<DataType, OgreAllocatorType> {
     }
 
 
-        /// Zero-copy the `data` into one of the slots provided by `allocator` -- which will be used to deallocate it when the time comes
+    /// Zero-copy the `data` into one of the slots provided by `allocator` -- which will be used to deallocate it when the time comes
     /// --  zero-copying will be enforced (if compiled in Release mode) due to this method being inlined in the caller.\
     /// `None` will be returned if there are, currently, no space available for the requested allocation.\
     /// A possible usage pattern for use cases that don't care if we're out of space is:

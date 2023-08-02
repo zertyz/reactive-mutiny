@@ -97,7 +97,9 @@ async fn main() {
     // The application's queue client will propagate the events like this
     let queue_a_send = |incoming: ExchangeEvent| {
         println!("Queue A: received '{:?}'", incoming);
-        let _sent = queue_a_events_handle.send_with(|slot| *slot = incoming);
+        queue_a_events_handle.send_with(|slot| *slot = incoming)
+            .retry_with(|setter| queue_a_events_handle.send_with(setter))
+            .spinning_forever();
     };
 
     // simulates some events were received

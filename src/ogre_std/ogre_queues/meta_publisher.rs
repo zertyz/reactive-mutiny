@@ -11,10 +11,13 @@ use std::num::NonZeroU32;
 pub trait MetaPublisher<'a, SlotType: 'a> {
 
     /// Passes a slot reference to `setter`, so to fill in the information for the event to be published,
-    /// to be later retrieved with [MoveSubscriber<>], in a way that the compiler won't scape zero-copying it
+    /// to be later retrieved with [MoveSubscriber<>], in a way that the compiler won't escape zero-copying it
     /// (even in debug mode).\
-    /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
-    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
+    /// The returned values serves two purposes:
+    ///   - 1st: If `None`, the container was full and no publishing was done; otherwise, the number of
+    ///          elements present just after publishing `item` is returned -- which would be, at a minimum, 1
+    ///   - 2nd: If the 1st returned value is `None`, this value will be `Some`, giving back to the caller the
+    ///          `setter()` function (FnOnce) for a possible zero-copy reattempt.
     /// IMPLEMENTORS: #[inline(always)]
     fn publish<F: FnOnce(&mut SlotType)>
               (&self, setter: F) -> (Option<NonZeroU32>, Option<F>);
@@ -22,8 +25,11 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
     /// move the data (copy & forget) rather than zero-copying it -- which may be useful for data that
     /// requires a custom dropping function.\
-    /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
-    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
+    /// The returned values serves two purposes:
+    ///   - 1st: If `None`, the container was full and no publishing was done; otherwise, the number of
+    ///          elements present just after publishing `item` is returned -- which would be, at a minimum, 1
+    ///   - 2nd: If the 1st returned value is `None`, this value will be `Some`, giving back to the caller the
+    ///          `item` for a possible reattempt without incurring in further copying.
     /// IMPLEMENTORS: #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>);
 
@@ -78,8 +84,11 @@ pub trait MovePublisher<SlotType> {
 
     /// Store the `item`, to be later retrieved with [MoveSubscriber<>], in a way that the compiler might
     /// move the data (copy & forget) rather than zero-copying it.\
-    /// If it returns `None`, the container was full and no publishing was done; otherwise, the number of
-    /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.
+    /// The returned values serves two purposes:
+    ///   - 1st: If `None`, the container was full and no publishing was done; otherwise, the number of
+    ///          elements present just after publishing `item` is returned -- which would be, at a minimum, 1
+    ///   - 2nd: If the 1st returned value is `None`, this value will be `Some`, giving back to the caller the
+    ///          `item` for a possible reattempt without incurring in further copying.
     /// IMPLEMENTORS: #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>);
 
@@ -91,8 +100,8 @@ pub trait MovePublisher<SlotType> {
     ///   - `report_len_after_enqueueing_fn(len)` is called after the enqueueing is done and receives the number of not-yet-collected elements present -- a similar info as [available_elements()].
     ///     Specializers might use this to awake a number of consumers.
     /// Returns:
-    ///   - `true` if the enqueueing was done;
-    ///   - `false` otherwise -- possibly due to a bounded queue being full (generally meaning the caller should try again after spin-waiting or sleeping a bit).
+    ///   - `None` if the enqueueing was done;
+    ///   - `Some(setter_fn)` otherwise -- possibly due to a bounded queue being full -- giving the caller the opportunity of retrying (maybe after spin-looping a bit).
     ///     Keep in mind that blocking-queues are likely never to return false (unless some sort of enqueueing timeout happens).
     /// Caveats:
     ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call.
