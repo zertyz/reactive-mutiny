@@ -155,7 +155,7 @@ FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         if let Some((ogre_arc_item, mut slot)) = OgreArc::new(&self.allocator) {
             setter(&mut slot);
-            self.send_derived(&ogre_arc_item);
+            let _ = self.send_derived(&ogre_arc_item);
             keen_retry::RetryResult::Ok { reported_input: (), output: () }
         } else {
             keen_retry::RetryResult::Retry { input: setter, error: () }
@@ -178,7 +178,6 @@ FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                         }
                     },
                     None => {
-                        // TODO f14: re-evaluate if this is really not happening after the f14 changes
                         // WARNING: THIS SHOULD NEVER HAPPEN IF BUFFER_SIZE OF THE ALLOCATOR IS THE SAME AS THE DISPATCHER MANAGERS, as there is no way that there are more elements into a dispatcher manager than elements in the allocator
                         //          if this class ever gets to accept a bigger BUFFER_SIZE for the allocator, this situation may happen (and the loops should be brought back from the "movable" channels). For the time being, it could be replaced by a panic!() instead, saying it is a bug.
                         panic!("BUG! This should never happen! See the comment in the code -- Multi Channel's OgreArc/FullSync (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",

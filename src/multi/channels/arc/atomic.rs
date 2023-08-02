@@ -134,16 +134,18 @@ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     #[inline(always)]
     fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
         let arc_item = Arc::new(item);
-        self.send_derived(&arc_item);
+        _ = self.send_derived(&arc_item);
         keen_retry::RetryResult::Ok { reported_input: (), output: () }
     }
 
     #[inline(always)]
     fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
-        let mut item = unsafe { MaybeUninit::uninit().assume_init() };
-        setter(&mut item);
+        let mut item = MaybeUninit::uninit();
+        let item_ref = unsafe { &mut *item.as_mut_ptr() };
+        setter(item_ref);
+        let item = unsafe { item.assume_init() };
         let arc_item = Arc::new(item);
-        self.send_derived(&arc_item);
+        _ = self.send_derived(&arc_item);
         keen_retry::RetryResult::Ok { reported_input: (), output: () }
     }
 
@@ -164,8 +166,8 @@ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                     },
                     (None, _) => {
                         self.streams_manager.wake_stream(*stream_id);
-// TODO f14: this code is supposed to be part of the caller or the contention strategy: this method can simply return false in this case, indicating that sending was not possible
-warn!("Multi Channel's Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
+// TODO n18
+warn!("Multi Channel's for Arc Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
       channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
 std::thread::sleep(Duration::from_millis(500));
                     },
