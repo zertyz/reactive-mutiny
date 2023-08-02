@@ -166,7 +166,7 @@ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                     },
                     (None, _) => {
                         self.streams_manager.wake_stream(*stream_id);
-// TODO n18
+// TODO 2023-08-02: the possibility of this code indicates all our arc based channels is not a good fit for our retrying semantics. A possible correction would be to use a lock + count all listener's free slots... but OgreArc based ones seem to be a better design
 warn!("Multi Channel's for Arc Atomic (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",
       channel_name = self.streams_manager.name(), used_streams_count = self.streams_manager.running_streams_count());
 std::thread::sleep(Duration::from_millis(500));

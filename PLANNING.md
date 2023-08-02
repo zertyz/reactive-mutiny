@@ -17,27 +17,7 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 
 # Being-Done
 
-**(f14)** 2023-07-16: Some API changes due to user feedback regarding retries:
-  1) No more `try_send*()` familly of functions -- only `send()` & `send_movable()`
-  2) Further, `send()` will be renamed to `send_with()` and `send_movable()` will become just `send()`
-  3) All the above functions should return data suitable for zero-copy retrying (no longer a simple `bool` or `()`):
-     - `Result<(), T>`, being Ok(()) if the sending was successful and `Err(T)` if it was not, so retrying could be attempted without copying
-       (notice some types do return a value on success... for these cases, `Result<S,T>` where `S` is the currently returned success value);
-     - `Result<(), FnOnce>`, like above, for `send_with(FnOnce)`
-
-    --> It was confirmed those changes are, indeed, zero-cost abstractions: no extra copying is being done and performance is as good as before (when compiling to Release).
-  4) Introduce Uni/Multi Channels `is_channel_open()` and, possibly, review the name `keep_streams_running()` / `close_streams()/close_channel()`
-  5) Start using the `keen-retry` crate in the `Multi` channels (logging if retrying is needed, retrying in a spin-looping for up to 1 second before giving up)
-  6) Due to (5), the `send*()` functions will return `Result<n, Payload>`, where `n` is:
-     - *0*  if all listeners received the event in the first shot (without retrying);
-     - *>0* if all listeners received the event, but some of them (the returned value), required *retrying*;
-     - *<0* if not all listeners were able to receive the event (the abs of the returned value)
-  7) Also due to (5), laden the code with `TODO n18` in the places where that followup story should touch/fix.
-  8) Take in **(b8)** as part of this story.
-
-**(n18)** 2023-07-27: Incorporate the "Generic Configuration" pattern used by the `reactive-messaging` crate in order to:
-  1) Make the arbitrary logic defined in *f14.5* configurable
-  2) Move our existing `INSTRUMENTATION` pattern to the `CONFIGURATION` one.
+**(r18)** 2023-08-02: Eventually drop all Multi Arc channels, as they are a not good fit for our retrying model -- see the TODOs with the same date 
 
 **(b8)** 2023-05-30: No function should panic! for non-bug scenarios: `Result<>`s should be returned instead
 
@@ -82,6 +62,14 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 
 **(r12)** 2023-06-14: Unify `UniBuilder` & `Uni`, for types simplification & symmetry with how `Multi`s work -- causing a MAJOR version upgrade
 
+**(f14)** 2023-08-02: Some API changes due to user feedback regarding retries:
+  1) All the Channel publishing functions (all the way down to the containers) are now fully zero-copy compliant -- including any retrying.
+     For this, they all return back the payload if pushing the data into the container failed
+     --> It was confirmed those changes are, indeed, zero-cost abstractions: no extra copying is being done and performance is as good as before (when compiling to Release).
+  2) Rethinking the API: the functions now are `send_with()`, `send()` & `send_derived()`
+  3) The aforementioned functions returns a `keen-retry` result, enabling users to add their own retry logic 
+  4) Introduced Uni/Multi Channels `is_channel_open()` to provide information for retrying logic
+  5) **(b8)** can also be considered done, as panic! is no longer part of any (non-bug) logic
 
 
 
