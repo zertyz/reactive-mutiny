@@ -46,15 +46,8 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     type MultiChannelType    = MultiChannelType;
     type DerivedItemType     = DerivedItemType;
     type MutinyStreamType    = MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>;
-}
 
-impl<ItemType:          Debug + Send + Sync + 'static,
-     MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
-     const INSTRUMENTS: usize,
-     DerivedItemType:   Debug + Sync + Send + 'static>
-Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
-
-    pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
+    fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
         let multi_name = multi_name.into();
         Multi {
             multi_name:     multi_name.clone(),
@@ -63,6 +56,13 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
             _phantom:       PhantomData,
         }
     }
+}
+
+impl<ItemType:          Debug + Send + Sync + 'static,
+     MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
+     const INSTRUMENTS: usize,
+     DerivedItemType:   Debug + Sync + Send + 'static>
+Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Returns this Multi's name
     pub fn name(&self) -> &str {
@@ -636,14 +636,24 @@ pub trait GenericMulti {
     /// The instruments this Multi will collect/report
     const INSTRUMENTS: usize;
     /// The payload type this Multi's producers will receive
-    type ItemType;
-    /// The channel through which payloads will travel from producers to listeners (see [Multi] for more info)
-    type MultiChannelType;
+    type ItemType: Debug + Sync + Send + 'static;
     /// The payload type this [Multi]'s `Stream`s will yield
-    type DerivedItemType;
+    type DerivedItemType: Debug + Sync + Send + 'static;
+    /// The channel through which payloads will travel from producers to listeners (see [Multi] for more info)
+    type MultiChannelType: FullDuplexMultiChannel<'static, Self::ItemType, Self::DerivedItemType> + Sync + Send;
     /// Defined as `MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>`,\
     /// the concrete type for the `Stream` of `DerivedItemType`s to be given to listeners
     type MutinyStreamType;
+
+    /// Creates a [Multi], which implements the `listener pattern`, capable of:
+    ///   - creating `Stream`s;
+    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
+    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
+    ///     futures/non-futures events;
+    ///   - producing events that are sent to those `Stream`s.
+    /// `multi_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
+    /// argument passed to the [Multi] struct.
+    fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self;
 }
 
 

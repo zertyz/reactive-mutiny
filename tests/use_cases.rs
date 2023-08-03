@@ -11,15 +11,18 @@ use std::{
             AtomicU32,
             Ordering::Relaxed,
         },
-    }
+    },
+    fmt::Debug, marker::PhantomData,
 };
 use reactive_mutiny::prelude::advanced::{
-    MultiAtomicOgreArc,
-    MultiMmapLog,
+    Uni,
+    GenericUni,
     UniMoveAtomic,
     UniMoveFullSync,
-    GenericUni,
+    Multi,
     GenericMulti,
+    MultiAtomicOgreArc,
+    MultiMmapLog,
 };
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
@@ -371,20 +374,28 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
 #[cfg_attr(not(doc),test)]
 fn generics() {
 
-    // ensure Unis can be used in generics
+    // ensure `Uni`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
     struct GenericUniUser<UniType: GenericUni> {
-        the_uni: UniType,
+        _phantom: PhantomData<UniType>,
     }
-    let the_uni = UniMoveAtomic::<u32, 1024>::new("The Uni");
-    GenericUniUser { the_uni };
-
-    // ensure Multis can be used in generics
-    struct GenericMultiUser<MultiType: GenericMulti> {
-        the_multi: MultiType,
+    impl<UniType: GenericUni> GenericUniUser<UniType> {
+        // type TheUniType = Uni<UniType::ItemType, UniType::UniChannelType, { UniType::INSTRUMENTS }, UniType::DerivedItemType>;   // NOT YET ALLOWED :(
+        fn new_uni() -> UniType {
+            UniType::new("Another Uni")
+        }
     }
-    let the_multi = MultiAtomicOgreArc::<u32, 1024, 1>::new("The Uni");
-    GenericMultiUser { the_multi };
-
+    let _the_uni = GenericUniUser::<UniMoveAtomic::<u32, 1024>>::new_uni();
     
 
+    // ensure `Multi`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
+    struct GenericMultiUser<MultiType: GenericMulti> {
+        _phantom: PhantomData<MultiType>,
+    }
+    impl<MultiType: GenericMulti> GenericMultiUser<MultiType> {
+        // type TheMultiType = Multi<MultiType::ItemType, MultiType::MultiChannelType, { MultiType::INSTRUMENTS }, MultiType::DerivedItemType>;   // NOT YET ALLOWED :(
+        fn new_multi() -> MultiType {
+            MultiType::new("Another Multi")
+        }
+    }
+    let _multi_uni = GenericMultiUser::<MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
 }

@@ -1,5 +1,7 @@
 //! See [super]
 
+use crate::prelude::ChannelCommon;
+
 use super::super::{
     stream_executor::StreamExecutor,
     mutiny_stream::MutinyStream,
@@ -18,7 +20,7 @@ use tokio::sync::Mutex;
 pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
                UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
                const INSTRUMENTS: usize,
-               DerivedItemType:   Debug + 'static = ItemType> {
+               DerivedItemType:   Send + Sync + Debug + 'static = ItemType> {
     pub channel:                  Arc<UniChannelType>,
     pub stream_executors:         Vec<Arc<StreamExecutor>>,
     pub finished_executors_count: AtomicU32,
@@ -28,7 +30,7 @@ pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
 impl<ItemType:          Send + Sync + Debug + 'static,
      UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
-     DerivedItemType:   Debug + Sync>
+     DerivedItemType:   Send + Sync + Debug + Sync>
 GenericUni for
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     const INSTRUMENTS: usize = INSTRUMENTS;
@@ -36,23 +38,8 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     type UniChannelType      = UniChannelType;
     type DerivedItemType     = DerivedItemType;
     type MutinyStreamType    = MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>;
-}
 
-impl<ItemType:          Send + Sync + Debug + 'static,
-     UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
-     const INSTRUMENTS: usize,
-     DerivedItemType:   Debug + Sync>
-Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
-
-    /// Creates a [Uni], which implements the `consumer pattern`, capable of:
-    ///   - creating `Stream`s;
-    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
-    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
-    ///     futures/non-futures events;
-    ///   - producing events that are sent to those `Stream`s.
-    /// `uni_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
-    /// argument passed to the [Uni] struct.
-    pub fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self {
+    fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self {
         Uni {
             channel:                  UniChannelType::new(uni_name),
             stream_executors:         vec![],
@@ -60,6 +47,13 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
             _phantom:                 PhantomData,
         }
     }
+}
+
+impl<ItemType:          Send + Sync + Debug + 'static,
+     UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+     const INSTRUMENTS: usize,
+     DerivedItemType:   Send + Sync + Debug + Sync>
+Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
@@ -310,18 +304,30 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 ///     struct MyGenericStruct<T: GenericUni> { the_uni: T }
 ///     let the_uni = Uni<Lots,And,Lots<Of,Generic,Arguments>>::new();
 ///     let my_struct = MyGenericStruct { the_uni };
+///     // see more at `tests/use_cases.rs`
 pub trait GenericUni {
     /// The instruments this Uni will collect/report
     const INSTRUMENTS: usize;
     /// The payload type this Uni's producers will receive
-    type ItemType;
-    /// The channel through which payloads will travel from producers to consumers (see [Uni] for more info)
-    type UniChannelType;
+    type ItemType: Send + Sync + Debug + 'static;
     /// The payload type this [Uni]'s `Stream`s will yield
-    type DerivedItemType;
+    type DerivedItemType: Send + Sync + Debug + 'static;
+    /// The channel through which payloads will travel from producers to consumers (see [Uni] for more info)
+    type UniChannelType: FullDuplexUniChannel<'static, Self::ItemType, Self::DerivedItemType> + Send + Sync + 'static;
     /// Defined as `MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>`,\
     /// the concrete type for the `Stream` of `DerivedItemType`s to be given to consumers
     type MutinyStreamType;
+
+    /// Creates a [Uni], which implements the `consumer pattern`, capable of:
+    ///   - creating `Stream`s;
+    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
+    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
+    ///     futures/non-futures events;
+    ///   - producing events that are sent to those `Stream`s.
+    /// `uni_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
+    /// argument passed to the [Uni] struct.
+    fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self;
+    
 }
 
 
