@@ -28,8 +28,8 @@ pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
 impl<ItemType:          Send + Sync + Debug + 'static,
      UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
-     DerivedItemType:   Send + Sync + Debug + Sync>
-GenericUni for
+     DerivedItemType:   Send + Sync + Debug + 'static>
+GenericUni<INSTRUMENTS> for
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     const INSTRUMENTS: usize = INSTRUMENTS;
     type ItemType            = ItemType;
@@ -40,12 +40,15 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self {
         Self::new(uni_name)
     }
+    fn to_uni(self) -> Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
+        self
+    }
 }
 
 impl<ItemType:          Send + Sync + Debug + 'static,
      UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
-     DerivedItemType:   Send + Sync + Debug + Sync>
+     DerivedItemType:   Send + Sync + Debug + 'static>
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Creates a [Uni], which implements the `consumer pattern`, capable of:
@@ -315,7 +318,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 ///     let the_uni = Uni<Lots,And,Lots<Of,Generic,Arguments>>::new();
 ///     let my_struct = MyGenericStruct { the_uni };
 ///     // see more at `tests/use_cases.rs`
-pub trait GenericUni {
+pub trait GenericUni<const INSTRUMENTS: usize> {
     /// The instruments this Uni will collect/report
     const INSTRUMENTS: usize;
     /// The payload type this Uni's producers will receive
@@ -330,6 +333,7 @@ pub trait GenericUni {
 
     /// See [Uni::new()]
     fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self;
+    fn to_uni(self) -> Uni<Self::ItemType, Self::UniChannelType, INSTRUMENTS, Self::DerivedItemType>;
 }
 
 

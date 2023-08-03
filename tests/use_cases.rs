@@ -13,6 +13,7 @@ use std::{
         },
     },
     fmt::Debug, marker::PhantomData,
+    future::Future,
 };
 use reactive_mutiny::prelude::advanced::{
     Uni,
@@ -375,43 +376,58 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
 fn generics() {
 
     // ensure `Uni`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
-    struct GenericUniUser<UniType: GenericUni> {
+    struct GenericUniUser<const UNI_INSTRUMENTS: usize, UniType: GenericUni<UNI_INSTRUMENTS>> {
         the_uni: UniType,
         _phantom: PhantomData<UniType>,
     }
-    impl<UniType: GenericUni> GenericUniUser<UniType> {
-        // type TheUniType = Uni<UniType::ItemType, UniType::UniChannelType, { UniType::INSTRUMENTS }, UniType::DerivedItemType>;   // NOT YET ALLOWED :(
+    impl<const UNI_INSTRUMENTS: usize, UniType: GenericUni<UNI_INSTRUMENTS>> GenericUniUser<UNI_INSTRUMENTS, UniType> {
+        // type TheUniType = Uni<UniType::ItemType, UniType::UniChannelType, { UniType::INSTRUMENTS }, UniType::DerivedItemType>;   // NOT YET ALLOWED :( when it is, `UNI_INSTRUMENTS` may be dropped
+        /// Demonstrates the caller is able to see `UniType` as a `Uni`
         fn as_uni(self) -> UniType {
             self.the_uni
         }
+        /// Demonstrates we can access the type
         fn new_uni() -> UniType {
             UniType::new("Another Uni")
         }
+        /// Demonstrates `UniType` can be converted to a `Uni`
+        async fn close(self) {
+            self.the_uni.to_uni().close(Duration::ZERO).await;
+        }
     }
-    let the_uni = GenericUniUser {the_uni: UniMoveAtomic::<u32, 1024>::new("The Uni"), _phantom: PhantomData}.as_uni();
+    type MyUniType = UniMoveAtomic::<u32, 1024>;
+    let the_uni = GenericUniUser::<{MyUniType::INSTRUMENTS}, _> {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.as_uni();
     let _future = the_uni.close(Duration::ZERO);
-    let the_uni = GenericUniUser::<UniMoveAtomic::<u32, 1024>>::new_uni();
+    let the_uni = GenericUniUser::<{MyUniType::INSTRUMENTS}, MyUniType>::new_uni();
     let _future = the_uni.close(Duration::ZERO);
+    let _future = GenericUniUser::<{MyUniType::INSTRUMENTS}, _> {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.close();
     
 
     // ensure `Multi`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
-    struct GenericMultiUser<MultiType: GenericMulti> {
+    struct GenericMultiUser<const MULTI_INSTRUMENTS: usize, MultiType: GenericMulti<MULTI_INSTRUMENTS>> {
         the_multi: MultiType,
         _phantom: PhantomData<MultiType>,
     }
-    impl<MultiType: GenericMulti> GenericMultiUser<MultiType> {
-        // type TheMultiType = Multi<MultiType::ItemType, MultiType::MultiChannelType, { MultiType::INSTRUMENTS }, MultiType::DerivedItemType>;   // NOT YET ALLOWED :(
+    impl<const MULTI_INSTRUMENTS: usize, MultiType: GenericMulti<MULTI_INSTRUMENTS>> GenericMultiUser<MULTI_INSTRUMENTS, MultiType> {
+        // type TheMultiType = Multi<MultiType::ItemType, MultiType::MultiChannelType, { MultiType::INSTRUMENTS }, MultiType::DerivedItemType>;   // NOT YET ALLOWED :( when it is, `UNI_INSTRUMENTS` may be dropped
+        /// Demonstrates the caller is able to see `MultiType` as a `Multi`
         fn as_multi(self) -> MultiType {
             self.the_multi
         }
+        /// Demonstrates we can access the type
         fn new_multi() -> MultiType {
-        MultiType::new("Another Multi")
+            MultiType::new("Another Multi")
+        }
+        /// Demonstrates `MultiType` can be converted to a `Multi`
+        async fn close(self) {
+            self.the_multi.to_multi().close(Duration::ZERO).await;
         }
     }
-//    let _the_multi = GenericMultiUser::<MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
-    let the_multi = GenericMultiUser {the_multi: MultiAtomicOgreArc::<u32, 1024, 1>::new("The Multi"), _phantom: PhantomData}.as_multi();
+    type MyMultiType = MultiAtomicOgreArc::<u32, 1024, 1>;
+    let the_multi = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, _> {the_multi: MyMultiType::new("The Multi"), _phantom: PhantomData}.as_multi();
     let _future = the_multi.close(Duration::ZERO);
-    let the_multi = GenericMultiUser::<MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
+    let the_multi = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
     let _future = the_multi.close(Duration::ZERO);
+    let _future = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, _> {the_multi: MyMultiType::new("The Multi"), _phantom: PhantomData}.close();
 
 }

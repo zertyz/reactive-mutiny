@@ -26,7 +26,7 @@ use tokio::sync::RwLock;
 /// ```nocompile
 /// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
 pub struct Multi<ItemType:          Debug + Sync + Send + 'static,
-                 MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send,
+                 MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
                  const INSTRUMENTS: usize,
                  DerivedItemType:   Debug + Sync + Send + 'static> {
     pub multi_name:     String,
@@ -39,7 +39,7 @@ impl<ItemType:          Debug + Send + Sync + 'static,
      MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync + Send + 'static>
-GenericMulti for
+GenericMulti<INSTRUMENTS> for
 Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     const INSTRUMENTS: usize = INSTRUMENTS;
     type ItemType            = ItemType;
@@ -49,6 +49,9 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
         Self::new(multi_name)
+    }
+    fn to_multi(self) -> Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
+        self
     }
 }
 
@@ -644,7 +647,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 ///     struct MyGenericStruct<T: GenericMulti> { the_multi: T }
 ///     let the_multi = Multi<Lots,And,Lots<Of,Generic,Arguments>>::new();
 ///     let my_struct = MyGenericStruct { the_multi };
-pub trait GenericMulti {
+pub trait GenericMulti<const INSTRUMENTS: usize> {
     /// The instruments this Multi will collect/report
     const INSTRUMENTS: usize;
     /// The payload type this Multi's producers will receive
@@ -659,6 +662,7 @@ pub trait GenericMulti {
 
     /// See [Multi::new()]
     fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self;
+    fn to_multi(self) -> Multi<Self::ItemType, Self::MultiChannelType, INSTRUMENTS, Self::DerivedItemType>;
 }
 
 
