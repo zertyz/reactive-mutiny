@@ -1,7 +1,5 @@
 //! See [super]
 
-use crate::prelude::ChannelCommon;
-
 use super::super::{
     stream_executor::StreamExecutor,
     mutiny_stream::MutinyStream,
@@ -40,12 +38,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     type MutinyStreamType    = MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>;
 
     fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self {
-        Uni {
-            channel:                  UniChannelType::new(uni_name),
-            stream_executors:         vec![],
-            finished_executors_count: AtomicU32::new(0),
-            _phantom:                 PhantomData,
-        }
+        Self::new(uni_name)
     }
 }
 
@@ -54,6 +47,23 @@ impl<ItemType:          Send + Sync + Debug + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Send + Sync + Debug + Sync>
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
+
+    /// Creates a [Uni], which implements the `consumer pattern`, capable of:
+    ///   - creating `Stream`s;
+    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
+    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
+    ///     futures/non-futures events;
+    ///   - producing events that are sent to those `Stream`s.
+    /// `uni_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
+    /// argument passed to the [Uni] struct.
+    pub fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self {
+        Uni {
+            channel:                  UniChannelType::new(uni_name),
+            stream_executors:         vec![],
+            finished_executors_count: AtomicU32::new(0),
+            _phantom:                 PhantomData,
+        }
+    }
 
     #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
@@ -318,16 +328,8 @@ pub trait GenericUni {
     /// the concrete type for the `Stream` of `DerivedItemType`s to be given to consumers
     type MutinyStreamType;
 
-    /// Creates a [Uni], which implements the `consumer pattern`, capable of:
-    ///   - creating `Stream`s;
-    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
-    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
-    ///     futures/non-futures events;
-    ///   - producing events that are sent to those `Stream`s.
-    /// `uni_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
-    /// argument passed to the [Uni] struct.
+    /// See [Uni::new()]
     fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self;
-    
 }
 
 

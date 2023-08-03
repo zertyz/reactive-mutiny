@@ -376,26 +376,42 @@ fn generics() {
 
     // ensure `Uni`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
     struct GenericUniUser<UniType: GenericUni> {
+        the_uni: UniType,
         _phantom: PhantomData<UniType>,
     }
     impl<UniType: GenericUni> GenericUniUser<UniType> {
         // type TheUniType = Uni<UniType::ItemType, UniType::UniChannelType, { UniType::INSTRUMENTS }, UniType::DerivedItemType>;   // NOT YET ALLOWED :(
+        fn as_uni(self) -> UniType {
+            self.the_uni
+        }
         fn new_uni() -> UniType {
             UniType::new("Another Uni")
         }
     }
-    let _the_uni = GenericUniUser::<UniMoveAtomic::<u32, 1024>>::new_uni();
+    let the_uni = GenericUniUser {the_uni: UniMoveAtomic::<u32, 1024>::new("The Uni"), _phantom: PhantomData}.as_uni();
+    let _future = the_uni.close(Duration::ZERO);
+    let the_uni = GenericUniUser::<UniMoveAtomic::<u32, 1024>>::new_uni();
+    let _future = the_uni.close(Duration::ZERO);
     
 
     // ensure `Multi`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
     struct GenericMultiUser<MultiType: GenericMulti> {
+        the_multi: MultiType,
         _phantom: PhantomData<MultiType>,
     }
     impl<MultiType: GenericMulti> GenericMultiUser<MultiType> {
         // type TheMultiType = Multi<MultiType::ItemType, MultiType::MultiChannelType, { MultiType::INSTRUMENTS }, MultiType::DerivedItemType>;   // NOT YET ALLOWED :(
+        fn as_multi(self) -> MultiType {
+            self.the_multi
+        }
         fn new_multi() -> MultiType {
-            MultiType::new("Another Multi")
+        MultiType::new("Another Multi")
         }
     }
-    let _multi_uni = GenericMultiUser::<MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
+//    let _the_multi = GenericMultiUser::<MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
+    let the_multi = GenericMultiUser {the_multi: MultiAtomicOgreArc::<u32, 1024, 1>::new("The Multi"), _phantom: PhantomData}.as_multi();
+    let _future = the_multi.close(Duration::ZERO);
+    let the_multi = GenericMultiUser::<MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
+    let _future = the_multi.close(Duration::ZERO);
+
 }

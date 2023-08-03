@@ -48,13 +48,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     type MutinyStreamType    = MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>;
 
     fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
-        let multi_name = multi_name.into();
-        Multi {
-            multi_name:     multi_name.clone(),
-            channel:        MultiChannelType::new(multi_name.clone()),
-            executor_infos: RwLock::new(IndexMap::new()),
-            _phantom:       PhantomData,
-        }
+        Self::new(multi_name)
     }
 }
 
@@ -63,6 +57,24 @@ impl<ItemType:          Debug + Send + Sync + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync + Send + 'static>
 Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
+
+    /// Creates a [Multi], which implements the `listener pattern`, capable of:
+    ///   - creating `Stream`s;
+    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
+    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
+    ///     futures/non-futures events;
+    ///   - producing events that are sent to those `Stream`s.
+    /// `multi_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
+    /// argument passed to the [Multi] struct.
+    fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
+        let multi_name = multi_name.into();
+        Multi {
+            multi_name:     multi_name.clone(),
+            channel:        MultiChannelType::new(multi_name.clone()),
+            executor_infos: RwLock::new(IndexMap::new()),
+            _phantom:       PhantomData,
+        }
+    }
 
     /// Returns this Multi's name
     pub fn name(&self) -> &str {
@@ -645,14 +657,7 @@ pub trait GenericMulti {
     /// the concrete type for the `Stream` of `DerivedItemType`s to be given to listeners
     type MutinyStreamType;
 
-    /// Creates a [Multi], which implements the `listener pattern`, capable of:
-    ///   - creating `Stream`s;
-    ///   - applying a user-provided `processor` to the `Stream`s and executing them to depletion --
-    ///     the final `Stream`s may produce a combination of fallible/non-fallible &
-    ///     futures/non-futures events;
-    ///   - producing events that are sent to those `Stream`s.
-    /// `multi_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
-    /// argument passed to the [Multi] struct.
+    /// See [Multi::new()]
     fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self;
 }
 
