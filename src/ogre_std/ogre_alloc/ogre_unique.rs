@@ -107,12 +107,12 @@ where DataType: PartialEq {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
-Into<OgreArc<DataType, OgreAllocatorType>> for
-OgreUnique<DataType, OgreAllocatorType> {
+From<OgreUnique<DataType, OgreAllocatorType>> for
+OgreArc<DataType, OgreAllocatorType> {
 
     #[inline(always)]
-    fn into(self) -> OgreArc<DataType, OgreAllocatorType> {
-        self.into_ogre_arc()
+    fn from(ogre_unique: OgreUnique<DataType, OgreAllocatorType>) -> OgreArc<DataType, OgreAllocatorType> {
+        ogre_unique.into_ogre_arc()
     }
 }
 
@@ -184,7 +184,7 @@ mod tests {
         assert_eq!(*observed, expected, "Comparison of `Deref` failed for `&str`");
 
         // String -- notice that, although possible, there is no nice API for "movable values", like `Arc` or `String`: OgreAllocator were not designed for those, therefore, OgreArc, also isn't.
-        let expected: String = format!("String to compare");
+        let expected: String = String::from("String to compare");
         let allocator = AllocatorAtomicArray::<String, 128>::new();
         let observed = OgreUnique::new(|slot| unsafe { std::ptr::write(slot, expected.clone()); }, &allocator).expect("Allocation should have been done");
         assert_eq!(observed, expected, "Comparison of pristine types failed for `String`");

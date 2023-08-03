@@ -91,7 +91,7 @@ OgreArc<DataType, OgreAllocatorType> {
             allocator: unsafe { &*(allocator as *const OgreAllocatorType) },
             data_id,
             references_count: AtomicU32::new(COUNT as u32),
-            _phantom:         PhantomData::default(),
+            _phantom:         PhantomData,
         });
         let inner: NonNull<InnerOgreArc<DataType, OgreAllocatorType>> = Box::leak(inner).into();
         [0; COUNT].map(|_| Self {
@@ -99,6 +99,7 @@ OgreArc<DataType, OgreAllocatorType> {
         })
     }
 
+    /// # Safety
     /// Increments the reference count of the passed [OgreUnique] by `count`.\
     /// To be used in conjunction with [raw_copy()] in order to produce several clones at once,
     /// in the hope it will be faster than calling [clone()] several times\
@@ -110,6 +111,7 @@ OgreArc<DataType, OgreAllocatorType> {
         self
     }
 
+    /// # Safety
     /// Copies the [OgreUnique] (a simple 64-bit pointer) without increasing the reference count -- but it will still be decreased when dropped.\
     /// To be used after a call to [increment_references()] in order to produce several clones at once,
     /// in the hope it will be faster than calling [clone()] several times.\

@@ -39,7 +39,7 @@ impl<ItemType:          Debug + Send + Sync + 'static,
      MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync + Send + 'static>
-MultiGenericTypes for
+GenericMulti for
 Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     type ItemType = ItemType;
     type MultiChannelType = MultiChannelType;
@@ -59,11 +59,12 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
             multi_name:     multi_name.clone(),
             channel:        MultiChannelType::new(multi_name.clone()),
             executor_infos: RwLock::new(IndexMap::new()),
-            _phantom:       PhantomData::default(),
+            _phantom:       PhantomData,
         }
     }
 
-    pub fn stream_name(self: &Self) -> &str {
+    /// Returns this Multi's name
+    pub fn name(&self) -> &str {
         &self.multi_name
     }
 
@@ -173,7 +174,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                     async move {
                                                         cloned_self.spawn_executor_from_stream(concurrency_limit, futures_timeout, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
                                                                                               move |err| on_err_callback_ref2(err),
-                                                                                              move |executor| newies_on_close_callback(executor)).await
+                                                                                              newies_on_close_callback).await
                                                             .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies`/sequential executor: {:?}", err))
                                                             .expect("CANNOT SPAWN NEWIES EXECUTOR AFTER OLDIES HAD COMPLETE");
                                                         oldies_on_close_callback(executor).await;
@@ -184,11 +185,11 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
             false => {
                 self.spawn_executor_from_stream(concurrency_limit, futures_timeout, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
                                                 move |err| on_err_callback_ref1(err),
-                                                move |executor| oldies_on_close_callback(executor)).await
+                                                oldies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `oldies` executor: {:?}", err))?;
                 self.spawn_executor_from_stream(concurrency_limit, futures_timeout, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
                                                 move |err| on_err_callback_ref2(err),
-                                                move |executor| newies_on_close_callback(executor)).await
+                                                newies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies` executor: {:?}", err))?;
             },
         }
@@ -214,13 +215,13 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
                                        -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.stream_name(), pipeline_name.into()), futures_timeout);
+        let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.name(), pipeline_name.into()), futures_timeout);
         self.add_executor(Arc::clone(&executor), stream_id).await?;
         executor
             .spawn_executor::<INSTRUMENTS, _, _, _, _>(
                 concurrency_limit,
                 on_err_callback,
-                move |executor| on_close_callback(executor),
+                on_close_callback,
                 pipelined_stream
             );
         Ok(())
@@ -293,7 +294,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                             let newies_pipeline_name = Arc::clone(&newies_pipeline_name);
                                                             async move {
                                                                 cloned_self.spawn_futures_executor_from_stream(concurrency_limit, futures_timeout, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
-                                                                                                              move |executor| newies_on_close_callback(executor)).await
+                                                                                                               newies_on_close_callback).await
                                                                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies`/sequential executor: {:?}", err))
                                                                     .expect("CANNOT SPAWN NEWIES EXECUTOR AFTER OLDIES HAD COMPLETE");
                                                                 oldies_on_close_callback(executor).await;
@@ -303,10 +304,10 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
             },
             false => {
                 self.spawn_futures_executor_from_stream(concurrency_limit, futures_timeout, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
-                                                        move |executor| oldies_on_close_callback(executor)).await
+                                                        oldies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `oldies` executor: {:?}", err))?;
                 self.spawn_futures_executor_from_stream(concurrency_limit, futures_timeout, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
-                                                        move |executor| newies_on_close_callback(executor)).await
+                                                        newies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies` executor: {:?}", err))?;
             },
         }
@@ -330,12 +331,12 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
                                                -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.stream_name(), pipeline_name.into()), futures_timeout);
+        let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.name(), pipeline_name.into()), futures_timeout);
         self.add_executor(Arc::clone(&executor), stream_id).await?;
         executor
             .spawn_futures_executor::<INSTRUMENTS, _, _, _>(
                 concurrency_limit,
-                move |executor| on_close_callback(executor),
+                on_close_callback,
                 pipelined_stream
             );
         Ok(())
@@ -391,7 +392,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         let ((oldies_in_stream, oldies_in_stream_id),
              (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
 
-        let cloned_self = Arc::clone(&self);
+        let cloned_self = Arc::clone(self);
         let oldies_pipeline_name = oldies_pipeline_name.into();
         let newies_pipeline_name = Arc::new(newies_pipeline_name.into());
         let on_err_callback_ref1 = Arc::new(on_err_callback);
@@ -410,7 +411,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                              async move {
                                                                  cloned_self.spawn_fallibles_executor_from_stream(concurrency_limit, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
                                                                                                                   move |err| on_err_callback_ref2(err),
-                                                                                                                  move |executor| newies_on_close_callback(executor)).await
+                                                                                                                  newies_on_close_callback).await
                                                                      .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies`/sequential executor: {:?}", err))
                                                                      .expect("CANNOT SPAWN NEWIES EXECUTOR AFTER OLDIES HAD COMPLETE");
                                                                  oldies_on_close_callback(executor).await;
@@ -420,12 +421,12 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
             },
             false => {
                 self.spawn_fallibles_executor_from_stream(concurrency_limit, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
-                                                         move |err| on_err_callback_ref1(err),
-                                                          move |executor| oldies_on_close_callback(executor)).await
+                                                          move |err| on_err_callback_ref1(err),
+                                                          oldies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `oldies` executor: {:?}", err))?;
                 self.spawn_fallibles_executor_from_stream(concurrency_limit, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
                                                           move |err| on_err_callback_ref2(err),
-                                                          move |executor| newies_on_close_callback(executor)).await
+                                                          newies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_oldies_executor(): could not start `newies` executor: {:?}", err))?;
             },
         }
@@ -448,13 +449,13 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
                                        -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
+        let executor = StreamExecutor::new(format!("{}: {}", self.name(), pipeline_name.into()));
         self.add_executor(Arc::clone(&executor), stream_id).await?;
         executor
             .spawn_fallibles_executor::<INSTRUMENTS, _, _>(
                 concurrency_limit,
                 on_err_callback,
-                move |executor| on_close_callback(executor),
+                on_close_callback,
                 pipelined_stream
             );
         Ok(())
@@ -509,7 +510,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         let ((oldies_in_stream, oldies_in_stream_id),
              (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
 
-        let cloned_self = Arc::clone(&self);
+        let cloned_self = Arc::clone(self);
         let oldies_pipeline_name = oldies_pipeline_name.into();
         let newies_pipeline_name = Arc::new(newies_pipeline_name.into());
         let oldies_out_stream = oldies_pipeline_builder(oldies_in_stream);
@@ -534,10 +535,10 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
             },
             false => {
                 self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, oldies_pipeline_name, oldies_in_stream_id, oldies_out_stream,
-                                                          move |executor| oldies_on_close_callback(executor)).await
+                                                                         oldies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `oldies` executor: {:?}", err))?;
                 self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
-                                                                         move |executor| newies_on_close_callback(executor)).await
+                                                                         newies_on_close_callback).await
                     .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `newies` executor: {:?}", err))?;
             },
         }
@@ -559,12 +560,12 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
                                                                 -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::new(format!("{}: {}", self.stream_name(), pipeline_name.into()));
+        let executor = StreamExecutor::new(format!("{}: {}", self.name(), pipeline_name.into()));
         self.add_executor(Arc::clone(&executor), stream_id).await?;
         executor
             .spawn_non_futures_non_fallibles_executor::<INSTRUMENTS, _, _>(
                 concurrency_limit,
-                move |executor| on_close_callback(executor),
+                on_close_callback,
                 pipelined_stream
             );
         Ok(())
@@ -575,7 +576,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// If this `Multi` share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [multis_close_async!()].\
     /// Returns `true` if all events could be flushed within the given `timeout`.
-    pub async fn close(self: &Self, timeout: Duration) -> bool {
+    pub async fn close(&self, timeout: Duration) -> bool {
         self.channel.gracefully_end_all_streams(timeout).await == 0
     }
 
@@ -590,7 +591,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// Returns false if there was no executor associated with `pipeline_name`.
     #[must_use = "futures do nothing unless you `.await` or poll them"]
     pub async fn flush_and_cancel_executor<IntoString: Into<String>>
-                                          (self:          &Self,
+                                          (&self,
                                            pipeline_name: IntoString,
                                            timeout:       Duration) -> bool {
 
@@ -623,21 +624,22 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 }
 
 
-/// This trait exists only to overcome some Rust's limitations (as of 2023-08-01), where it is not possible to infer the types of generic parameters directly.
-/// Since having access to internal generic types (of intricate types) my greatly economize typing and increase code readability, this trait justifies its existence for now.\
-/// See also [UniGenericTypes].\
+/// This trait exists to allow simplifying generic declarations of concrete [Multi]s types.
+/// See also [GenericUni].\
 /// Usage:
 /// ```nocompile
-///     let my_multi = CustomMultiType::new();
-///     let another_channel = <CustomMultiType as MultiGenericTypes>::MultiChannelTypes::new();
-pub trait MultiGenericTypes {
-    /// Define it as the homonymous generic parameter
+///     struct MyGenericStruct<T: GenericMulti> { the_multi: T }
+///     let the_multi = Multi<Lots,And,Lots<Of,Generic,Arguments>>::new();
+///     let my_struct = MyGenericStruct { the_multi };
+pub trait GenericMulti {
+    /// The payload type this Multi's producers will receive
     type ItemType;
-    /// Define it as the homonymous generic parameter
+    /// The channel through which payloads will travel from producers to listeners (see [Multi] for more info)
     type MultiChannelType;
-    /// Define it as the homonymous generic parameter
+    /// The payload type this [Multi]'s `Stream`s will yield
     type DerivedItemType;
-    /// Defined as `MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>`
+    /// Defined as `MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>`,\
+    /// the concrete type for the `Stream` of `DerivedItemType`s to be given to listeners
     type MutinyStreamType;
 }
 

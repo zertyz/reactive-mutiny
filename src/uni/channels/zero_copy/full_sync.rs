@@ -4,9 +4,9 @@ use crate::{
     ogre_std::{
         ogre_queues::{
             full_sync::full_sync_zero_copy::FullSyncZeroCopy,
-            meta_publisher::{MetaPublisher},
-            meta_subscriber::{MetaSubscriber},
-            meta_container::{MetaContainer},
+            meta_publisher::MetaPublisher,
+            meta_subscriber::MetaSubscriber,
+            meta_container::MetaContainer,
         },
         ogre_alloc::{
             ogre_unique::OgreUnique,
@@ -26,7 +26,7 @@ use crate::{
 use std::{
     time::Duration,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
     sync::Arc,
 };
 use std::marker::PhantomData;
@@ -61,7 +61,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name)),
             channel:         FullSyncZeroCopy::new(),
-            _phantom:        PhantomData::default(),
+            _phantom:        PhantomData,
         })
     }
 
@@ -168,12 +168,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn consume(&self, _stream_id: u32) -> Option<OgreUnique<ItemType, OgreAllocatorType>> {
-        match self.channel.consume_leaking() {
-            Some( (slot_ref, _slot_id) ) => {
-                Some(OgreUnique::<ItemType, OgreAllocatorType>::from_allocated_ref(slot_ref, &self.channel.allocator))
-            }
-            None => None,
-        }
+        self.channel.consume_leaking().map(|(slot_ref, _slot_id)| OgreUnique::<ItemType, OgreAllocatorType>::from_allocated_ref(slot_ref, &self.channel.allocator))
     }
 
     #[inline(always)]

@@ -19,11 +19,9 @@ use crate::{
 };
 use std::{
     time::Duration,
-    sync::{
-        Arc,
-    },
+    sync::Arc,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
 };
 use std::mem::MaybeUninit;
 use async_trait::async_trait;
@@ -149,9 +147,9 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()> {
-        if let Some((ogre_arc_item, mut slot)) = OgreArc::new(&self.allocator) {
+        if let Some((ogre_arc_item, slot)) = OgreArc::new(&self.allocator) {
             unsafe { std::ptr::write(slot, item) }
-            self.send_derived(&ogre_arc_item);
+            _ = self.send_derived(&ogre_arc_item);
             keen_retry::RetryResult::Ok { reported_input: (), output: () }
         } else {
             keen_retry::RetryResult::Retry { input: item, error: () }
@@ -160,9 +158,9 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
-        if let Some((ogre_arc_item, mut slot)) = OgreArc::new(&self.allocator) {
-            setter(&mut slot);
-            let _ = self.send_derived(&ogre_arc_item);
+        if let Some((ogre_arc_item, slot)) = OgreArc::new(&self.allocator) {
+            setter(slot);
+            _ = self.send_derived(&ogre_arc_item);
             keen_retry::RetryResult::Ok { reported_input: (), output: () }
         } else {
             keen_retry::RetryResult::Retry { input: setter, error: () }

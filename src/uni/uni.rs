@@ -10,7 +10,6 @@ use std::future::Future;
 use std::marker::PhantomData;
 use futures::future::BoxFuture;
 use futures::Stream;
-use minstant::Instant;
 use tokio::sync::Mutex;
 
 
@@ -30,7 +29,7 @@ impl<ItemType:          Send + Sync + Debug + 'static,
      UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync>
-UniGenericTypes for
+GenericUni for
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
     type ItemType = ItemType;
     type UniChannelType = UniChannelType;
@@ -57,7 +56,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
             channel:                  UniChannelType::new(uni_name),
             stream_executors:         vec![],
             finished_executors_count: AtomicU32::new(0),
-            _phantom:                 PhantomData::default(),
+            _phantom:                 PhantomData,
         }
     }
 
@@ -81,16 +80,15 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         (arc_self, streams)
     }
 
-    /// similar to [consumer_stream()], but without the transformation `self -> Arc<Self>`
+    /// similar to [consumer_stream()], but without consuming `self`
     #[must_use]
     fn consumer_stream_internal(&self) -> Vec<MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>> {
-        let streams = (0..UniChannelType::MAX_STREAMS)
+        (0..UniChannelType::MAX_STREAMS)
             .map(|_| {
                 let (stream, _stream_id) = self.channel.create_stream();
                 stream
             })
-            .collect();
-        streams
+            .collect()
     }
 
     pub async fn flush(&self, duration: Duration) -> u32 {
@@ -143,7 +141,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let on_close_callback = Arc::clone(&on_close_callback);
                 let on_err_callback = Arc::clone(&on_err_callback);
                 let out_stream = pipeline_builder(in_stream);
-                Arc::clone(&executor)
+                Arc::clone(executor)
                     .spawn_executor::<INSTRUMENTS, _, _, _, _>(
                         concurrency_limit,
                         move |err| on_err_callback(err),
@@ -192,7 +190,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let on_close_callback = Arc::clone(&on_close_callback);
                 let on_err_callback = Arc::clone(&on_err_callback);
                 let out_stream = pipeline_builder(in_stream);
-                Arc::clone(&executor)
+                Arc::clone(executor)
                     .spawn_fallibles_executor::<INSTRUMENTS, _, _>(
                         concurrency_limit,
                         move |err| on_err_callback(err),
@@ -240,7 +238,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);
                 let out_stream = pipeline_builder(in_stream);
-                Arc::clone(&executor)
+                Arc::clone(executor)
                     .spawn_futures_executor::<INSTRUMENTS, _, _, _>(
                         concurrency_limit,
                         move |executor| {
@@ -285,7 +283,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);
                 let out_stream = pipeline_builder(in_stream);
-                Arc::clone(&executor)
+                Arc::clone(executor)
                     .spawn_non_futures_non_fallibles_executor::<INSTRUMENTS, _, _>(
                         concurrency_limit,
                         move |executor| {
@@ -304,21 +302,22 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 }
 
 
-/// This trait exists only to overcome some Rust's limitations (as of 2023-08-01), where it is not possible to infer the types of generic parameters directly.
-/// Since having access to internal generic types (of intricate types) my greatly economize typing and increase code readability, this trait justifies its existence for now.\
-/// See also [MultiGenericTypes].\
+/// This trait exists to allow simplifying generic declarations of concrete [Uni]s types.
+/// See also [GenericMulti].\
 /// Usage:
 /// ```nocompile
-///     let my_uni = CustomUniType::new();
-///     let another_channel = <CustomUniType as UniGenericTypes>::UniChannelTypes::new();
-pub trait UniGenericTypes {
-    /// Define it as the homonymous generic parameter
+///     struct MyGenericStruct<T: GenericUni> { the_uni: T }
+///     let the_uni = Uni<Lots,And,Lots<Of,Generic,Arguments>>::new();
+///     let my_struct = MyGenericStruct { the_uni };
+pub trait GenericUni {
+    /// The payload type this Uni's producers will receive
     type ItemType;
-    /// Define it as the homonymous generic parameter
+    /// The channel through which payloads will travel from producers to consumers (see [Uni] for more info)
     type UniChannelType;
-    /// Define it as the homonymous generic parameter
+    /// The payload type this [Uni]'s `Stream`s will yield
     type DerivedItemType;
-    /// Defined as `MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>`
+    /// Defined as `MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>`,\
+    /// the concrete type for the `Stream` of `DerivedItemType`s to be given to consumers
     type MutinyStreamType;
 }
 

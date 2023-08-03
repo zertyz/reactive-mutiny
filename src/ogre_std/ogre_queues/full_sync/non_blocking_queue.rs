@@ -14,7 +14,7 @@ use super::super::super::{
 use std::{
     fmt::Debug,
     sync::atomic::{AtomicU64,Ordering::Relaxed},
-    mem::{MaybeUninit},
+    mem::MaybeUninit,
 };
 use log::trace;
 
@@ -138,6 +138,7 @@ impl<SlotType:          Unpin + Debug + Send + Sync,
      const INSTRUMENTS: usize>
 NonBlockingQueue<SlotType, BUFFER_SIZE, INSTRUMENTS> {
 
+    /// # Safety
     /// See [MetaSubscriber::peek_all()]
     #[inline(always)]
     pub unsafe fn peek_remaining(&self) -> [&[SlotType];2] {

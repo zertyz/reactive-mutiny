@@ -13,7 +13,7 @@ use std::{
     fmt::Debug,
     sync::Arc,
     time::Duration,
-    mem::{MaybeUninit},
+    mem::MaybeUninit,
     task::Waker,
 };
 use crossbeam_channel::{Sender, Receiver, TryRecvError, TrySendError};
@@ -129,7 +129,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         let mut item = MaybeUninit::uninit();
         let item_ref = unsafe { &mut *item.as_mut_ptr() };
         setter(item_ref);
-        let mut some_item = Some( unsafe { item.assume_init() } );
+        let some_item = Some( unsafe { item.assume_init() } );
         let item = some_item.unwrap();
         self.send(item)
             .retry_with(|item| self.send(item))

@@ -47,6 +47,7 @@ pub trait MetaSubscriber<'a, SlotType: 'a> {
     /// IMPLEMENTORS: #[inline(always)]
     fn remaining_elements_count(&self) -> usize;
 
+    /// # Safety
     /// Considering parallelism, this method *might* provide access to all elements available for [consume()].\
     /// This method is totally not thread safe for ring-buffer based implementations -- the moment it returns, all those elements might have already
     /// been consumed (furthermore, by the time the references are used, several generations of elements might have
@@ -64,6 +65,7 @@ pub trait MoveSubscriber<SlotType> {
     /// IMPLEMENTORS: #[inline(always)]
     fn consume_movable(&self) -> Option<SlotType>;
 
+    /// # Safety
     /// Considering parallelism, this method *might* provide access to all elements available for [consume()].\
     /// This method is totally not thread safe for ring-buffer based implementations -- the moment it returns, all those elements might have already
     /// been consumed (furthermore, by the time the references are used, several generations of elements might have

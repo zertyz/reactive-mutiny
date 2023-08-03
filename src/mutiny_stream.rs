@@ -37,7 +37,7 @@ MutinyStream<'a, ItemType, ChannelConsumerType, DerivedItemType> {
         Self {
             stream_id,
             events_source: events_source.clone(),
-            _phantom:      PhantomData::default(),
+            _phantom:      PhantomData,
         }
     }
 

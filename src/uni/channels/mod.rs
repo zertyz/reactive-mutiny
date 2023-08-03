@@ -19,7 +19,7 @@ pub mod zero_copy;
 mod tests {
     //use super::*;
     use crate::{
-        uni::channels::{movable},
+        uni::channels::movable,
         prelude::advanced::{
             ChannelCommon,
             ChannelUni,
@@ -232,7 +232,8 @@ mod tests {
                     for e in 0..count {
                         channel.send_with(|slot| *slot = e)
                             .retry_with_async(|setter| core::future::ready(channel.send_with(setter)))
-                            .yielding_forever();        // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
+                            .yielding_forever()
+                            .await;        // hanging prevention: since we're on the same thread, we must yield or else the other task won't execute
                     }
                     channel.gracefully_end_all_streams(Duration::from_secs(1)).await;
                 };

@@ -28,16 +28,22 @@ pub union AtomicIncrementalAverage64 {
     joined: ManuallyDrop<AtomicU64>,
 }
 
-impl AtomicIncrementalAverage64 {
-
-    /// starts a new metrics object
-    pub fn new() -> Self {
+impl Default for AtomicIncrementalAverage64 {
+    fn default() -> Self {
         Self {
             split: ManuallyDrop::new(IncrementalAveragePair32 {
                 counter: 0,
                 average: 0.0,
             })
         }
+    }
+}
+
+impl AtomicIncrementalAverage64 {
+
+    /// starts a new metrics object
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// increments the counter and includes 'measurement' in the computation

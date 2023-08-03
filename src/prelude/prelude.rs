@@ -6,12 +6,12 @@ pub use crate::{
     mutiny_stream::MutinyStream,
     uni::{
         Uni,
-        UniGenericTypes,
+        GenericUni,
         unis_close_async,
     },
     multi::{
         Multi,
-        MultiGenericTypes,
+        GenericMulti,
         multis_close_async,
     },
     types::*,

@@ -26,24 +26,18 @@ use std::{
         Arc,
         atomic::{
             AtomicU64,
-            Ordering::{Relaxed},
+            Ordering::Relaxed,
         },
     },
     future::Future,
     fmt::Debug,
-    time::{Duration},
+    time::Duration,
     error::Error,
     future,
 };
 use atomic_enum::atomic_enum;
-use futures::{
-    stream::{Stream,StreamExt}
-};
-use tokio::{
-    time::{
-        timeout,
-    },
-};
+use futures::stream::{Stream,StreamExt};
+use tokio::time::timeout;
 // using this instead of Tokio's Instant -- or even std's Instant -- saves a system call (and a context switch), avoiding a huge performance prejudice
 use minstant::Instant;
 use log::{trace,info,warn,error};
@@ -773,7 +767,7 @@ mod tests {
                                             move |_| async move {
                                                 tx.send(true).await.unwrap()
                                             },
-                                            stream::iter(vec![Ok(17), Ok(19), Err(Box::from(format!("Error on 20th")))]) );
+                                            stream::iter(vec![Ok(17), Ok(19), Err(Box::from(String::from("Error on 20th")))]) );
         assert!(rx.next().await.expect("consumption_done_reporter() wasn't called"), "consumption_done_reporter yielded the wrong value");
         assert_eq!(error_count.load(Relaxed), 1, "Error count is wrong, as computed by the error callback");
         assert_metrics::<INSTRUMENTS>

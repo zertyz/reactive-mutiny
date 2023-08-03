@@ -37,7 +37,7 @@ mod tests {
     use std::{sync::{
         Arc,
         atomic::{AtomicBool, AtomicU32, Ordering::Relaxed},
-    }, time::Duration, future::Future, io::Write, future};
+    }, time::Duration, future::Future, io::Write};
     use futures::stream::{self, Stream, StreamExt};
     use minstant::Instant;
     use log::error;
@@ -151,7 +151,7 @@ mod tests {
         let uni = TestUni::<u32, 1024, 1>::new("async_elements()")
             .spawn_executors(PARTS.len() as u32, Duration::from_secs(2), on_event,
                              |err| async move { error!("on_err_callback(): cought error '{:?}'", err) },
-                             |executor| async move { properly_closed_ref.store(true, Relaxed); });
+                             |_executor| async move { properly_closed_ref.store(true, Relaxed); });
 
         let producer = |item| uni.send_with(move |slot| *slot = item).expect_ok("couldn't send");
 
@@ -200,7 +200,7 @@ mod tests {
                                 stream.map(|payload: String| async move {
                                     if payload.contains("unsuccessful") {
                                         tokio::time::sleep(Duration::from_millis(50)).await;
-                                        Err(Box::from(format!("failing the pipeline, as requested")))
+                                        Err(Box::from(String::from("failing the pipeline, as requested")))
                                     } else if payload.contains("timeout") {
                                         tokio::time::sleep(Duration::from_millis(200)).await;
                                         Ok("this answer will never make it -- stream executor times out after 100ms".to_string())

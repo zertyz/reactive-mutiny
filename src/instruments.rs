@@ -1,4 +1,5 @@
 //! Resting place for [Instruments] used across this module
+//! TODO 2023-08-02: eventually, merge this and `./src/ogre_std/instruments.rs` together, into OgreStd, probably... making the instrumentation options general
 
 
 /// Honors the *Zero-Cost Instrumentation Pattern* for the [stream_executors]:\

@@ -53,7 +53,7 @@ mod tests {
         },
         io::Write,
     };
-    use futures::{stream::{self, Stream, StreamExt}};
+    use futures::stream::{self, Stream, StreamExt};
     use minstant::Instant;
     use tokio::sync::Mutex;
 
@@ -310,7 +310,7 @@ mod tests {
                                          stream.map(|payload| async move {
                                              if payload.contains("unsuccessful") {
                                                  tokio::time::sleep(Duration::from_millis(50)).await;
-                                                 Err(Box::from(format!("failing the pipeline, as requested")))
+                                                 Err(Box::from(String::from("failing the pipeline, as requested")))
                                              } else if payload.contains("timeout") {
                                                  tokio::time::sleep(Duration::from_millis(200)).await;
                                                  Ok(Arc::new(String::from("this answer will never make it -- stream executor times out after 100ms")))
@@ -685,7 +685,7 @@ mod tests {
         first_multi.spawn_non_futures_non_fallible_executor(1, "first executor", move |stream| {
                 stream.map(move |message: Arc<String>| {
                     println!("`first_multi` received '{:?}'", message);
-                    second_multi_ref.send_derived(&message);
+                    assert!(second_multi_ref.send_derived(&message), "couldn't send derived");
                     first_multi_msgs_ref
                         .lock().unwrap()
                         .push(message);

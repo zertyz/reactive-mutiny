@@ -1,4 +1,5 @@
 //! Resting place for [Instruments] used across this module
+//! TODO 2023-08-02: eventually, merge this and `./src/instruments.rs` together, into OgreStd, probably... making the instrumentation options general
 
 
 /// Honors the *Zero-Cost Instrumentation Pattern* for the [ogre_std] containers:\
@@ -18,7 +19,7 @@ pub enum Instruments {
 
     /// No conditional instrumentation code will be included -- bringing in the fastest
     /// possible execution speeds at the expense of lowest operational control
-    NoInstruments              = 0,
+    Uninstrumented             = 0,
 
     /// Counters are updated, but no periodical output will be logged in the *INFO* level
     MetricsWithoutDiagnostics  = Self::METRICS,
@@ -37,14 +38,14 @@ impl Instruments {
     /// that corresponds to the given const generic numeric value as described in [Self]
     pub const fn from(instruments: usize) -> Self {
         match instruments {
-            0                                                         => Self::NoInstruments,
+            0                                                         => Self::Uninstrumented,
             x if x == Self::MetricsWithoutDiagnostics as usize => Self::MetricsWithoutDiagnostics,
             x if x == Self::MetricsWithDiagnostics as usize    => Self::MetricsWithDiagnostics,
             x if x == Self::OperationsTracing as usize         => Self::OperationsTracing,
             x if x == Self::MetricsAndTracing as usize         => Self::MetricsAndTracing,
             _                                                         => {
                 // panic!("Don't know how to create an `Instruments` enum variant from value {instruments}");
-                Self::NoInstruments
+                Self::Uninstrumented
             },
         }
     }
@@ -54,7 +55,7 @@ impl Instruments {
     /// to the given enum variant
     pub const fn into(self) -> usize {
         match self {
-            Self::NoInstruments             => 0,
+            Self::Uninstrumented             => 0,
             Self::MetricsWithoutDiagnostics => Self::METRICS,
             Self::MetricsWithDiagnostics    => Self::METRICS | Self::METRICS_DIAGNOSTICS,
             Self::OperationsTracing         => Self::TRACING,
@@ -64,31 +65,18 @@ impl Instruments {
 
     /// returns true if metrics should be computed
     pub const fn metrics(self) -> bool {
-        match self {
-            Instruments::MetricsWithoutDiagnostics => true,
-            Instruments::MetricsWithDiagnostics    => true,
-            Instruments::MetricsAndTracing         => true,
-            _                                      => false,
-        }
+        matches!(self, Instruments::MetricsWithoutDiagnostics | Instruments::MetricsWithDiagnostics | Instruments::MetricsAndTracing)
     }
 
     /// returns true if operations should be traced
     pub const fn tracing(self) -> bool {
-        match self {
-            Instruments::OperationsTracing => true,
-            Instruments::MetricsAndTracing => true,
-            _                              => false,
-        }
+        matches!(self, Instruments::OperationsTracing | Instruments::MetricsAndTracing)
     }
 
     /// returns true if occasional diagnostic messages should be output with
     /// the current metrics counters
     pub const fn metrics_diagnostics(self) -> bool {
-        match self {
-            Instruments::MetricsWithDiagnostics => true,
-            Instruments::MetricsAndTracing      => true,
-            _                                   => false,
-        }
+        matches!(self, Instruments::MetricsWithDiagnostics | Instruments::MetricsAndTracing)
     }
 }
 
@@ -102,7 +90,7 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     fn exhaustive_from_and_into_conversions() {
         let all_variants = [
-            Instruments::NoInstruments,
+            Instruments::Uninstrumented,
             Instruments::MetricsWithoutDiagnostics,
             Instruments::MetricsWithDiagnostics,
             Instruments::OperationsTracing,
@@ -121,6 +109,6 @@ mod tests {
     #[cfg_attr(not(doc),test)]
     fn invalid_from() {
         // as soon as Rust allows it, the code bellow should not even compile
-        assert_eq!(Instruments::from(127), Instruments::NoInstruments);
+        assert_eq!(Instruments::from(127), Instruments::Uninstrumented);
     }
 }

@@ -18,6 +18,8 @@ use reactive_mutiny::prelude::advanced::{
     MultiMmapLog,
     UniMoveAtomic,
     UniMoveFullSync,
+    GenericUni,
+    GenericMulti,
 };
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
@@ -48,7 +50,6 @@ async fn unis_of_arcs() {
     let _ = uni.send(Arc::new(123));
     let _ = uni.send(Arc::new(321));
     let _ = uni.send(Arc::new(444));
-    // TODO: 2023-05-23: for an improved API, uni.try_send() & other functions must be denied (compilation error) if the type is `std::mem::needs_drop()`
     assert!(uni.close(Duration::from_secs(5)).await, "couldn't close");
     assert_eq!(sum.load(Relaxed), 888, "Wrong payloads received");
     assert_eq!("count: 3", executor_status.lock().await.as_str(), "Wrong execution report");
@@ -364,4 +365,26 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
     assert_eq!(observed_fallible_future_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `fallible_future_type_multi`");
 
     Ok(())
+}
+
+/// Ensures [Uni] & [Multi] may be easily used in generic structs
+#[cfg_attr(not(doc),test)]
+fn generics() {
+
+    // ensure Unis can be used in generics
+    struct GenericUniUser<UniType: GenericUni> {
+        the_uni: UniType,
+    }
+    let the_uni = UniMoveAtomic::<u32, 1024>::new("The Uni");
+    GenericUniUser { the_uni };
+
+    // ensure Multis can be used in generics
+    struct GenericMultiUser<MultiType: GenericMulti> {
+        the_multi: MultiType,
+    }
+    let the_multi = MultiAtomicOgreArc::<u32, 1024, 1>::new("The Uni");
+    GenericMultiUser { the_multi };
+
+    
+
 }

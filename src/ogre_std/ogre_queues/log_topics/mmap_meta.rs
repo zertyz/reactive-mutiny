@@ -17,7 +17,6 @@ use std::{
     fmt::Debug,
     num::NonZeroU32,
 };
-use futures::TryFutureExt;
 use memmap::{
     MmapOptions,
     MmapMut,
@@ -64,7 +63,7 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
     /// Even if the mmapped data grow, the returned reference is always valid, as the data never shrinks.
     fn buffer_as_slice_mut(&self) -> &'a mut [SlotType] {
         unsafe {
-            let mutable_self = &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get();
+            let mutable_self = &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get();
             std::slice::from_raw_parts_mut(&mut mutable_self.mmap_contents.first_buffer_element as *mut SlotType, mutable_self.mmap_contents.slice_length.load(Relaxed))
         }
     }
@@ -81,7 +80,7 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
         MMapMetaDynamicSubscriber {
             head:                AtomicUsize::new(first_element_slot_id),
             buffer:              self.buffer_as_slice_mut(),
-            meta_mmap_log_topic: Arc::clone(&self),
+            meta_mmap_log_topic: Arc::clone(self),
         }
     }
 
@@ -101,7 +100,7 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
             MMapMetaDynamicSubscriber {
                 head:                AtomicUsize::new(tail),
                 buffer:              self.buffer_as_slice_mut(),
-                meta_mmap_log_topic: Arc::clone(&self),
+                meta_mmap_log_topic: Arc::clone(self),
             },
         )
     }
@@ -113,7 +112,7 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
         MMapMetaDynamicSubscriber {
             head:                AtomicUsize::new(first_element_slot_id),
             buffer:              self.buffer_as_slice_mut(),
-            meta_mmap_log_topic: Arc::clone(&self),
+            meta_mmap_log_topic: Arc::clone(self),
         }
     }
 
@@ -143,7 +142,7 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
         let mmap_file_len = std::mem::size_of::<MMapContents<SlotType>>() as u64 + (max_slots-1) * std::mem::size_of::<SlotType>() as u64;  // `MMapContents<SlotType>` already contains 1 slot
         mmap_file.set_len(0)
             .map_err(|err| format!("mmapped log topic '{mmap_file_path}': Could not set the (sparsed) length of the mentioned mmapped file (after opening it) to {mmap_file_len}: {:?}", err, mmap_file_len = 0))?;
-        mmap_file.set_len(mmap_file_len as u64)
+        mmap_file.set_len(mmap_file_len)
              .map_err(|err| format!("mmapped log topic '{mmap_file_path}': Could not set the (sparsed) length of the mentioned mmapped file (after opening it) to {mmap_file_len}: {:?}", err))?;
         let mut mmap_handle = unsafe {
             MmapOptions::new()
@@ -173,7 +172,7 @@ impl<'a, SlotType: 'a + Debug> MetaPublisher<'a, SlotType> for MMapMeta<'a, Slot
 
     #[inline(always)]
     fn publish<F: FnOnce(&mut SlotType)>(&self, setter: F) -> (Option<NonZeroU32>, Option<F>) {
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let tail = self.mmap_contents.publisher_tail.fetch_add(1, Relaxed);
         let slot = unsafe { mutable_self.buffer.get_unchecked_mut(tail) };
         setter(slot);
@@ -264,7 +263,7 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaDynamicS
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let head = self.head.fetch_add(1, Relaxed);
         let tail = self.meta_mmap_log_topic.mmap_contents.consumer_tail.load(Relaxed);
         // check if there is an element available
@@ -322,7 +321,7 @@ impl<'a, SlotType: 'a + Debug> MetaSubscriber<'a, SlotType> for MMapMetaFixedSub
                report_len_after_dequeueing_fn: ReportLenAfterDequeueingFn)
               -> Option<GetterReturnType> {
 
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         let head = self.head.fetch_add(1, Relaxed);
         // check if there is an element available
         if head >= self.fixed_tail {
@@ -501,7 +500,7 @@ mod tests {
 
     /// Checks that dropping leaves no dangling references behind
     #[cfg_attr(not(doc),test)]
-    fn safe_lifetimes<'a>() {
+    fn safe_lifetimes() {
         const EXPECTED_ELEMENT: u128 = 1928384756;
 
         let meta_log_topic = MMapMeta::<u128>::new("/tmp/safe_lifetimes.test.mmap", 1024 * 1024 * 1024)

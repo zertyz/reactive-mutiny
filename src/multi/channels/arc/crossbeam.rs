@@ -37,7 +37,7 @@ ChannelCommon<'a, ItemType, Arc<ItemType>> for
 Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
-        let (mut senders, mut receivers): (Vec<_>, Vec<_>) = (0 .. MAX_STREAMS).into_iter()
+        let (mut senders, mut receivers): (Vec<_>, Vec<_>) = (0 .. MAX_STREAMS)
             .map(|_| crossbeam_channel::bounded::<Arc<ItemType>>(BUFFER_SIZE))
             .unzip();
         Arc::new(Self {

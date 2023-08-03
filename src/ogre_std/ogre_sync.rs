@@ -22,7 +22,7 @@ pub fn lock(flag: &AtomicBool) {
     if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
     if flag.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok() { return } else { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
     // no deal -- fallback without using the _weak version of compare_exchange
-    while !flag.compare_exchange(false, true, Acquire, Relaxed).is_ok() { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
+    while flag.compare_exchange(false, true, Acquire, Relaxed).is_err() { std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop(); std::hint::spin_loop() }
 }
 
 /// Releases any locks, returning immediately

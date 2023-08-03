@@ -2,9 +2,7 @@
 //! only a single push (or pop) may execute the critical region at a time.\
 //! Blocks (with parking-lot mutex) on a push if the stack is full and also on a pop, if its empty.
 
-use super::super::{
-    ogre_stacks::OgreStack,
-};
+use super::super::ogre_stacks::OgreStack;
 use std::{
     fmt::Debug,
     mem::MaybeUninit,

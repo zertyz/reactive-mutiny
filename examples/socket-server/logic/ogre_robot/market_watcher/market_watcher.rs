@@ -102,7 +102,7 @@ impl MarketWatcher {
                 let (symbol, _market_data) = (&subscriber_payload.0, &subscriber_payload.1);
                 let subscribers = cloned_self.subscribers.read().await;
                 match subscribers.get(symbol) {
-                    Some(multi) => { multi.send_derived(&subscriber_payload); },
+                    Some(multi) => { _ = multi.send_derived(&subscriber_payload); },
                     None                        => {},
                 }
                 Ok(())

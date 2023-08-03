@@ -7,9 +7,7 @@ use crate::ogre_std::{
         meta_subscriber::{MetaSubscriber,MoveSubscriber},
         meta_container::{MetaContainer, MoveContainer},
     },
-    ogre_alloc::{
-        OgreAllocator,
-    },
+    ogre_alloc::OgreAllocator,
 };
 use std::{
     fmt::Debug,
@@ -47,7 +45,7 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
         Self {
             allocator: Arc::new(OgreAllocatorType::new()),
             queue:     AtomicMove::new(),
-            _phantom:  PhantomData::default(),
+            _phantom:  PhantomData,
         }
     }
 }
@@ -156,15 +154,12 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
     #[inline(always)]
     fn consume_leaking(&'a self) -> Option<(/*ref:*/ &'a SlotType, /*id: */u32)> {
-        match self.queue.consume_movable() {
-            Some(slot_id) => Some( (self.allocator.ref_from_id(slot_id), slot_id) ),
-            None => None,
-        }
+        self.queue.consume_movable().map(|slot_id| (&*self.allocator.ref_from_id(slot_id), slot_id))
     }
 
     #[inline(always)]
     fn release_leaked_ref(&'a self, slot: &'a SlotType) {
-        let mutable_slot = unsafe { &mut *(&*(slot as *const SlotType as *const std::cell::UnsafeCell<SlotType>)).get() };
+        let mutable_slot = unsafe { &mut *(*(slot as *const SlotType as *const std::cell::UnsafeCell<SlotType>)).get() };
         self.allocator.dealloc_ref(mutable_slot);
     }
 

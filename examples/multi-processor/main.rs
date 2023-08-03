@@ -91,7 +91,9 @@ impl DecisionMaker {
                 None
             };
             if let Some(order) = order {
-                self.orders_event_handler.send_with(|slot| *slot = order);
+                self.orders_event_handler.send_with(|slot| *slot = order)
+                    .retry_with(|setter| self.orders_event_handler.send_with(setter))
+                    .spinning_forever();
             }
             ()
         })

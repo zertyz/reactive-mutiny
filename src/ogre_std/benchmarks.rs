@@ -110,7 +110,7 @@ pub fn single_producer_multiple_consumers_benchmark<ContainerType: Benchmarkable
     }).unwrap();
     println!();
 
-    return operations_per_second;
+    operations_per_second
 }
 
 /// Given a `container` and a `deadline`, recruits the specified number of 'threads' to perform add & remove operations in multi producer / single consumer mode --
@@ -166,7 +166,7 @@ pub fn multiple_producers_single_consumer_benchmark<ContainerType: Benchmarkable
     }).unwrap();
     println!();
 
-    return operations_per_second;
+    operations_per_second
 }
 
 
@@ -184,7 +184,7 @@ fn compute_operations_per_second(benchmark_name:      String,
     // loop until 'deadline' elapses
     loop {
         let operations_on_last_run = algorithm();
-        if let Some(operations_per_second) = keep_looping(&start_time, &mut total_operations, &deadline, operations_on_last_run) {
+        if let Some(operations_per_second) = keep_looping(&start_time, &mut total_operations, deadline, operations_on_last_run) {
             print!("{:12.2} ops/s: ", operations_per_second); std::io::stdout().flush().unwrap();
             return operations_per_second
         }
@@ -200,18 +200,18 @@ fn keep_looping(start_time: &SystemTime, total_operations: &mut u64, deadline: &
     if elapsed >= *deadline {
         let elapsed_micros = elapsed.as_micros();
         let operations_per_second = MICROS_IN_ONE_SECOND * (*total_operations as f64 / elapsed_micros as f64);
-        return Some(operations_per_second);
+        Some(operations_per_second)
     } else {
         None
     }
 }
 
 /// iterate from 'start' to 'finish', dividing the work among the given number of 'threads', calling 'callback' on each iteration
-pub fn multi_threaded_iterate(start: usize, finish: usize, threads: usize, callback: impl Fn(u32) -> () + std::marker::Sync) {
+pub fn multi_threaded_iterate(start: usize, finish: usize, threads: usize, callback: impl Fn(u32) + Sync) {
     crossbeam::scope(|scope| {
         let cb = &callback;
-        let join_handlers: Vec<crossbeam::thread::ScopedJoinHandle<()>> = (start..start+threads).into_iter()
-            .map(|thread_number| scope.spawn(move |_| iterate(thread_number, finish, threads, &cb)))
+        let join_handlers: Vec<crossbeam::thread::ScopedJoinHandle<()>> = (start..start+threads)
+            .map(|thread_number| scope.spawn(move |_| iterate(thread_number, finish, threads, cb)))
             .collect();
         for join_handler in join_handlers {
             join_handler.join().unwrap();
@@ -220,7 +220,7 @@ pub fn multi_threaded_iterate(start: usize, finish: usize, threads: usize, callb
 }
 
 /// iterate from 'start' to 'finish' with the given 'step' size and calls 'callback' on each iteration
-fn iterate(start: usize, finish: usize, step: usize, callback: impl Fn(u32) -> () + std::marker::Sync) {
+fn iterate(start: usize, finish: usize, step: usize, callback: impl Fn(u32)) {
     for i in (start..finish).step_by(step) {
         callback(i as u32);
     }
@@ -361,9 +361,9 @@ mod benchmark_queues {
     ////////////////////////////////////////////////
     // NOTE: blocking queues should be tested without lock timeouts
 
-    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
-    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::NoInstruments.into()}>);
-    impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::NoInstruments.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::Uninstrumented.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::atomic::BlockingQueue::<SlotType, BUFFER_SIZE, 1, {Instruments::Uninstrumented.into()}>);
+    impl_benchmarkable_container_for!(super::super::ogre_queues::full_sync::NonBlockingQueue::<SlotType, BUFFER_SIZE, {Instruments::Uninstrumented.into()}>);
 
     #[cfg_attr(not(doc),test)]
     #[ignore]   // must run in a single thread for accurate measurements
@@ -371,9 +371,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
-            all_in_and_out_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            all_in_and_out_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            all_in_and_out_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -383,9 +383,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [1,2,4] {
             println!("{n_threads} threads:");
-            single_in_and_out_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_in_and_out_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_in_and_out_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -395,9 +395,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
-            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            single_producer_multiple_consumers_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 
@@ -407,9 +407,9 @@ mod benchmark_queues {
         println!();
         for n_threads in [2,3,5] {
             println!("{n_threads} threads:");
-            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
-            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::NoInstruments.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::atomic::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::atomic::BlockingQueue::<usize, 32768, 1, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
+            multiple_producers_single_consumer_benchmark(super::super::ogre_queues::full_sync::NonBlockingQueue::<usize, 32768, {Instruments::Uninstrumented.into()}>::new("".to_string()), n_threads, Duration::from_secs(5));
         }
     }
 

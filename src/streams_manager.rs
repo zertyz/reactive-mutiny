@@ -246,9 +246,8 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
                     for used_stream_id in i .. *next_vacant_stream_id {
                         last_used_stream_id += 1;
                         unsafe { *used_streams.get_unchecked_mut(last_used_stream_id as usize)  = used_stream_id };
-                        i += 1;
                     }
-                    i += 1;
+                    i = *next_vacant_stream_id + 1;
                 }
                 None => {
                     last_used_stream_id += 1;
@@ -291,11 +290,10 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
         // true if `stream_id` is not running
         let is_vacant = || unsafe { self.vacant_streams.peek_remaining().iter() }
             .flat_map(|&slice| slice)
-            .find(|&vacant_stream_id| *vacant_stream_id == stream_id)
-            .is_some();
+            .any(|vacant_stream_id| *vacant_stream_id == stream_id);
 
-        debug_assert_eq!(false, is_vacant(), "Mutiny's `StreamsManager` @ end_stream(): BUG! stream_id {stream_id} is not running! Running ones are {:?}",
-                                             unsafe { &*self.used_streams.get() } .iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
+        debug_assert!(!is_vacant(), "Mutiny's `StreamsManager` @ end_stream(): BUG! stream_id {stream_id} is not running! Running ones are {:?}",
+                                    unsafe { &*self.used_streams.get() } .iter().filter(|&id| *id != u32::MAX).collect::<Vec<&u32>>());
 
         let start = Instant::now();
         self.flush(timeout, pending_items_counter).await;

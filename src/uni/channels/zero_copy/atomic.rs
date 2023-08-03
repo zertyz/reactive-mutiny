@@ -26,7 +26,7 @@ use crate::{
 use std::{
     time::Duration,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
     sync::Arc,
     marker::PhantomData,
 };
@@ -60,7 +60,7 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             channel:         AtomicZeroCopy::new(),
-            _phantom:        PhantomData::default(),
+            _phantom:        PhantomData,
         })
     }
 
@@ -179,12 +179,8 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn consume(&self, _stream_id: u32) -> Option<OgreUnique<ItemType, OgreAllocatorType>> {
-        match self.channel.consume_leaking() {
-            Some( (slot_ref, _slot_id) ) => {
-                Some(OgreUnique::<ItemType, OgreAllocatorType>::from_allocated_ref(slot_ref, &self.channel.allocator))
-            }
-            None => None,
-        }
+        self.channel.consume_leaking()
+            .map(|(slot_ref, _slot_id)| OgreUnique::<ItemType, OgreAllocatorType>::from_allocated_ref(slot_ref, &self.channel.allocator))
     }
 
     #[inline(always)]

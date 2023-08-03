@@ -1,14 +1,10 @@
 //! Common types across this module
 
-pub use crate::{
-    instruments::Instruments,
-};
-use crate::{
-    mutiny_stream::MutinyStream,
-};
+pub use crate::instruments::Instruments;
+use crate::mutiny_stream::MutinyStream;
 use std::{
     time::Duration,
-    task::{Waker},
+    task::Waker,
     fmt::Debug,
 };
 use std::sync::Arc;

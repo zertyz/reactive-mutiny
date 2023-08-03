@@ -1,9 +1,7 @@
 //! multiple producer / multiple consumer non-blocking stack with a full locking synchronization --
 //! only a single push (or pop) may execute the critical region at a time
 
-use super::super::{
-    ogre_stacks::OgreStack,
-};
+use super::super::ogre_stacks::OgreStack;
 use std::{
     fmt::Debug,
     mem::MaybeUninit,
@@ -48,7 +46,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
 
     #[inline(always)]
     fn push(&self, element: SlotType) -> bool {
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
         if self.head >= BUFFER_SIZE as u32 {
             if METRICS {
@@ -71,7 +69,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
 
     #[inline(always)]
     fn pop(&self) -> Option<SlotType> {
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
         while self.head == 0 {
             if METRICS {
