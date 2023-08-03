@@ -41,10 +41,11 @@ impl<ItemType:          Debug + Send + Sync + 'static,
      DerivedItemType:   Debug + Sync + Send + 'static>
 GenericMulti for
 Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
-    type ItemType = ItemType;
-    type MultiChannelType = MultiChannelType;
-    type DerivedItemType = DerivedItemType;
-    type MutinyStreamType = MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>;
+    const INSTRUMENTS: usize = INSTRUMENTS;
+    type ItemType            = ItemType;
+    type MultiChannelType    = MultiChannelType;
+    type DerivedItemType     = DerivedItemType;
+    type MutinyStreamType    = MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>;
 }
 
 impl<ItemType:          Debug + Send + Sync + 'static,
@@ -632,6 +633,8 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 ///     let the_multi = Multi<Lots,And,Lots<Of,Generic,Arguments>>::new();
 ///     let my_struct = MyGenericStruct { the_multi };
 pub trait GenericMulti {
+    /// The instruments this Multi will collect/report
+    const INSTRUMENTS: usize;
     /// The payload type this Multi's producers will receive
     type ItemType;
     /// The channel through which payloads will travel from producers to listeners (see [Multi] for more info)

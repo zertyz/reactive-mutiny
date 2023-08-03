@@ -31,10 +31,11 @@ impl<ItemType:          Send + Sync + Debug + 'static,
      DerivedItemType:   Debug + Sync>
 GenericUni for
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
-    type ItemType = ItemType;
-    type UniChannelType = UniChannelType;
-    type DerivedItemType = DerivedItemType;
-    type MutinyStreamType = MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>;
+    const INSTRUMENTS: usize = INSTRUMENTS;
+    type ItemType            = ItemType;
+    type UniChannelType      = UniChannelType;
+    type DerivedItemType     = DerivedItemType;
+    type MutinyStreamType    = MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>;
 }
 
 impl<ItemType:          Send + Sync + Debug + 'static,
@@ -310,6 +311,8 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 ///     let the_uni = Uni<Lots,And,Lots<Of,Generic,Arguments>>::new();
 ///     let my_struct = MyGenericStruct { the_uni };
 pub trait GenericUni {
+    /// The instruments this Uni will collect/report
+    const INSTRUMENTS: usize;
     /// The payload type this Uni's producers will receive
     type ItemType;
     /// The channel through which payloads will travel from producers to consumers (see [Uni] for more info)
