@@ -69,7 +69,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     ///   - producing events that are sent to those `Stream`s.
     /// `multi_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
     /// argument passed to the [Multi] struct.
-    fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
+    pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
         let multi_name = multi_name.into();
         Multi {
             multi_name:     multi_name.clone(),
