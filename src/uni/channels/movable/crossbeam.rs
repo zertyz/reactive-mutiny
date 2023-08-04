@@ -176,13 +176,16 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl <'a, ItemType:          'a + Debug + Send + Sync,
-          const BUFFER_SIZE: usize,
-          const MAX_STREAMS: usize>
-FullDuplexUniChannel<'a, ItemType, ItemType>
-for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+impl <ItemType:          'static + Debug + Send + Sync,
+      const BUFFER_SIZE: usize,
+      const MAX_STREAMS: usize>
+FullDuplexUniChannel
+for Crossbeam<'static, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     const MAX_STREAMS: usize = MAX_STREAMS;
+    const BUFFER_SIZE: usize = BUFFER_SIZE;
+    type ItemType            = ItemType;
+    type DerivedItemType     = ItemType;
 
     fn name(&self) -> &str {
         self.streams_manager.name()

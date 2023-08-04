@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 /// Contains the producer-side [Uni] handle used to interact with the `uni` event
 /// -- for closing the stream, requiring stats, ...
 pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
-               UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+               UniChannelType:    FullDuplexUniChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Send + Sync + 'static,
                const INSTRUMENTS: usize,
                DerivedItemType:   Send + Sync + Debug + 'static = ItemType> {
     pub channel:                  Arc<UniChannelType>,
@@ -26,7 +26,7 @@ pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
 }
 
 impl<ItemType:          Send + Sync + Debug + 'static,
-     UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+     UniChannelType:    FullDuplexUniChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Send + Sync + Debug + 'static>
 GenericUni<INSTRUMENTS> for
@@ -46,7 +46,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 }
 
 impl<ItemType:          Send + Sync + Debug + 'static,
-     UniChannelType:    FullDuplexUniChannel<'static, ItemType, DerivedItemType> + Send + Sync + 'static,
+     UniChannelType:    FullDuplexUniChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Send + Sync + Debug + 'static>
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
@@ -310,7 +310,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 }
 
 
-/// This trait exists to allow simplifying generic declarations of concrete [Uni]s types.
+/// This trait exists to allow simplifying generic declarations of concrete [Uni] types.
 /// See also [GenericMulti].\
 /// Usage:
 /// ```nocompile
@@ -326,7 +326,7 @@ pub trait GenericUni<const INSTRUMENTS: usize> {
     /// The payload type this [Uni]'s `Stream`s will yield
     type DerivedItemType: Send + Sync + Debug + 'static;
     /// The channel through which payloads will travel from producers to consumers (see [Uni] for more info)
-    type UniChannelType: FullDuplexUniChannel<'static, Self::ItemType, Self::DerivedItemType> + Send + Sync + 'static;
+    type UniChannelType: FullDuplexUniChannel<ItemType=Self::ItemType, DerivedItemType=Self::DerivedItemType> + Send + Sync + 'static;
     /// Defined as `MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>`,\
     /// the concrete type for the `Stream` of `DerivedItemType`s to be given to consumers
     type MutinyStreamType;

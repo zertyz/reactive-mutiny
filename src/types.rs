@@ -176,23 +176,42 @@ pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {
 
 
 /// Defines a fully fledged `Uni` channel, that has both the producer and consumer parts
-pub trait FullDuplexUniChannel<'a, ItemType:        'a + Debug + Send + Sync,
-                                   DerivedItemType: 'a + Debug = ItemType>:
-          ChannelCommon<'a, ItemType, DerivedItemType> +
-          ChannelUni<'a, ItemType, DerivedItemType> +
-          ChannelProducer<'a, ItemType, DerivedItemType> +
-          ChannelConsumer<'a, DerivedItemType> {
+/// Also, laverages generic programming by allowing simpler generic parameters:
+/// ```nocompile
+///     struct MyGenericStruct<T: FullDuplexUniChannel> { the_channel: T }
+///     let the_channel = uni::channels::xxx<Lots,And,Lots<Of,Generic,Arguments>>::new();
+///     let my_struct = MyGenericStruct { the_channel };
+///     // see more at `tests/use_cases.rs`
+pub trait FullDuplexUniChannel:
+              ChannelCommon<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelUni<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelProducer<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelConsumer<'static, Self::DerivedItemType> {
 
     const MAX_STREAMS: usize;
-
+    const BUFFER_SIZE: usize;
+    type ItemType: 'static + Debug + Send + Sync;
+    type DerivedItemType: 'static + Debug + Send + Sync;
+            
     /// Returns this channel's name
     fn name(&self) -> &str;
 }
 
 /// A fully fledged `Multi` channel, that has both the producer and consumer parts
-pub trait FullDuplexMultiChannel<'a, ItemType:        'a + Debug + Send + Sync,
-                                     DerivedItemType: 'a + Debug = ItemType>:
-          ChannelCommon<'a, ItemType, DerivedItemType> +
-          ChannelMulti<'a, ItemType, DerivedItemType> +
-          ChannelProducer<'a, ItemType, DerivedItemType> +
-          ChannelConsumer<'a, DerivedItemType> {}
+/// Also, laverages generic programming by allowing simpler generic parameters:
+/// ```nocompile
+///     struct MyGenericStruct<T: FullDuplexUniChannel> { the_channel: T }
+///     let the_channel = uni::channels::xxx<Lots,And,Lots<Of,Generic,Arguments>>::new();
+///     let my_struct = MyGenericStruct { the_channel };
+///     // see more at `tests/use_cases.rs`
+pub trait FullDuplexMultiChannel:
+              ChannelCommon<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelMulti<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelProducer<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelConsumer<'static, Self::DerivedItemType> {
+
+    const MAX_STREAMS: usize;
+    const BUFFER_SIZE: usize;
+    type ItemType: 'static + Debug + Send + Sync;
+    type DerivedItemType: 'static + Debug + Send + Sync;
+}

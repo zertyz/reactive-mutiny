@@ -21,6 +21,8 @@ use std::{
 use async_trait::async_trait;
 
 
+const BUFFER_SIZE: usize = 1<<38;
+
 /// ...
 pub struct MmapLog<'a, ItemType:          Send + Sync + Debug,
                        const MAX_STREAMS: usize = 16> {
@@ -43,7 +45,7 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         let name = name.into();
         let mmap_file_path = format!("/tmp/{}.mmap", name.chars().map(|c| if c == ' ' || c >= '0' || c <= '9' || c >= 'A' || c <= 'z' { c } else { '_' }).collect::<String>());
-        let log_queue = MMapMeta::new(mmap_file_path, 1<<38).expect("TODO: 2023-05-24: MAKE THIS TRAIT ALLOW RETURNING AN ERROR");
+        let log_queue = MMapMeta::new(mmap_file_path, BUFFER_SIZE as u64).expect("TODO: 2023-05-24: MAKE THIS TRAIT ALLOW RETURNING AN ERROR");
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             log_queue:       log_queue.clone(),
@@ -245,7 +247,13 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
 }
 
 
-impl <'a, ItemType:          'a + Debug + Send + Sync,
-          const MAX_STREAMS: usize>
-FullDuplexMultiChannel<'a, ItemType, &'static ItemType> for
-MmapLog<'a, ItemType, MAX_STREAMS> {}
+impl <ItemType:          'static + Debug + Send + Sync,
+      const MAX_STREAMS: usize>
+FullDuplexMultiChannel for
+MmapLog<'static, ItemType, MAX_STREAMS> {
+
+    const MAX_STREAMS: usize = MAX_STREAMS;
+    const BUFFER_SIZE: usize = BUFFER_SIZE;
+    type ItemType            = ItemType;
+    type DerivedItemType     = &'static ItemType;
+}

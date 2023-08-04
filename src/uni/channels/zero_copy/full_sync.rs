@@ -188,14 +188,17 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl <'a, ItemType:          'a + Debug + Send + Sync,
-          OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
-          const BUFFER_SIZE: usize,
-          const MAX_STREAMS: usize>
-FullDuplexUniChannel<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
-for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
+impl <ItemType:          'static + Debug + Send + Sync,
+      OgreAllocatorType: OgreAllocator<ItemType> + 'static + Send + Sync,
+      const BUFFER_SIZE: usize,
+      const MAX_STREAMS: usize>
+FullDuplexUniChannel
+for FullSync<'static, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     const MAX_STREAMS: usize = MAX_STREAMS;
+    const BUFFER_SIZE: usize = BUFFER_SIZE;
+    type ItemType            = ItemType;
+    type DerivedItemType     = OgreUnique<ItemType, OgreAllocatorType>;
 
     fn name(&self) -> &str {
         self.streams_manager.name()

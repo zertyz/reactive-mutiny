@@ -26,7 +26,7 @@ use tokio::sync::RwLock;
 /// ```nocompile
 /// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
 pub struct Multi<ItemType:          Debug + Sync + Send + 'static,
-                 MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
+                 MultiChannelType:  FullDuplexMultiChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Sync + Send + 'static,
                  const INSTRUMENTS: usize,
                  DerivedItemType:   Debug + Sync + Send + 'static> {
     pub multi_name:     String,
@@ -36,7 +36,7 @@ pub struct Multi<ItemType:          Debug + Sync + Send + 'static,
 }
 
 impl<ItemType:          Debug + Send + Sync + 'static,
-     MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
+     MultiChannelType:  FullDuplexMultiChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync + Send + 'static>
 GenericMulti<INSTRUMENTS> for
@@ -56,7 +56,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 }
 
 impl<ItemType:          Debug + Send + Sync + 'static,
-     MultiChannelType:  FullDuplexMultiChannel<'static, ItemType, DerivedItemType> + Sync + Send + 'static,
+     MultiChannelType:  FullDuplexMultiChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Sync + Send + 'static,
      const INSTRUMENTS: usize,
      DerivedItemType:   Debug + Sync + Send + 'static>
 Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
@@ -640,7 +640,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 }
 
 
-/// This trait exists to allow simplifying generic declarations of concrete [Multi]s types.
+/// This trait exists to allow simplifying generic declarations of concrete [Multi] types.
 /// See also [GenericUni].\
 /// Usage:
 /// ```nocompile
@@ -655,7 +655,7 @@ pub trait GenericMulti<const INSTRUMENTS: usize> {
     /// The payload type this [Multi]'s `Stream`s will yield
     type DerivedItemType: Debug + Sync + Send + 'static;
     /// The channel through which payloads will travel from producers to listeners (see [Multi] for more info)
-    type MultiChannelType: FullDuplexMultiChannel<'static, Self::ItemType, Self::DerivedItemType> + Sync + Send;
+    type MultiChannelType: FullDuplexMultiChannel<ItemType=Self::ItemType, DerivedItemType=Self::DerivedItemType> + Sync + Send;
     /// Defined as `MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>`,\
     /// the concrete type for the `Stream` of `DerivedItemType`s to be given to listeners
     type MutinyStreamType;

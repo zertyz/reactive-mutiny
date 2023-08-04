@@ -714,7 +714,7 @@ mod tests {
         const FACTOR: u32 = 32;
 
         /// measure how long it takes to stream a certain number of elements through the given `multi`
-        async fn profile_multi<MultiChannelType:  FullDuplexMultiChannel<'static, u32, Arc<u32>> + Sync + Send + 'static,
+        async fn profile_multi<MultiChannelType:  FullDuplexMultiChannel<ItemType=u32, DerivedItemType=Arc<u32>> + Sync + Send + 'static,
                                const INSTRUMENTS: usize>
                               (multi:          &Multi<u32, MultiChannelType, INSTRUMENTS, Arc<u32>>,
                                profiling_name: &str,

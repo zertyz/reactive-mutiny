@@ -445,7 +445,7 @@ mod tests {
         const FACTOR: u32 = 40;
 
         /// measure how long it takes to stream a certain number of elements through the given `uni`
-        async fn profile_uni<UniChannelType:    FullDuplexUniChannel<'static, u32, u32> + Sync + Send + 'static,
+        async fn profile_uni<UniChannelType:    FullDuplexUniChannel<ItemType=u32, DerivedItemType=u32> + Sync + Send + 'static,
                              const INSTRUMENTS: usize>
                             (uni:            Arc<Uni<u32, UniChannelType, INSTRUMENTS>>,
                              profiling_name: &str,

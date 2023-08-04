@@ -219,8 +219,14 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl <'a, ItemType:          'a + Debug + Send + Sync,
-          const BUFFER_SIZE: usize,
-          const MAX_STREAMS: usize>
-FullDuplexMultiChannel<'a, ItemType, Arc<ItemType>> for
-FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {}
+impl <ItemType:          'static + Debug + Send + Sync,
+      const BUFFER_SIZE: usize,
+      const MAX_STREAMS: usize>
+FullDuplexMultiChannel for
+FullSync<'static, ItemType, BUFFER_SIZE, MAX_STREAMS> {
+
+    const MAX_STREAMS: usize = MAX_STREAMS;
+    const BUFFER_SIZE: usize = BUFFER_SIZE;
+    type ItemType            = ItemType;
+    type DerivedItemType     = Arc<ItemType>;
+}

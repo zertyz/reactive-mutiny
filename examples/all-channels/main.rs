@@ -26,7 +26,7 @@ const INSTRUMENTS: usize = Instruments::NoInstruments.into();
 
 
 async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                               UniChannelType:      FullDuplexUniChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
+                               UniChannelType:      FullDuplexUniChannel<ItemType=ExchangeEvent, DerivedItemType=DerivedEventType> + Sync + Send + 'static>
                               (ident: &str,
                                name: &str,
                                uni: Uni<ExchangeEvent, UniChannelType, INSTRUMENTS, DerivedEventType>) {
@@ -75,7 +75,7 @@ async fn uni_builder_benchmark<DerivedEventType:    'static + Debug + Send + Syn
 }
 
 async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<Target = ExchangeEvent>,
-                                 MultiChannelType: FullDuplexMultiChannel<'static, ExchangeEvent, DerivedEventType> + Sync + Send + 'static>
+                                 MultiChannelType: FullDuplexMultiChannel<ItemType=ExchangeEvent, DerivedItemType=DerivedEventType> + Sync + Send + 'static>
                                 (ident:               &str,
                                  name:                &str,
                                  number_of_listeners: u32,
