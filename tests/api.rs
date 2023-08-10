@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use futures::StreamExt;
 use reactive_mutiny::prelude::advanced::{
+    GenericUni,
     UniZeroCopyAtomic,
     Instruments,
 };

@@ -49,7 +49,7 @@ async fn unis_of_arcs() {
                                                       payloads.map(move | payload| sum_ref.fetch_add(*payload, Relaxed))
                                                   },
                                                    move |executor| async move {
-                                                     executor_status_ref.lock().await.push_str(&format!("count: {}", executor.ok_events_avg_future_duration.lightweight_probe().0));
+                                                     executor_status_ref.lock().await.push_str(&format!("count: {}", executor.ok_events_avg_future_duration().lightweight_probe().0));
                                                  });
     let _ = uni.send(Arc::new(123));
     let _ = uni.send(Arc::new(321));
@@ -376,11 +376,11 @@ async fn multi_with_any_resulting_type_for_oldies() -> Result<(), Box<dyn std::e
 fn generics() {
 
     // ensure `Uni`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed
-    struct GenericUniUser<const UNI_INSTRUMENTS: usize, UniType: GenericUni<UNI_INSTRUMENTS>> {
+    struct GenericUniUser<UniType: GenericUni> {
         the_uni: UniType,
         _phantom: PhantomData<UniType>,
     }
-    impl<const UNI_INSTRUMENTS: usize, UniType: GenericUni<UNI_INSTRUMENTS>> GenericUniUser<UNI_INSTRUMENTS, UniType> {
+    impl<UniType: GenericUni> GenericUniUser<UniType> {
         // type TheUniType = Uni<UniType::ItemType, UniType::UniChannelType, { UniType::INSTRUMENTS }, UniType::DerivedItemType>;   // NOT YET ALLOWED :( when it is, `UNI_INSTRUMENTS` may be dropped
         /// Demonstrates the caller is able to see `UniType` as a `Uni`
         fn as_uni(self) -> UniType {
@@ -392,15 +392,15 @@ fn generics() {
         }
         /// Demonstrates `UniType` can be converted to a `Uni`
         async fn close(self) {
-            self.the_uni.to_uni().close(Duration::ZERO).await;
+            self.the_uni.close(Duration::ZERO).await;
         }
     }
     type MyUniType = UniMoveAtomic::<u32, 1024>;
-    let the_uni = GenericUniUser::<{MyUniType::INSTRUMENTS}, _> {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.as_uni();
+    let the_uni = GenericUniUser {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.as_uni();
     let _future = the_uni.close(Duration::ZERO);
-    let the_uni = GenericUniUser::<{MyUniType::INSTRUMENTS}, MyUniType>::new_uni();
+    let the_uni = GenericUniUser::<MyUniType>::new_uni();
     let _future = the_uni.close(Duration::ZERO);
-    let _future = GenericUniUser::<{MyUniType::INSTRUMENTS}, _> {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.close();
+    let _future = GenericUniUser {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.close();
     
 
     // ensure `Multi`s can be represented by a simple generic type that may be "reconstructed" back into the concrete type when needed

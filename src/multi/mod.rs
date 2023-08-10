@@ -289,13 +289,13 @@ mod tests {
         multi.close(Duration::from_secs(5)).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
         for (i, executor_info) in multi.executor_infos.read().await.values().enumerate() {
-            let (ok_counter, ok_avg_futures_resolution_duration) = executor_info.stream_executor.ok_events_avg_future_duration.lightweight_probe();
+            let (ok_counter, ok_avg_futures_resolution_duration) = executor_info.executor_stats.ok_events_avg_future_duration().lightweight_probe();
             assert_eq!(ok_counter,                               1,    "counter of successful '{event_name}' events is wrong for pipeline #{i}");
             assert_eq!(ok_avg_futures_resolution_duration,       -1.0, "avg futures resolution time of successful '{event_name}' events is wrong  for pipeline #{i} -- since it is a non-future, avg times should be always -1.0");
-            let (failures_counter, failures_avg_futures_resolution_duration) = executor_info.stream_executor.failed_events_avg_future_duration.lightweight_probe();
+            let (failures_counter, failures_avg_futures_resolution_duration) = executor_info.executor_stats.failed_events_avg_future_duration().lightweight_probe();
             assert_eq!(failures_counter,                         0,    "counter of unsuccessful '{event_name}' events is wrong  for pipeline #{i} -- since it is a non-fallible event, failures should always be 0");
             assert_eq!(failures_avg_futures_resolution_duration, 0.0,  "avg futures resolution time of unsuccessful '{event_name}' events is wrong  for pipeline #{i} -- since it is a non-fallible event,, avg times should be always 0.0");
-            let (timeouts_counter, timeouts_avg_futures_resolution_duration) = executor_info.stream_executor.timed_out_events_avg_future_duration.lightweight_probe();
+            let (timeouts_counter, timeouts_avg_futures_resolution_duration) = executor_info.executor_stats.timed_out_events_avg_future_duration().lightweight_probe();
             assert_eq!(timeouts_counter,                         0,    "counter of timed out '{event_name}' events is wrong  for pipeline #{i} -- since it is a non-future event, timeouts should always be 0");
             assert_eq!(timeouts_avg_futures_resolution_duration, 0.0,  "avg futures resolution time of timed out '{event_name}' events is wrong  for pipeline #{i} -- since it is a non-future event,, avg timeouts should be always 0.0");
         }
@@ -334,13 +334,13 @@ mod tests {
         multi.close(Duration::from_secs(5)).await;
         assert_eq!(N_PIPELINES, multi.executor_infos.read().await.len(), "Number of created pipelines doesn't match");
         for (i, executor_info) in multi.executor_infos.read().await.values().enumerate() {
-            let (ok_counter, ok_avg_futures_resolution_duration) = executor_info.stream_executor.ok_events_avg_future_duration.lightweight_probe();
+            let (ok_counter, ok_avg_futures_resolution_duration) = executor_info.executor_stats.ok_events_avg_future_duration().lightweight_probe();
             assert_eq!(ok_counter,                                             2,    "counter of successful '{event_name}' events is wrong for pipeline #{i}");
             assert!((ok_avg_futures_resolution_duration-0.100).abs()        < 15e-2, "avg futures resolution time of successful '{event_name}' events is wrong for pipeline #{i} -- it should be 0.1s, but was {ok_avg_futures_resolution_duration}s");
-            let (failures_counter, failures_avg_futures_resolution_duration) = executor_info.stream_executor.failed_events_avg_future_duration.lightweight_probe();
+            let (failures_counter, failures_avg_futures_resolution_duration) = executor_info.executor_stats.failed_events_avg_future_duration().lightweight_probe();
             assert_eq!(failures_counter,                                      2,    "counter of unsuccessful '{event_name}' events is wrong for pipeline #{i}");
             assert!((failures_avg_futures_resolution_duration-0.050).abs() < 15e-2, "avg futures resolution time of unsuccessful '{event_name}' events is wrong for pipeline #{i} -- it should be 0.05s, but was {failures_avg_futures_resolution_duration}s");
-            let (timeouts_counter, timeouts_avg_futures_resolution_duration) = executor_info.stream_executor.timed_out_events_avg_future_duration.lightweight_probe();
+            let (timeouts_counter, timeouts_avg_futures_resolution_duration) = executor_info.executor_stats.timed_out_events_avg_future_duration().lightweight_probe();
             assert_eq!(timeouts_counter,                                      2,    "counter of timed out '{event_name}' events is wrong for pipeline #{i}");
             assert!((timeouts_avg_futures_resolution_duration-0.150).abs() < 15e-2, "avg futures resolution time of timed out '{event_name}' events is wrong for pipeline #{i} -- it should be 0.150s, but was {timeouts_avg_futures_resolution_duration}s");
         }

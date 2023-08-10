@@ -129,7 +129,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                 pipeline_name:             IntoString,
                                 pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
                                 on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                               -> ErrVoidAsyncType   + Send + Sync + 'static,
-                                on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                                                -> CloseVoidAsyncType + Send + Sync + 'static)
+                                on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                -> Result<(), Box<dyn std::error::Error>> {
 
@@ -150,9 +150,9 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                        NewiesOutStreamType:      Stream<Item=NewiesOutType> + Sync + Send + 'static,
                                        OldiesOutType:            Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
                                        NewiesOutType:            Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
-                                       ErrVoidAsyncType:         Future<Output=()> + Send + 'static,
-                                       OldiesCloseVoidAsyncType: Future<Output=()> + Send + 'static,
-                                       NewiesCloseVoidAsyncType: Future<Output=()> + Send + 'static>
+                                       ErrVoidAsyncType:         Future<Output=()>   + Send + 'static,
+                                       OldiesCloseVoidAsyncType: Future<Output=()>   + Send + 'static,
+                                       NewiesCloseVoidAsyncType: Future<Output=()>   + Send + 'static>
 
                                       (self:                      &Arc<Self>,
                                        concurrency_limit:         u32,
@@ -160,10 +160,10 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                        futures_timeout:           Duration,
                                        oldies_pipeline_name:      IntoString,
                                        oldies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OldiesOutStreamType,
-                                       oldies_on_close_callback:  impl FnOnce(Arc<StreamExecutor>)                                                -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
+                                       oldies_on_close_callback:  impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
                                        newies_pipeline_name:      IntoString,
                                        newies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> NewiesOutStreamType      + Send + Sync + 'static,
-                                       newies_on_close_callback:  impl FnOnce(Arc<StreamExecutor>)                                                -> NewiesCloseVoidAsyncType + Send + Sync + 'static,
+                                       newies_on_close_callback:  impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> NewiesCloseVoidAsyncType + Send + Sync + 'static,
                                        on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                               -> ErrVoidAsyncType         + Send + Sync + 'static)
 
                                       -> Result<(), Box<dyn std::error::Error>> {
@@ -217,8 +217,8 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                         OutItemType:            Send + Debug,
                                         OutStreamType:          Stream<Item=OutType> + Send + 'static,
                                         OutType:                Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
-                                        ErrVoidAsyncType:       Future<Output=()> + Send + 'static,
-                                        CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+                                        ErrVoidAsyncType:       Future<Output=()>   + Send + 'static,
+                                        CloseVoidAsyncType:     Future<Output=()>   + Send + 'static>
 
                                        (&self,
                                         concurrency_limit:         u32,
@@ -226,15 +226,15 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                         pipeline_name:             IntoString,
                                         stream_id:                 u32,
                                         pipelined_stream:          OutStreamType,
-                                        on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
-                                        on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                  -> CloseVoidAsyncType + Send + Sync + 'static)
+                                        on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)       -> ErrVoidAsyncType   + Send + Sync + 'static,
+                                        on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                        -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.name(), pipeline_name.into()), futures_timeout);
-        self.add_executor(Arc::clone(&executor), stream_id).await?;
+        let executor = StreamExecutor::<INSTRUMENTS>::with_futures_timeout(format!("{}: {}", self.name(), pipeline_name.into()), futures_timeout);
+        self.add_executor(executor.clone(), stream_id).await?;
         executor
-            .spawn_executor::<INSTRUMENTS, _, _, _, _>(
+            .spawn_executor::<_, _, _, _>(
                 concurrency_limit,
                 on_err_callback,
                 on_close_callback,
@@ -256,7 +256,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                         futures_timeout:           Duration,
                                         pipeline_name:             IntoString,
                                         pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
-                                        on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                                                -> CloseVoidAsyncType + Send + Sync + 'static)
+                                        on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                        -> Result<(), Box<dyn std::error::Error>> {
 
@@ -286,10 +286,10 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                futures_timeout:           Duration,
                                                oldies_pipeline_name:      IntoString,
                                                oldies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OldiesOutStreamType,
-                                               oldies_on_close_callback:  impl FnOnce(Arc<StreamExecutor>)                                                -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
+                                               oldies_on_close_callback:  impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
                                                newies_pipeline_name:      IntoString,
                                                newies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> NewiesOutStreamType       + Send + Sync + 'static,
-                                               newies_on_close_callback:  impl FnOnce(Arc<StreamExecutor>)                                                -> NewiesCloseVoidAsyncType  + Send + Sync + 'static)
+                                               newies_on_close_callback:  impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> NewiesCloseVoidAsyncType  + Send + Sync + 'static)
 
                                               -> Result<(), Box<dyn std::error::Error>> {
 
@@ -333,9 +333,9 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// Internal method with common code for [Self::spawn_futures_executor()] & [Self::spawn_futures_oldies_executor()].
     async fn spawn_futures_executor_from_stream<IntoString:             Into<String>,
                                                 OutItemType:            Send + Debug,
-                                                OutStreamType:          Stream<Item=OutType> + Send + 'static,
+                                                OutStreamType:          Stream<Item=OutType>       + Send + 'static,
                                                 OutType:                Future<Output=OutItemType> + Send,
-                                                CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+                                                CloseVoidAsyncType:     Future<Output=()>          + Send + 'static>
 
                                                (&self,
                                                 concurrency_limit:         u32,
@@ -343,14 +343,14 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                 pipeline_name:             IntoString,
                                                 stream_id:                 u32,
                                                 pipelined_stream:          OutStreamType,
-                                                on_close_callback:         impl FnOnce(Arc<StreamExecutor>) -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                                -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::with_futures_timeout(format!("{}: {}", self.name(), pipeline_name.into()), futures_timeout);
-        self.add_executor(Arc::clone(&executor), stream_id).await?;
+        let executor = StreamExecutor::<INSTRUMENTS>::with_futures_timeout(format!("{}: {}", self.name(), pipeline_name.into()), futures_timeout);
+        self.add_executor(executor.clone(), stream_id).await?;
         executor
-            .spawn_futures_executor::<INSTRUMENTS, _, _, _>(
+            .spawn_futures_executor::<_, _, _>(
                 concurrency_limit,
                 on_close_callback,
                 pipelined_stream
@@ -370,7 +370,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                           pipeline_name:             IntoString,
                                           pipeline_builder:          impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
                                           on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                                                     + Send + Sync + 'static,
-                                          on_close_callback:         impl FnOnce(Arc<StreamExecutor>)                                                -> CloseVoidAsyncType + Send + Sync + 'static)
+                                          on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                          -> Result<(), Box<dyn std::error::Error>> {
 
@@ -397,10 +397,10 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                  sequential_transition:     bool,
                                                  oldies_pipeline_name:      IntoString,
                                                  oldies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OldiesOutStreamType,
-                                                 oldies_on_close_callback:  impl FnOnce(Arc<StreamExecutor>)                                                -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
+                                                 oldies_on_close_callback:  impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
                                                  newies_pipeline_name:      IntoString,
                                                  newies_pipeline_builder:   impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> NewiesOutStreamType      + Send + Sync + 'static,
-                                                 newies_on_close_callback:  impl FnOnce(Arc<StreamExecutor>)                                                -> NewiesCloseVoidAsyncType + Send + Sync + 'static,
+                                                 newies_on_close_callback:  impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> NewiesCloseVoidAsyncType + Send + Sync + 'static,
                                                  on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                                                           + Send + Sync + 'static)
 
                                                 -> Result<(), Box<dyn std::error::Error>> {
@@ -460,15 +460,15 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                         pipeline_name:             IntoString,
                                         stream_id:                 u32,
                                         pipelined_stream:          OutStreamType,
-                                        on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)      + Send + Sync + 'static,
-                                        on_close_callback:         impl FnOnce(Arc<StreamExecutor>) -> CloseVoidAsyncType + Send + Sync + 'static)
+                                        on_err_callback:           impl Fn(Box<dyn std::error::Error + Send + Sync>)                             + Send + Sync + 'static,
+                                        on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                        -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::new(format!("{}: {}", self.name(), pipeline_name.into()));
-        self.add_executor(Arc::clone(&executor), stream_id).await?;
+        let executor = StreamExecutor::<INSTRUMENTS>::new(format!("{}: {}", self.name(), pipeline_name.into()));
+        self.add_executor(executor.clone(), stream_id).await?;
         executor
-            .spawn_fallibles_executor::<INSTRUMENTS, _, _>(
+            .spawn_fallibles_executor::<_, _>(
                 concurrency_limit,
                 on_err_callback,
                 on_close_callback,
@@ -479,16 +479,16 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
 
     /// Spawns a new listener of all subsequent events sent to this `Multi`, processing them through the `Stream` returned by `pipeline_builder()`,
     /// which generates events that are Non-Futures & Non-Fallible.
-    pub async fn spawn_non_futures_non_fallible_executor<IntoString:             Into<String>,
-                                                         OutItemType:            Send + Debug,
-                                                         OutStreamType:          Stream<Item=OutItemType> + Send + 'static,
-                                                         CloseVoidAsyncType:     Future<Output=()> + Send + 'static>
+    pub async fn spawn_non_futures_non_fallible_executor<IntoString:         Into<String>,
+                                                         OutItemType:        Send + Debug,
+                                                         OutStreamType:      Stream<Item=OutItemType> + Send + 'static,
+                                                         CloseVoidAsyncType: Future<Output=()>        + Send + 'static>
 
                                                         (&self,
                                                          concurrency_limit:        u32,
                                                          pipeline_name:            IntoString,
                                                          pipeline_builder:         impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OutStreamType,
-                                                         on_close_callback:        impl FnOnce(Arc<StreamExecutor>)                                                -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                         on_close_callback:        impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                                         -> Result<(), Box<dyn std::error::Error>> {
 
@@ -516,10 +516,10 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                                 sequential_transition:    bool,
                                                                 oldies_pipeline_name:     IntoString,
                                                                 oldies_pipeline_builder:  impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> OldiesOutStreamType,
-                                                                oldies_on_close_callback: impl FnOnce(Arc<StreamExecutor>)                                                -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
+                                                                oldies_on_close_callback: impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> OldiesCloseVoidAsyncType + Send + Sync + 'static,
                                                                 newies_pipeline_name:     IntoString,
                                                                 newies_pipeline_builder:  impl FnOnce(MutinyStream<'static, ItemType, MultiChannelType, DerivedItemType>) -> NewiesOutStreamType,
-                                                                newies_on_close_callback: impl FnOnce(Arc<StreamExecutor>)                                                -> NewiesCloseVoidAsyncType + Send + Sync + 'static)
+                                                                newies_on_close_callback: impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                         -> NewiesCloseVoidAsyncType + Send + Sync + 'static)
 
                                                                -> Result<(), Box<dyn std::error::Error>> {
 
@@ -572,14 +572,14 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                                  pipeline_name:             IntoString,
                                                                  stream_id:                 u32,
                                                                  pipelined_stream:          OutStreamType,
-                                                                 on_close_callback:         impl FnOnce(Arc<StreamExecutor>) -> CloseVoidAsyncType + Send + Sync + 'static)
+                                                                 on_close_callback:         impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType + Send + Sync + 'static)
 
                                                                 -> Result<(), Box<dyn std::error::Error>> {
 
-        let executor = StreamExecutor::new(format!("{}: {}", self.name(), pipeline_name.into()));
-        self.add_executor(Arc::clone(&executor), stream_id).await?;
+        let executor = StreamExecutor::<INSTRUMENTS>::new(format!("{}: {}", self.name(), pipeline_name.into()));
+        self.add_executor(executor.clone(), stream_id).await?;
         executor
-            .spawn_non_futures_non_fallibles_executor::<INSTRUMENTS, _, _>(
+            .spawn_non_futures_non_fallibles_executor::<_, _>(
                 concurrency_limit,
                 on_close_callback,
                 pipelined_stream
@@ -621,18 +621,18 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         drop(executor_infos);
 
         // wait until all elements are taken out from the queue
-        executor_info.stream_executor.report_scheduled_to_finish();
+        executor_info.executor_stats.report_scheduled_to_finish();
         self.channel.gracefully_end_stream(executor_info.stream_id, timeout).await;
         true
     }
 
     /// Registers an executor within this `Multi` so it can be managed -- closed, inquired for stats, etc
-    async fn add_executor(&self, stream_executor: Arc<StreamExecutor>, stream_id: u32) -> Result<(), Box<dyn std::error::Error>> {
+    async fn add_executor(&self, stream_executor: Arc<dyn StreamExecutorStats + Send + Sync>, stream_id: u32) -> Result<(), Box<dyn std::error::Error>> {
         let mut internal_multis = self.executor_infos.write().await;
-        if internal_multis.contains_key(&stream_executor.executor_name()) {
+        if internal_multis.contains_key(stream_executor.executor_name()) {
             Err(Box::from(format!("an executor with the same name is already present: '{}'", stream_executor.executor_name())))
         } else {
-            internal_multis.insert(stream_executor.executor_name(), ExecutorInfo { stream_executor, stream_id });
+            internal_multis.insert(stream_executor.executor_name().to_owned(), ExecutorInfo { executor_stats: stream_executor, stream_id });
             Ok(())
         }
     }
@@ -678,10 +678,11 @@ macro_rules! multis_close_async {
     }
 }
 pub use multis_close_async;
+use crate::stream_executor::StreamExecutorStats;
 pub use crate::types::ChannelCommon;
 
 /// Keeps track of the `stream_executor` associated to each `stream_id`
 pub struct ExecutorInfo {
-    pub stream_executor: Arc<StreamExecutor>,
-    pub stream_id: u32,
+    pub executor_stats: Arc<dyn StreamExecutorStats + Send + Sync>,
+    pub stream_id:      u32,
 }

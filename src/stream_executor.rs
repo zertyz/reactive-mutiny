@@ -43,9 +43,26 @@ use minstant::Instant;
 use log::{trace,info,warn,error};
 
 
+/// The trait to be passed along after the executor has been started
+pub trait StreamExecutorStats {
+    fn executor_name(&self) -> &String;
+    fn futures_timeout(&self) -> &Duration;
+    fn creation_time(&self) -> &Instant;
+    fn executor_status(&self) -> &AtomicExecutorStatus;
+    fn execution_start_delta_nanos(&self) -> u64;
+    fn execution_finish_delta_nanos(&self) -> u64;
+    fn ok_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64;
+    fn timed_out_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64;
+    fn failed_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64;
+    /// Tells this executor that its Stream will be artificially ended -- so to cause it to cease its execution
+    fn report_scheduled_to_finish(&self);
+
+}
+
+
 /// See [Instruments]
 #[derive(Debug)]
-pub struct StreamExecutor {
+pub struct StreamExecutor<const INSTRUMENTS_USIZE:  usize> {
     executor_name:                 String,
     futures_timeout:               Duration,
     creation_time:                 Instant,
@@ -86,9 +103,9 @@ pub struct StreamExecutor {
 ///   - `fallible`: true if items yielded by this stream are of type `Result<DataType, ErrType>`
 ///   - `futures_timeout`: if different than `Duration::ZERO` means we enforce a timeout for every item (`Future<Outut=ItemType>`) when resolving them
 macro_rules! on_executor_start {
-    ($self: expr, $future: expr, $fallible: expr, $futures_timeout: expr, $INSTRUMENTS: ident) => {
+    ($self: expr, $future: expr, $fallible: expr, $futures_timeout: expr, $INSTRUMENTS: expr) => {
         $self.register_execution_start();
-        if Instruments::from($INSTRUMENTS).logging() {
+        if $INSTRUMENTS.logging() {
             info!("✓✓✓✓ Stream Executor '{}' started: {}Futures{} / {}Fallible Items & {}Metrics",
                   $self.executor_name,
                   if $future {""} else {"Non-"},
@@ -98,7 +115,7 @@ macro_rules! on_executor_start {
                       "".to_string()
                   },
                   if $fallible {""} else {"Non-"},
-                  if !Instruments::from($INSTRUMENTS).metrics() {"NO "} else {""});
+                  if !$INSTRUMENTS.metrics() {"NO "} else {""});
         }
     }
 }
@@ -107,12 +124,12 @@ macro_rules! on_executor_start {
 ///   - `self`: this executor's instance. Example: `self_ref`
 ///   - `item`: the just yielded `Ok` item
 macro_rules! on_non_timed_ok_item {
-    ($self: expr, $item: expr, $INSTRUMENTS: ident) => {
+    ($self: expr, $item: expr, $INSTRUMENTS: expr) => {
         {
-            if Instruments::from($INSTRUMENTS).cheap_profiling() {
+            if $INSTRUMENTS.cheap_profiling() {
                 $self.ok_events_avg_future_duration.inc(-1.0);  // since there is no time measurement (item is non-future or METRICS=false), the convention is to use -1.0
             }
-            if Instruments::from($INSTRUMENTS).tracing() {
+            if $INSTRUMENTS.tracing() {
                 trace!("✓✓✓✓ Executor '{}' yielded '{:?}'", $self.executor_name, $item);
             }
         }
@@ -124,14 +141,14 @@ macro_rules! on_non_timed_ok_item {
 ///   - `item`: the just yielded `Ok` item
 ///   - `elapsed`: the `Duration` it took to resolve the this item's `Future`
 macro_rules! on_timed_ok_item {
-    ($self: expr, $item: expr, $elapsed: expr, $INSTRUMENTS: ident) => {
+    ($self: expr, $item: expr, $elapsed: expr, $INSTRUMENTS: expr) => {
         {
-            if Instruments::from($INSTRUMENTS).cheap_profiling() {
+            if $INSTRUMENTS.cheap_profiling() {
                 $self.ok_events_avg_future_duration.inc($elapsed.as_secs_f32());
             } else {
                 panic!("\nThis macro can only be used if at least one of the Instruments' PROFILING are enabled -- otherwise you should use `on_non_timed_ok_item!(...)` instead");
             }
-            if Instruments::from($INSTRUMENTS).tracing() {
+            if $INSTRUMENTS.tracing() {
                 trace!("✓✓✓✓ Executor '{}' yielded '{:?}' in {:?}", $self.executor_name, $item, $elapsed);
             }
         }
@@ -142,12 +159,12 @@ macro_rules! on_timed_ok_item {
 ///   - `self`: this executor's instance. Example: `self_ref`
 ///   - `err`: the just yielded `Err` item
 macro_rules! on_non_timed_err_item {
-    ($self: expr, $err: expr, $INSTRUMENTS: ident) => {
+    ($self: expr, $err: expr, $INSTRUMENTS: expr) => {
         {
-            if Instruments::from($INSTRUMENTS).cheap_profiling() {
+            if $INSTRUMENTS.cheap_profiling() {
                 $self.failed_events_avg_future_duration.inc(-1.0);  // since there is no time measurement (item is non-future or METRICS=false), the convention is to use -1.0
             }
-            if Instruments::from($INSTRUMENTS).logging() {
+            if $INSTRUMENTS.logging() {
                 error!("✗✗✗✗ Executor '{}' yielded ERROR '{:?}'", $self.executor_name, $err);
             }
         }
@@ -159,14 +176,14 @@ macro_rules! on_non_timed_err_item {
 ///   - `err`: the just yielded `Err` item
 ///   - `elapsed`: the `Duration` it took to resolve the this item's `Future`
 macro_rules! on_timed_err_item {
-    ($self: expr, $err: expr, $elapsed: expr, $INSTRUMENTS: ident) => {
+    ($self: expr, $err: expr, $elapsed: expr, $INSTRUMENTS: expr) => {
         {
-            if Instruments::from($INSTRUMENTS).cheap_profiling() {
+            if $INSTRUMENTS.cheap_profiling() {
                 $self.failed_events_avg_future_duration.inc($elapsed.as_secs_f32());
             } else {
                 panic!("This macro can only be used if at least one of the Instruments' PROFILING are enabled -- otherwise you should use `on_non_timed_err_item!(...)` instead");
             }
-            if Instruments::from($INSTRUMENTS).logging() {
+            if $INSTRUMENTS.logging() {
                 error!("✗✗✗✗ Executor '{}' yielded ERROR '{:?}' in {:?}", $self.executor_name, $err, $elapsed);
             }
         }
@@ -179,11 +196,11 @@ macro_rules! on_timed_err_item {
 ///   - `fallible`: true if items yielded by this stream were of type `Result<DataType, ErrType>`
 ///   - `futures_timeout`: if different than `Duration::ZERO`, means time out stats could have beem collected and may be logged
 macro_rules! on_executor_end {
-    ($self: expr, $future: expr, $fallible: expr, $futures_timeout: expr, $INSTRUMENTS: ident) => {
+    ($self: expr, $future: expr, $fallible: expr, $futures_timeout: expr, $INSTRUMENTS: expr) => {
         $self.register_execution_finish();
         let stream_ended = $self.executor_status.load(Relaxed) == ExecutorStatus::StreamEnded;
         let execution_nanos = $self.execution_finish_delta_nanos.load(Relaxed) - $self.execution_start_delta_nanos.load(Relaxed);
-        if Instruments::from($INSTRUMENTS).logging() && Instruments::from($INSTRUMENTS).cheap_profiling() {
+        if $INSTRUMENTS.logging() && $INSTRUMENTS.cheap_profiling() {
             let (ok_counter, ok_avg_seconds) = $self.ok_events_avg_future_duration.probe();
             let (timed_out_counter, timed_out_avg_seconds) = $self.timed_out_events_avg_future_duration.probe();
             let (failed_counter, failed_avg_seconds) = $self.failed_events_avg_future_duration.probe();
@@ -212,7 +229,7 @@ macro_rules! on_executor_end {
                   ok_stats,
                   timed_out_stats,
                   failed_stats);
-        } else if Instruments::from($INSTRUMENTS).logging() {
+        } else if $INSTRUMENTS.logging() {
             warn!("✓✓✓✓ {} '{}' ended after running for {:?} -- metrics were disabled",
                   if stream_ended {"Stream"} else {"Executor"},
                   $self.executor_name,
@@ -222,7 +239,10 @@ macro_rules! on_executor_end {
 }
 
 
-impl StreamExecutor {
+impl<const INSTRUMENTS_USIZE:  usize>
+StreamExecutor<INSTRUMENTS_USIZE> {
+
+    const INSTRUMENTS: Instruments = {Instruments::from(INSTRUMENTS_USIZE)};
 
     /// Initializes an executor that should not timeout any futures returned by the Stream
     pub fn new<IntoString: Into<String>>(executor_name: IntoString) -> Arc<Self> {
@@ -245,10 +265,6 @@ impl StreamExecutor {
     }
 
 
-    pub fn executor_name(&self) -> String {
-        self.executor_name.clone()
-    }
-
     /// Sets the executor state & computes some always-enabled metrics
     fn register_execution_start(&self) {
         self.executor_status.store(ExecutorStatus::Running, Relaxed);
@@ -266,25 +282,20 @@ impl StreamExecutor {
         self.execution_finish_delta_nanos.store(self.creation_time.elapsed().as_nanos() as u64, Relaxed);
     }
 
-    /// Tells this executor that its Stream will be artificially ended -- so to cause it to cease its execution
-    pub fn report_scheduled_to_finish(&self) {
-        self.executor_status.store(ExecutorStatus::ScheduledToFinish, Relaxed);
-    }
-
     /// Spawns an optimized executor for a Stream of `ItemType`s which are:
     ///   * Futures  -- `ItemType := Future<Output=InnerFallibleType>`
     ///   * Fallible -- `InnerFallibleType := Result<InnerType, Box<dyn std::error::Error>>.`\
-    /// NOTE: special (optimized) versions are spawned depending if we should or not enforce each item's `Future` a resolution timeout
-    pub fn spawn_executor<const INSTRUMENTS:  usize,
-                          OutItemType:        Send + Debug,
+    /// NOTE: special (optimized) versions are spawned depending if we should or not enforce each item's `Future` a resolution timeout.\
+    /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
+    pub fn spawn_executor<OutItemType:        Send + Debug,
                           FutureItemType:     Future<Output=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send,
-                          CloseVoidAsyncType: Future<Output=()> + Send + 'static,
-                          ErrVoidAsyncType:   Future<Output=()> + Send + 'static>
+                          CloseVoidAsyncType: Future<Output=()>   + Send + 'static,
+                          ErrVoidAsyncType:   Future<Output=()>   + Send + 'static>
                          (self:                  Arc<Self>,
                           concurrency_limit:     u32,
-                          on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>) -> ErrVoidAsyncType   + Send + Sync + 'static,
-                          stream_ended_callback: impl FnOnce(Arc<StreamExecutor>) -> CloseVoidAsyncType + Send + Sync + 'static,
-                          stream:                impl Stream<Item=FutureItemType> + 'static + Send) {
+                          on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>)                   -> ErrVoidAsyncType   + Send + Sync + 'static,
+                          stream_ended_callback: impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                          stream:                impl Stream<Item=FutureItemType>                                              + Send        + 'static) {
 
         match self.futures_timeout {
 
@@ -293,28 +304,28 @@ impl StreamExecutor {
                 tokio::spawn(async move {
                     let self_ref: &Self = &self;
                     let on_err_callback_ref = &on_err_callback;
-                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, INSTRUMENTS);
+                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, Self::INSTRUMENTS);
                     let mut start = Instant::now();     // item's Future resolution time -- declared here to allow optimizations when METRICS=false
                     let item_processor = |future_element| {
                         async move {
-                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                            if Self::INSTRUMENTS.cheap_profiling() {
                                 start = Instant::now();
                             }
                             match future_element.await {
                                 Ok(yielded_item) => {
-                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                    if Self::INSTRUMENTS.cheap_profiling() {
                                         let elapsed = start.elapsed();
-                                        on_timed_ok_item!(self_ref, yielded_item, elapsed, INSTRUMENTS);
+                                        on_timed_ok_item!(self_ref, yielded_item, elapsed, Self::INSTRUMENTS);
                                     } else {
-                                        on_non_timed_ok_item!(self_ref, yielded_item, INSTRUMENTS);
+                                        on_non_timed_ok_item!(self_ref, yielded_item, Self::INSTRUMENTS);
                                     }
                                 },
                                 Err(err) => {
-                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                    if Self::INSTRUMENTS.cheap_profiling() {
                                         let elapsed = start.elapsed();
-                                        on_timed_err_item!(self_ref, err, elapsed, INSTRUMENTS);
+                                        on_timed_err_item!(self_ref, err, elapsed, Self::INSTRUMENTS);
                                     } else {
-                                        on_non_timed_err_item!(self_ref, err, INSTRUMENTS);
+                                        on_non_timed_err_item!(self_ref, err, Self::INSTRUMENTS);
                                     }
                                     on_err_callback_ref(err).await;
                                 },
@@ -325,7 +336,7 @@ impl StreamExecutor {
                         1 => stream.for_each(item_processor).await,     // faster in `futures 0.3` -- may be useless in the future
                         _ => stream.for_each_concurrent(concurrency_limit as usize, item_processor).await,
                     }
-                    on_executor_end!(self_ref, true, true, Duration::ZERO, INSTRUMENTS);
+                    on_executor_end!(self_ref, true, true, Duration::ZERO, Self::INSTRUMENTS);
                     stream_ended_callback(self).await;
                 });
             },
@@ -335,41 +346,41 @@ impl StreamExecutor {
                 tokio::spawn(async move {
                     let self_ref: &Self = &self;
                     let on_err_callback_ref = &on_err_callback;
-                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, INSTRUMENTS);
+                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, Self::INSTRUMENTS);
                     let mut start = Instant::now();     // item's Future resolution time -- declared here to allow optimizations when METRICS=false
                     let item_processor = |future_element| {
                         async move {
-                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                            if Self::INSTRUMENTS.cheap_profiling() {
                                 start = Instant::now();
                             }
                             match timeout(self_ref.futures_timeout, future_element).await {
                                 Ok(non_timed_out_result) => match non_timed_out_result {
                                                                                           Ok(yielded_item) => {
-                                                                                              if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                                                                              if Self::INSTRUMENTS.cheap_profiling() {
                                                                                                   let elapsed = start.elapsed();
-                                                                                                  on_timed_ok_item!(self_ref, yielded_item, elapsed, INSTRUMENTS);
+                                                                                                  on_timed_ok_item!(self_ref, yielded_item, elapsed, Self::INSTRUMENTS);
                                                                                               } else {
-                                                                                                  on_non_timed_ok_item!(self_ref, yielded_item, INSTRUMENTS);
+                                                                                                  on_non_timed_ok_item!(self_ref, yielded_item, Self::INSTRUMENTS);
                                                                                               }
                                                                                           },
                                                                                           Err(err) => {
-                                                                                              if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                                                                              if Self::INSTRUMENTS.cheap_profiling() {
                                                                                                   let elapsed = start.elapsed();
-                                                                                                  on_timed_err_item!(self_ref, err, elapsed, INSTRUMENTS);
+                                                                                                  on_timed_err_item!(self_ref, err, elapsed, Self::INSTRUMENTS);
                                                                                               } else {
-                                                                                                  on_non_timed_err_item!(self_ref, err, INSTRUMENTS);
+                                                                                                  on_non_timed_err_item!(self_ref, err, Self::INSTRUMENTS);
                                                                                               }
                                                                                               on_err_callback_ref(err).await;
                                                                                           },
                                                                                       },
                                 Err(_time_out_err) => {
-                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                    if Self::INSTRUMENTS.cheap_profiling() {
                                         let elapsed = start.elapsed();
                                         self_ref.timed_out_events_avg_future_duration.inc(elapsed.as_secs_f32());
-                                        if Instruments::from(INSTRUMENTS).logging() {
+                                        if Self::INSTRUMENTS.logging() {
                                             error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT after {:?}", self_ref.executor_name, elapsed);
                                         }
-                                    } else if Instruments::from(INSTRUMENTS).logging() {
+                                    } else if Self::INSTRUMENTS.logging() {
                                         error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT", self_ref.executor_name);
                                     }
                                 }
@@ -380,7 +391,7 @@ impl StreamExecutor {
                         1 => stream.for_each(item_processor).await,     // faster in `futures 0.3` -- may be useless in other versions
                         _ => stream.for_each_concurrent(concurrency_limit as usize, item_processor).await,
                     }
-                    on_executor_end!(self_ref, true, true, self_ref.futures_timeout, INSTRUMENTS);
+                    on_executor_end!(self_ref, true, true, self_ref.futures_timeout, Self::INSTRUMENTS);
                     stream_ended_callback(self).await;
                 });
             },
@@ -389,15 +400,15 @@ impl StreamExecutor {
     }
 
     /// Spawns an optimized executor for a `Stream` of `FutureItemType`s (non fallible Futures).\
-    /// NOTE: Since this is non-fallible, timeouts are enforced but not detectable. If that is not acceptable, use [Self::spawn_executor()] instead
-    pub fn spawn_futures_executor<const INSTRUMENTS:  usize,
-                                  OutItemType:        Send + Debug,
+    /// NOTE: Since this is non-fallible, timeouts are enforced but not detectable. If that is not acceptable, use [Self::spawn_executor()] instead.\
+    /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
+    pub fn spawn_futures_executor<OutItemType:        Send + Debug,
                                   FutureItemType:     Future<Output=OutItemType> + Send,
                                   CloseVoidAsyncType: Future<Output=()> + Send + 'static>
                                  (self:                  Arc<Self>,
                                   concurrency_limit:     u32,
-                                  stream_ended_callback: impl FnOnce(Arc<StreamExecutor>) -> CloseVoidAsyncType + Send + Sync + 'static,
-                                  stream:                impl Stream<Item=FutureItemType> + 'static + Send) {
+                                  stream_ended_callback: impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType + Send + Sync + 'static,
+                                  stream:                impl Stream<Item=FutureItemType>                                              + Send        + 'static) {
 
         match self.futures_timeout {
 
@@ -405,19 +416,19 @@ impl StreamExecutor {
             Duration::ZERO => {
                 tokio::spawn(async move {
                     let self_ref: &Self = &self;
-                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, INSTRUMENTS);
+                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, Self::INSTRUMENTS);
                     let mut start = Instant::now();     // item's Future resolution time -- declared here to allow optimizations when METRICS=false
                     let item_processor = |future_element| {
                         async move {
-                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                            if Self::INSTRUMENTS.cheap_profiling() {
                                 start = Instant::now();
                             }
                             let yielded_item = future_element.await;
-                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                            if Self::INSTRUMENTS.cheap_profiling() {
                                 let elapsed = start.elapsed();
-                                on_timed_ok_item!(self_ref, yielded_item, elapsed, INSTRUMENTS);
+                                on_timed_ok_item!(self_ref, yielded_item, elapsed, Self::INSTRUMENTS);
                             } else {
-                                on_non_timed_ok_item!(self_ref, yielded_item, INSTRUMENTS);
+                                on_non_timed_ok_item!(self_ref, yielded_item, Self::INSTRUMENTS);
                             }
                         }
                     };
@@ -425,7 +436,7 @@ impl StreamExecutor {
                         1 => stream.for_each(item_processor).await,     // faster in `futures 0.3` -- may be useless in the future
                         _ => stream.for_each_concurrent(concurrency_limit as usize, item_processor).await,
                     }
-                    on_executor_end!(self_ref, true, true, Duration::ZERO, INSTRUMENTS);
+                    on_executor_end!(self_ref, true, true, Duration::ZERO, Self::INSTRUMENTS);
                     stream_ended_callback(self).await;
                 });
             },
@@ -434,30 +445,30 @@ impl StreamExecutor {
             _ => {
                 tokio::spawn(async move {
                     let self_ref: &Self = &self;
-                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, INSTRUMENTS);
+                    on_executor_start!(self_ref, true, true, self_ref.futures_timeout, Self::INSTRUMENTS);
                     let mut start = Instant::now();     // item's Future resolution time -- declared here to allow optimizations when METRICS=false
                     let item_processor = |future_element| {
                         async move {
-                            if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                            if Self::INSTRUMENTS.cheap_profiling() {
                                 start = Instant::now();
                             }
                             match timeout(self_ref.futures_timeout, future_element).await {
                                 Ok(non_timed_out_result) => {
-                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                    if Self::INSTRUMENTS.cheap_profiling() {
                                         let elapsed = start.elapsed();
-                                        on_timed_ok_item!(self_ref, non_timed_out_result, elapsed, INSTRUMENTS);
+                                        on_timed_ok_item!(self_ref, non_timed_out_result, elapsed, Self::INSTRUMENTS);
                                     } else {
-                                        on_non_timed_ok_item!(self_ref, non_timed_out_result, INSTRUMENTS);
+                                        on_non_timed_ok_item!(self_ref, non_timed_out_result, Self::INSTRUMENTS);
                                     }
                                 }
                                 Err(_time_out_err) => {
-                                    if Instruments::from(INSTRUMENTS).cheap_profiling() {
+                                    if Self::INSTRUMENTS.cheap_profiling() {
                                         let elapsed = start.elapsed();
                                         self_ref.timed_out_events_avg_future_duration.inc(elapsed.as_secs_f32());
-                                        if Instruments::from(INSTRUMENTS).logging() {
+                                        if Self::INSTRUMENTS.logging() {
                                             error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT after {:?}", self_ref.executor_name, elapsed);
                                         }
-                                    } else if Instruments::from(INSTRUMENTS).logging() {
+                                    } else if Self::INSTRUMENTS.logging() {
                                         error!("🕝🕝🕝🕝 Executor '{}' TIMED OUT", self_ref.executor_name);
                                     }
                                 }
@@ -468,7 +479,7 @@ impl StreamExecutor {
                         1 => stream.for_each(item_processor).await,     // faster in `futures 0.3` -- may be useless in other versions
                         _ => stream.for_each_concurrent(concurrency_limit as usize, item_processor).await,
                     }
-                    on_executor_end!(self_ref, true, true, self_ref.futures_timeout, INSTRUMENTS);     // notice the `fallible = true` here -- this is due to the timeouts, that shows as errors
+                    on_executor_end!(self_ref, true, true, self_ref.futures_timeout, Self::INSTRUMENTS);     // notice the `fallible = true` here -- this is due to the timeouts, that shows as errors
                     stream_ended_callback(self).await;
                 });
             },
@@ -478,24 +489,24 @@ impl StreamExecutor {
 
     /// Spawns an optimized executor for a Stream of `FallibleItemType`s, where:\
     ///   * `FallibleItemType := Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>`
-    pub fn spawn_fallibles_executor<const INSTRUMENTS:  usize,
-                                    OutItemType:        Send + Debug,
+    /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
+    pub fn spawn_fallibles_executor<OutItemType:        Send + Debug,
                                     CloseVoidAsyncType: Future<Output=()> + Send + 'static>
                                    (self:                  Arc<Self>,
                                     concurrency_limit:     u32,
-                                    on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>)                               + Send + Sync + 'static,
-                                    stream_ended_callback: impl FnOnce(Arc<StreamExecutor>) -> CloseVoidAsyncType + Send + Sync + 'static,
-                                    stream:                impl Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + 'static + Send) {
+                                    on_err_callback:       impl Fn(Box<dyn Error + Send + Sync>)                                           + Send + Sync + 'static,
+                                    stream_ended_callback: impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> CloseVoidAsyncType   + Send + Sync + 'static,
+                                    stream:                impl Stream<Item=Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>> + Send + 'static) {
 
         tokio::spawn(async move {
-            on_executor_start!(self, true, true, Duration::ZERO, INSTRUMENTS);
+            on_executor_start!(self, true, true, Duration::ZERO, Self::INSTRUMENTS);
             let item_processor = |element| {
                 match element {
                     Ok(yielded_item) => {
-                        on_non_timed_ok_item!(self, yielded_item, INSTRUMENTS);
+                        on_non_timed_ok_item!(self, yielded_item, Self::INSTRUMENTS);
                     },
                     Err(err) => {
-                        on_non_timed_err_item!(self, err, INSTRUMENTS);
+                        on_non_timed_err_item!(self, err, Self::INSTRUMENTS);
                         on_err_callback(err);
                     }
                 }
@@ -504,58 +515,94 @@ impl StreamExecutor {
                 1 => stream.for_each(|item| future::ready(item_processor(item))).await,     // faster in `futures 0.3` -- may be useless in the future
                 _ => stream.for_each_concurrent(concurrency_limit as usize, |item| future::ready(item_processor(item))).await,
             }
-            on_executor_end!(self, false, true, Duration::ZERO, INSTRUMENTS);
+            on_executor_end!(self, false, true, Duration::ZERO, Self::INSTRUMENTS);
             stream_ended_callback(self).await;
         });
     }
 
     /// Spawns an executor for a Stream of `ItemType`s which are not Futures but are fallible:
     ///   * `InnerFallibleType := Result<ItemType, Box<dyn std::error::Error>>`
-    pub fn spawn_non_futures_executor<const INSTRUMENTS: usize,
-                                      ItemType:          Send + Debug,
+    /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
+    pub fn spawn_non_futures_executor<ItemType:          Send + Debug,
                                       VoidAsyncType:     Future<Output=()> + Send + 'static>
                                      (self:                      Arc<Self>,
                                       concurrency_limit:         u32,
-                                      stream_ended_callback:     impl FnOnce(Arc<StreamExecutor>) -> VoidAsyncType + Send + Sync + 'static,
-                                      stream:                    impl Stream<Item=Result<ItemType, Box<dyn std::error::Error + Send + Sync>>> + 'static + Send) {
+                                      stream_ended_callback:     impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> VoidAsyncType     + Send + Sync + 'static,
+                                      stream:                    impl Stream<Item=Result<ItemType, Box<dyn std::error::Error + Send + Sync>>> + Send        + 'static) {
         tokio::spawn(async move {
-            on_executor_start!(self, false, true, Duration::ZERO, INSTRUMENTS);
+            on_executor_start!(self, false, true, Duration::ZERO, Self::INSTRUMENTS);
             let item_processor = |fallible_element| {
                 match fallible_element {
-                    Ok(yielded_item) => on_non_timed_ok_item!(self, yielded_item, INSTRUMENTS),
-                    Err(err) => on_non_timed_err_item!(self, err, INSTRUMENTS),
+                    Ok(yielded_item) => on_non_timed_ok_item!(self, yielded_item, Self::INSTRUMENTS),
+                    Err(err) => on_non_timed_err_item!(self, err, Self::INSTRUMENTS),
                 }
             };
             match concurrency_limit {
                 1 => stream.for_each(|fallible_item| future::ready(item_processor(fallible_item))).await,     // faster in `futures 0.3` -- may be useless in other versions
                 _ => stream.for_each_concurrent(concurrency_limit as usize, |fallible_item| future::ready(item_processor(fallible_item))).await,
             }
-            on_executor_end!(self, false, true, Duration::ZERO, INSTRUMENTS);
+            on_executor_end!(self, false, true, Duration::ZERO, Self::INSTRUMENTS);
             stream_ended_callback(self).await;
         });
     }
 
-    /// Spawns an optimized executor for a Stream of `ItemType`s which are not Futures and, also, are not fallible
-    pub fn spawn_non_futures_non_fallibles_executor<const INSTRUMENTS: usize,
-                                                    OutItemType:       Send + Debug,
+    /// Spawns an optimized executor for a Stream of `ItemType`s which are not Futures and, also, are not fallible.\
+    /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
+    pub fn spawn_non_futures_non_fallibles_executor<OutItemType:       Send + Debug,
                                                     VoidAsyncType:     Future<Output=()> + Send + 'static>
                                                   (self:                  Arc<Self>,
                                                    concurrency_limit:     u32,
-                                                   stream_ended_callback: impl FnOnce(Arc<StreamExecutor>) -> VoidAsyncType + Send + Sync + 'static,
-                                                   stream:                impl Stream<Item=OutItemType> + 'static + Send) {
+                                                   stream_ended_callback: impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>) -> VoidAsyncType + Send + Sync + 'static,
+                                                   stream:                impl Stream<Item=OutItemType>                                            + Send        + 'static) {
 
         tokio::spawn(async move {
-            on_executor_start!(self, false, false, Duration::ZERO, INSTRUMENTS);
-            let item_processor = |yielded_item| on_non_timed_ok_item!(self, yielded_item, INSTRUMENTS);
+            on_executor_start!(self, false, false, Duration::ZERO, Self::INSTRUMENTS);
+            let item_processor = |yielded_item| on_non_timed_ok_item!(self, yielded_item, Self::INSTRUMENTS);
             match concurrency_limit {
                 1 => stream.for_each(|item| future::ready(item_processor(item))).await,     // faster in `futures 0.3` -- may be useless in the near future?
                 _ => stream.for_each_concurrent(concurrency_limit as usize, |item| future::ready(item_processor(item))).await,
             }
-            on_executor_end!(self, false, false, Duration::ZERO, INSTRUMENTS);
+            on_executor_end!(self, false, false, Duration::ZERO, Self::INSTRUMENTS);
             stream_ended_callback(self).await;
         });
     }
 
+}
+
+
+impl<const INSTRUMENTS_USIZE: usize> StreamExecutorStats for
+StreamExecutor<INSTRUMENTS_USIZE> {
+    //const INSTRUMENTS: Instruments = Instruments::from(INSTRUMENTS_USIZE);
+    fn executor_name(&self) -> &String {
+        &self.executor_name
+    }
+    fn futures_timeout(&self) -> &Duration {
+        &self.futures_timeout
+    }
+    fn creation_time(&self) -> &Instant {
+        &self.creation_time
+    }
+    fn executor_status(&self) -> &AtomicExecutorStatus {
+        &self.executor_status
+    }
+    fn execution_start_delta_nanos(&self) -> u64 {
+        self.execution_start_delta_nanos.load(Relaxed)
+    }
+    fn execution_finish_delta_nanos(&self) -> u64 {
+        self.execution_finish_delta_nanos.load(Relaxed)
+    }
+    fn ok_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64 {
+        &self.ok_events_avg_future_duration
+    }
+    fn timed_out_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64 {
+        &self.timed_out_events_avg_future_duration
+    }
+    fn failed_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64 {
+        &self.failed_events_avg_future_duration
+    }
+    fn report_scheduled_to_finish(&self) {
+        self.executor_status.store(ExecutorStatus::ScheduledToFinish, Relaxed);
+    }    
 }
 
 /// Unit tests & enforces the requisites of the [stream_executor](self) module.\
@@ -621,8 +668,8 @@ mod tests {
     }
 
     /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding `Future<Result>` elements
-    async fn assert_spawn_futures_fallible_executor<const INSTRUMENTS: usize>
-                                                   (executor: Arc<StreamExecutor>) {
+    async fn assert_spawn_futures_fallible_executor<const INSTRUMENTS:  usize>
+                                                   (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
 
         async fn to_future(item: Result<u32, Box<dyn Error + Send + Sync>>) -> Result<u32, Box<dyn Error + Send + Sync>> {
             // OK items > 100 will sleep for a while -- intended to cause a timeout, provided the given executor is appropriately configured
@@ -636,9 +683,9 @@ mod tests {
         let error_counter = Arc::new(AtomicU32::new(0));
         let error_counter_ref = Arc::clone(&error_counter);
         let cloned_executor = Arc::clone(&executor);
-        let timeout_enabled = executor.futures_timeout > Duration::ZERO;
+        let timeout_enabled = *executor.futures_timeout() > Duration::ZERO;
         let expected_timeout_count = if timeout_enabled {2} else {0};
-        executor.spawn_executor::<INSTRUMENTS, _, _, _, _>
+        executor.spawn_executor::<_, _, _, _>
                                  (1,
                                   move |_| { let error_counter = Arc::clone(&error_counter_ref); async move {error_counter.fetch_add(1, Relaxed);} },
                                   move |_| { let mut tx = tx.clone(); async move {tx.send(true).await.unwrap()} },
@@ -701,7 +748,7 @@ mod tests {
 
     /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding `Future` elements
     async fn assert_spawn_futures_executor<const INSTRUMENTS: usize>
-                                          (executor: Arc<StreamExecutor>) {
+                                          (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
 
         async fn to_future(item: u32) -> u32 {
             // OK items > 100 will sleep for a while -- intended to cause a timeout, provided the given executor is appropriately configured
@@ -715,7 +762,7 @@ mod tests {
         let cloned_executor = Arc::clone(&executor);
         let timeout_enabled = executor.futures_timeout > Duration::ZERO;
         let expected_timeout_count = if timeout_enabled {2} else {0};
-        executor.spawn_futures_executor::<INSTRUMENTS, _, _, _>
+        executor.spawn_futures_executor::<_, _, _>
                                          (1,
                                           move |_| { let mut tx = tx.clone(); async move {tx.send(true).await.unwrap()} },
                                           stream::iter(vec![to_future(17),
@@ -754,12 +801,12 @@ mod tests {
 
     /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding fallible elements
     async fn assert_spawn_fallibles_executor<const INSTRUMENTS: usize>
-                                            (executor: Arc<StreamExecutor>) {
+                                            (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
         let error_count = Arc::new(AtomicU32::new(0));
         let error_count_ref = Arc::clone(&error_count);
         let (mut tx, mut rx) = mpsc::channel::<bool>(10);
         let cloned_executor = Arc::clone(&executor);
-        executor.spawn_fallibles_executor::<INSTRUMENTS, _, _>
+        executor.spawn_fallibles_executor::<_, _>
                                            (1,
                                             move |_err| {
                                                 error_count_ref.fetch_add(1, Relaxed);
@@ -799,11 +846,11 @@ mod tests {
     }
 
     /// executes assertions on the given `executor` by spawning the executor to operate on streams yielding non-futures / non-fallible elements
-    async fn assert_spawn_non_futures_non_fallibles_executor<const INSTRUMENTS: usize>
-                                                            (executor: Arc<StreamExecutor>) {
+    async fn assert_spawn_non_futures_non_fallibles_executor<const INSTRUMENTS:  usize>
+                                                            (executor: Arc<StreamExecutor<INSTRUMENTS>>) {
         let (mut tx, mut rx) = mpsc::channel::<bool>(10);
         let cloned_executor = Arc::clone(&executor);
-        executor.spawn_non_futures_non_fallibles_executor::<INSTRUMENTS, _, _>
+        executor.spawn_non_futures_non_fallibles_executor::<_, _>
                                                          (1,
                                                           move |_| async move {tx.send(true).await.unwrap()},
                                                           stream::iter(vec![17, 19]) );
@@ -818,7 +865,7 @@ mod tests {
 
     /// apply assertions on metrics for the given `executor`
     fn assert_metrics<const INSTRUMENTS: usize>
-                     (executor: Arc<StreamExecutor>,
+                     (executor: Arc<StreamExecutor<INSTRUMENTS>>,
                       expected_ok_counter:         u32,
                       expected_timed_out_counter:  u32,
                       expected_failed_counter:     u32) {
@@ -867,7 +914,7 @@ mod tests {
 /// will derive `AtomicExecutorStatus`
 #[atomic_enum]
 #[derive(PartialEq)]
-enum ExecutorStatus {
+pub enum ExecutorStatus {
     NotStarted,
     Running,
     ScheduledToFinish,
