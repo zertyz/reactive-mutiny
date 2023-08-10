@@ -109,12 +109,26 @@ OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
     }
 }
 
+
+impl<DataType:        Debug + Send + Sync,
+     ContainerType:   MoveContainer<u32>,
+     const POOL_SIZE: usize>
+PartialEq for
+OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
 unsafe impl<DataType:        Debug + Send + Sync,
            ContainerType:   MoveContainer<u32>,
            const POOL_SIZE: usize>
 Send for
 OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {}
+
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
 unsafe impl<DataType:        Debug + Send + Sync,

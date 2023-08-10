@@ -36,7 +36,7 @@ use async_trait::async_trait;
 /// Please, measure your `Uni`s using all available channels [FullSync], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
 /// See also [uni::channels::ogre_full_sync_mpmc_queue].\
 /// Refresher: the backing queue requires "BUFFER_SIZE" to be a power of 2
-pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
+pub struct FullSync<'a, ItemType:          Send + Sync + Debug + Default,
                         const BUFFER_SIZE: usize,
                         const MAX_STREAMS: usize> {
 
@@ -48,7 +48,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
 }
 
 #[async_trait]
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
+impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelCommon<'a, ItemType, ItemType>
@@ -97,7 +97,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
+impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelUni<'a, ItemType, ItemType>
@@ -109,7 +109,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
+impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelProducer<'a, ItemType, ItemType>
@@ -146,7 +146,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          'a + Debug + Send + Sync,
+impl<'a, ItemType:          'a + Debug + Send + Sync + Default,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelConsumer<'a, ItemType>
@@ -173,7 +173,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl <ItemType:          'static + Debug + Send + Sync,
+impl <ItemType:          'static + Debug + Send + Sync + Default,
       const BUFFER_SIZE: usize,
       const MAX_STREAMS: usize>
 FullDuplexUniChannel

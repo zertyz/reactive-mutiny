@@ -11,13 +11,12 @@ use std::{
         AtomicU32,
         Ordering::{Relaxed, Release},
     },
-    mem::MaybeUninit,
     ptr,
+    cell::UnsafeCell,
+    num::NonZeroU32,
+    pin::Pin,
+    mem::ManuallyDrop,
 };
-use std::cell::UnsafeCell;
-use std::mem::ManuallyDrop;
-use std::num::NonZeroU32;
-use std::pin::Pin;
 use crossbeam::utils::CachePadded;
 
 
@@ -28,7 +27,7 @@ use crossbeam::utils::CachePadded;
 /// is a good fit for raw thin payload < 1k.
 ///
 /// For fatter payloads, [AtomicZeroCopy] should be a better fit.
-pub struct AtomicMove<SlotType:          Debug,
+pub struct AtomicMove<SlotType:          Debug + Default,
                       const BUFFER_SIZE: usize> {
     /// marks the first element of the queue, ready for dequeue -- increasing when dequeues are complete
     pub(crate) head: CachePadded<AtomicU32>,
@@ -44,13 +43,13 @@ pub struct AtomicMove<SlotType:          Debug,
     pub(crate) tail: CachePadded<AtomicU32>,
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 MoveContainer<SlotType> for
 AtomicMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
-        Self::with_initializer(|| unsafe { MaybeUninit::zeroed().assume_init() })
+        Self::with_initializer(|| SlotType::default())
     }
 
     fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
@@ -68,7 +67,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 MovePublisher<SlotType> for
 AtomicMove<SlotType, BUFFER_SIZE> {
@@ -130,7 +129,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 MoveSubscriber<SlotType> for
 AtomicMove<SlotType, BUFFER_SIZE> {
@@ -169,7 +168,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 AtomicMove<SlotType, BUFFER_SIZE> {
 
@@ -303,7 +302,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 }
 
 // buffered elements are `ManuallyDrop<SlotType>`, so here is where we drop any unconsumed ones
-impl<SlotType:          Debug,
+impl<SlotType:          Debug + Default,
      const BUFFER_SIZE: usize>
 Drop for
 AtomicMove<SlotType, BUFFER_SIZE> {
@@ -319,13 +318,13 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 }
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
-unsafe impl<SlotType:          Debug,
+unsafe impl<SlotType:          Debug + Default,
             const BUFFER_SIZE: usize>
 Sync for
 AtomicMove<SlotType, BUFFER_SIZE> {}
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
-unsafe impl<SlotType:          Debug,
+unsafe impl<SlotType:          Debug + Default,
             const BUFFER_SIZE: usize>
 Send for
 AtomicMove<SlotType, BUFFER_SIZE> {}

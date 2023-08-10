@@ -73,7 +73,7 @@ FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>) {
         match self.leak_slot() {
             Some( (slot_ref, slot_id) ) => {
-                *slot_ref = item;
+                unsafe { std::ptr::write(slot_ref, item); }
                 (self.publish_leaked_id(slot_id), None)
             }
             None => (None, Some(item)),

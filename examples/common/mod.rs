@@ -5,7 +5,7 @@ use std::ops::Deref;
 
 /// The input event. For the examples, an hypothetical trading exchange shares with us a stream of events
 /// for which we only care for book tops & trades -- all for the same asset
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum ExchangeEvent {
 
     /// Issued when the book of orders have a change in the selling or buying prices available for immediate transactions
@@ -22,6 +22,7 @@ pub enum ExchangeEvent {
     },
 
     /// Any other events issued by the Exchange are ignored
+    #[default]
     Ignored,
 }
 impl Deref for ExchangeEvent {
@@ -34,7 +35,7 @@ impl Deref for ExchangeEvent {
 
 /// The result of analysing a sequence of [ExchangeEvent]s.\
 /// When issued, simply tells if the prices are going UP or DOWN and by HOW MUCH.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AnalysisEvent {
 
     /// This delta's base value is zeroed out whenever the price trend changes direction: if prices were going up (and are now going down) and vice-versa.\

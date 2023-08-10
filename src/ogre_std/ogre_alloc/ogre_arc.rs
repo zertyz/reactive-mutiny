@@ -136,6 +136,18 @@ OgreArc<DataType, OgreAllocatorType> {
 
 impl<DataType:          Debug + Send + Sync,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+Default for
+OgreArc<DataType, OgreAllocatorType> {
+
+    #[inline(always)]
+    fn default() -> Self {
+        Self { inner: NonNull::dangling() }
+    }
+}
+
+
+impl<DataType:          Debug + Send + Sync,
+     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
 Deref for
 OgreArc<DataType, OgreAllocatorType> {
 

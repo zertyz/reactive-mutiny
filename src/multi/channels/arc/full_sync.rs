@@ -29,7 +29,7 @@ use log::warn;
 /// Please, measure your `Multi`s using all available channels [FullSync], [OgreAtomicQueue] and, possibly, even [OgreMmapLog].\
 /// See also [multi::channels::ogre_full_sync_mpmc_queue].\
 /// Refresher: the backing queue requires `BUFFER_SIZE` to be a power of 2 -- the same applies to `MAX_STREAMS`, which will also have its own queue
-pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
+pub struct FullSync<'a, ItemType:          Send + Sync + Debug + Default,
                         const BUFFER_SIZE: usize = 1024,
                         const MAX_STREAMS: usize = 16> {
 
@@ -41,7 +41,7 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug,
 
 
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
+impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelCommon<'a, ItemType, Arc<ItemType>> for
@@ -99,7 +99,7 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
+impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelMulti<'a, ItemType, Arc<ItemType>> for
@@ -125,7 +125,7 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Send + Sync + Debug + Default,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelProducer<'a, ItemType, Arc<ItemType>> for
@@ -179,7 +179,7 @@ std::thread::sleep(Duration::from_millis(500));
 }
 
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Send + Sync + Debug + Default,
     const BUFFER_SIZE: usize,
     const MAX_STREAMS: usize>
 ChannelConsumer<'a, Arc<ItemType>> for
@@ -208,7 +208,7 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl<'a, ItemType:          Send + Sync + Debug + 'a,
+impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 Drop for
@@ -219,7 +219,7 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 }
 
 
-impl <ItemType:          'static + Debug + Send + Sync,
+impl <ItemType:          'static + Debug + Send + Sync + Default,
       const BUFFER_SIZE: usize,
       const MAX_STREAMS: usize>
 FullDuplexMultiChannel for

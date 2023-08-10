@@ -179,17 +179,28 @@ mod tests {
         let expected: &str = "&str to compare";
         let allocator = AllocatorAtomicArray::<&str, 128>::new();
         let observed = OgreUnique::new(|slot| *slot = expected, &allocator).expect("Allocation should have been done");
-        assert_eq!(observed, expected, "Comparison of pristine types failed for `&str`");
+        assert_eq!(observed,  expected,  "Comparison of pristine types failed for `&str`");
         assert_eq!(&observed, &expected, "Comparison of references failed for `&str`");
-        assert_eq!(*observed, expected, "Comparison of `Deref` failed for `&str`");
+        assert_eq!(*observed, expected,  "Comparison of `Deref` failed for `&str`");
 
         // String -- notice that, although possible, there is no nice API for "movable values", like `Arc` or `String`: OgreAllocator were not designed for those, therefore, OgreArc, also isn't.
         let expected: String = String::from("String to compare");
         let allocator = AllocatorAtomicArray::<String, 128>::new();
         let observed = OgreUnique::new(|slot| unsafe { std::ptr::write(slot, expected.clone()); }, &allocator).expect("Allocation should have been done");
-        assert_eq!(observed, expected, "Comparison of pristine types failed for `String`");
+        assert_eq!(observed,  expected,  "Comparison of pristine types failed for `String`");
         assert_eq!(&observed, &expected, "Comparison of references failed for `String`");
-        assert_eq!(*observed, expected, "Comparison of `Deref` failed for `String`");
+        assert_eq!(*observed, expected,  "Comparison of `Deref` failed for `String`");
+
+        // Wrapped in an `Option<>` (not yet supported as I cannot implement PartialEq for Option<MyType>...)
+        // unwrap and compare instead
+        // let payload = String::from("Wrapped");
+        // let expected = Some(payload.clone());
+        // let allocator = AllocatorAtomicArray::<String, 128>::new();
+        // let observed = Some(OgreUnique::new(|slot| unsafe { std::ptr::write(slot, payload); }, &allocator).expect("Allocation should have been done"));
+        // assert_eq!(observed,  expected,  "Comparison of wrapped types failed for `Option<String>`");
+        // assert_eq!(&observed, &expected, "Comparison of references failed for `Option<String>`");
+        // assert_eq!(*observed, expected,  "Comparison of `Deref` failed for `Option<String>`");
+
     }
 
 }

@@ -1,0 +1,251 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'reactive-mutiny'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "reactive-mutiny",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'all-channels'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=all-channels",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "all-channels",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'all-channels'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=all-channels",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "all-channels",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'multi-processor'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=multi-processor",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "multi-processor",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'multi-processor'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=multi-processor",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "multi-processor",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'socket-server'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=socket-server",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "socket-server",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'socket-server'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=socket-server",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "socket-server",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'uni-microservice'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=uni-microservice",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "uni-microservice",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'uni-microservice'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=uni-microservice",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "uni-microservice",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'api'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=api",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "api",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'use_cases'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=use_cases",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "use_cases",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'channels'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=channels",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "channels",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'rc_wrappers'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=rc_wrappers",
+                    "--package=reactive-mutiny"
+                ],
+                "filter": {
+                    "name": "rc_wrappers",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

@@ -6,8 +6,10 @@ use std::fmt::Debug;
 /// Dictates how data slots should be acquired and returned for future reuse.\
 /// Two APIs are available:
 ///   - by ref: offers mutable references upon allocation and requiring them for deallocation
-///   - by id:  offers u32 ids, which should be translated to mutable references before usage... from there, freeing might either be done from the id or the mut ref
-pub trait OgreAllocator<SlotType: Debug>: Debug {
+///   - by id:  offers u32 ids, which should be translated to mutable references before usage... from there, freeing might either be done from the id or the mut ref.
+/// Regarding comparisons, the `PartialEq` trait should be implemented so any wrapper types using the allocator can be compared: two allocators are only equal if they
+/// share the same exact address.
+pub trait OgreAllocator<SlotType: Debug>: Debug + PartialEq {
 
     /// Instantiates a new allocator
     fn new() -> Self;

@@ -27,7 +27,7 @@ use async_trait::async_trait;
 
 
 /// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
-pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
+pub struct Atomic<'a, ItemType:          Send + Sync + Debug + Default,
                       const BUFFER_SIZE: usize,
                       const MAX_STREAMS: usize> {
 
@@ -39,7 +39,7 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
 }
 
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Send + Sync + Debug + Default,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelCommon<'a, ItemType, ItemType>
@@ -89,7 +89,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Send + Sync + Debug + Default,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelUni<'a, ItemType, ItemType>
@@ -101,7 +101,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Send + Sync + Debug + Default,
     const BUFFER_SIZE: usize,
     const MAX_STREAMS: usize>
 ChannelProducer<'a, ItemType, ItemType>
@@ -151,7 +151,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
 }
 
-impl<'a, ItemType:          'a + Send + Sync + Debug,
+impl<'a, ItemType:          'a + Send + Sync + Debug + Default,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelConsumer<'a, ItemType>
@@ -178,7 +178,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 }
 
-impl <ItemType:          'static + Debug + Send + Sync,
+impl <ItemType:          'static + Debug + Send + Sync + Default,
       const BUFFER_SIZE: usize,
       const MAX_STREAMS: usize>
 FullDuplexUniChannel

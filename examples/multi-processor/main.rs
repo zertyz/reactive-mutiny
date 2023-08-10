@@ -29,14 +29,15 @@ use std::{
 use futures::{Stream, stream, StreamExt};
 
 /// Represents a Market Order to be sent to the Exchange
-#[derive(Debug)]
+#[derive(Debug, defaults::Defaults)]
+#[def = "Buy(Order::default())"]
 enum OrderEvent {
     Buy(Order),
     Sell(Order),
 }
 
 /// Core data for Market Orders
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Order {
     quantity: u32,
 }

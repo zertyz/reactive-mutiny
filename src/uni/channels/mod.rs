@@ -54,8 +54,8 @@ mod tests {
             async fn $fn_name() {
                 let channel = <$uni_channel_type>::new("doc_test");
                 let (mut stream, _stream_id) = channel.create_stream();
-                let send_result = channel.send_with(|slot| *slot = "a").is_ok();
-                assert!(send_result, "Even couldn't be sent!");
+                let send_result = channel.send("a").is_ok();
+                assert!(send_result, "Event couldn't be sent!");
                 exec_future(stream.next(), "receiving", 1.0, true).await;
             }
         }
@@ -65,6 +65,37 @@ mod tests {
     doc_test!(movable_full_sync_queue_doc_test,   movable::full_sync::FullSync<&str, 1024, 1>);
     doc_test!(zero_copy_atomic_queue_doc_test,    ChannelUniZeroCopyAtomic<&str, 1024, 2>);
     doc_test!(zero_copy_full_sync_queue_doc_test, ChannelUniZeroCopyFullSync<&str, 1024, 2>);
+
+
+    // *_sending_droppable_types for all known `UniChannel`s
+    ////////////////////////////////////////////////////////
+
+    macro_rules! sending_droppable_types {
+        ($fn_name: tt, $uni_channel_type: ty) => {
+            /// exercises the code present on the documentation for $uni_channel_type
+            #[cfg_attr(not(doc),tokio::test)]
+            async fn $fn_name() {
+                let payload = String::from("Hey, it worked!");
+                let channel = <$uni_channel_type>::new("test sending droppable types");
+                let (mut stream, _stream_id) = channel.create_stream();
+                // send()
+                let send_result = channel.send(payload.clone()).is_ok();
+                assert!(send_result, "Event couldn't be `send()`");
+                let observed = exec_future(stream.next(), "receiving", 1.0, true).await;
+                assert_eq!(observed.unwrap(), payload, "Wrong payloads using `send_with()`");
+                // send_with()
+                let send_result = channel.send_with(|slot| unsafe { std::ptr::write(slot, payload.clone()); }).is_ok();
+                assert!(send_result, "Event couldn't be `send_with()`");
+                let observed = exec_future(stream.next(), "receiving", 1.0, true).await;
+                assert_eq!(observed.unwrap(), payload, "Wrong payloads using `send_with()`");
+            }
+        }
+    }
+    sending_droppable_types!(movable_atomic_queue_sending_droppable_types,      movable::atomic::Atomic<String, 1024, 1>);
+    sending_droppable_types!(movable_crossbeam_channel_sending_droppable_types, movable::crossbeam::Crossbeam<String, 1024, 1>);
+    sending_droppable_types!(movable_full_sync_queue_sending_droppable_types,   movable::full_sync::FullSync<String, 1024, 1>);
+    sending_droppable_types!(zero_copy_atomic_queue_sending_droppable_types,    ChannelUniZeroCopyAtomic<String, 1024, 2>);
+    sending_droppable_types!(zero_copy_full_sync_queue_sending_droppable_types, ChannelUniZeroCopyFullSync<String, 1024, 2>);
 
 
     // *_dropping for known parallel stream implementors

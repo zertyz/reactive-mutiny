@@ -8,7 +8,6 @@ use super::super::{
 };
 use std::{
     fmt::Debug,
-    mem::{ManuallyDrop, MaybeUninit},
     ptr,
     sync::atomic::{
         AtomicBool,
@@ -17,6 +16,7 @@ use std::{
     pin::Pin,
     num::NonZeroU32,
     cell::UnsafeCell,
+    mem::ManuallyDrop,
 };
 
 
@@ -28,7 +28,7 @@ use std::{
 ///
 /// For fatter payloads, [FullSyncZeroCopy] should be a better fit.
 #[repr(C,align(128))]      // aligned to cache line sizes for a careful control over false-sharing performance degradation
-pub struct FullSyncMove<SlotType:          Debug,
+pub struct FullSyncMove<SlotType:          Debug + Default,
                         const BUFFER_SIZE: usize> {
 
     head: UnsafeCell<u32>,
@@ -40,13 +40,13 @@ pub struct FullSyncMove<SlotType:          Debug,
 
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 MoveContainer<SlotType> for
 FullSyncMove<SlotType, BUFFER_SIZE> {
 
     fn new() -> Self {
-        Self::with_initializer(|| unsafe { MaybeUninit::zeroed().assume_init() })
+        Self::with_initializer(|| SlotType::default())
     }
 
     fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
@@ -63,7 +63,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 MovePublisher<SlotType> for
 FullSyncMove<SlotType, BUFFER_SIZE> {
@@ -128,7 +128,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     }
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 MoveSubscriber<SlotType> for
 FullSyncMove<SlotType, BUFFER_SIZE> {
@@ -174,7 +174,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
 }
 
-impl<'a, SlotType:          'a + Debug,
+impl<'a, SlotType:          'a + Debug + Default,
          const BUFFER_SIZE: usize>
 FullSyncMove<SlotType, BUFFER_SIZE> {
 
@@ -277,7 +277,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 }
 
 // buffered elements are `ManuallyDrop<SlotType>`, so here is where we drop any unconsumed ones
-impl<SlotType:          Debug,
+impl<SlotType:          Debug + Default,
      const BUFFER_SIZE: usize>
 Drop for
 FullSyncMove<SlotType, BUFFER_SIZE> {
@@ -293,13 +293,13 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 }
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
-unsafe impl<SlotType:          Debug,
+unsafe impl<SlotType:          Debug + Default,
             const BUFFER_SIZE: usize>
 Send for
 FullSyncMove<SlotType, BUFFER_SIZE> {}
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
-unsafe impl<SlotType:          Debug,
+unsafe impl<SlotType:          Debug + Default,
     const BUFFER_SIZE: usize>
 Sync for
 FullSyncMove<SlotType, BUFFER_SIZE> {}
