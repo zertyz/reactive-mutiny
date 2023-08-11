@@ -44,7 +44,7 @@ use log::{trace,info,warn,error};
 
 
 /// The trait to be passed along after the executor has been started
-pub trait StreamExecutorStats {
+pub trait StreamExecutorStats: Debug {
     fn executor_name(&self) -> &String;
     fn futures_timeout(&self) -> &Duration;
     fn creation_time(&self) -> &Instant;
@@ -56,7 +56,6 @@ pub trait StreamExecutorStats {
     fn failed_events_avg_future_duration(&self) -> &AtomicIncrementalAverage64;
     /// Tells this executor that its Stream will be artificially ended -- so to cause it to cease its execution
     fn report_scheduled_to_finish(&self);
-
 }
 
 
