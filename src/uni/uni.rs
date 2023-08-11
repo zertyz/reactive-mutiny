@@ -72,6 +72,11 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         self.channel.pending_items_count()
     }
 
+    #[inline(always)]
+    fn buffer_size(&self) -> u32 {
+        self.channel.buffer_size()
+    }
+
     async fn flush(&self, duration: Duration) -> u32 {
         self.channel.flush(duration).await
     }
@@ -318,6 +323,10 @@ pub trait GenericUni {
     /// Sets this [Uni] to return `Stream`s instead of executing them
     #[must_use = "By calling this method, the Uni gets converted into only providing Streams (rather than executing them) -- so the returned values of (self, Streams) must be used"]
     fn consumer_stream(self) -> (Arc<Self>, Vec<MutinyStream<'static, Self::ItemType, Self::UniChannelType, Self::DerivedItemType>>);
+
+    /// Tells the limit number of events that might be, at any given time, awaiting consumption from the active `Stream`s
+    /// -- when exceeded, [Self::send()] & [Self::send_with()] will fail until consumption progresses
+    fn buffer_size(&self) -> u32;
 
     /// Tells how many events (collected by [Self::send()] or [Self::send_with()]) are waiting to be 
     /// consumed by the active `Stream`s
