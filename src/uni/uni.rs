@@ -51,10 +51,12 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         }
     }
 
+    #[inline(always)]
     fn send(&self, item:Self::ItemType) -> keen_retry::RetryConsumerResult<(),Self::ItemType,()>  {
         self.channel.send(item)
     }
 
+    #[inline(always)]
     fn send_with<F:FnOnce(&mut Self::ItemType)>(&self, setter:F) -> keen_retry::RetryConsumerResult<(),F,()>  {
         self.channel.send_with(setter)
     }
@@ -63,6 +65,11 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         let streams = self.consumer_stream_internal();
         let arc_self = Arc::new(self);
         (arc_self, streams)
+    }
+
+    #[inline(always)]
+    fn pending_items_count(&self) -> u32 {
+        self.channel.pending_items_count()
     }
 
     async fn flush(&self, duration: Duration) -> u32 {
@@ -311,8 +318,14 @@ pub trait GenericUni {
     /// Sets this [Uni] to return `Stream`s instead of executing them
     #[must_use = "By calling this method, the Uni gets converted into only providing Streams (rather than executing them) -- so the returned values of (self, Streams) must be used"]
     fn consumer_stream(self) -> (Arc<Self>, Vec<MutinyStream<'static, Self::ItemType, Self::UniChannelType, Self::DerivedItemType>>);
+
+    /// Tells how many events (collected by [Self::send()] or [Self::send_with()]) are waiting to be 
+    /// consumed by the active `Stream`s
+    fn pending_items_count(&self) -> u32;
     
-    async fn flush(&self, duration: Duration) -> u32;
+    /// Waits (up to `duration`) until [Self::pending_items_count()] is zero -- possibly waking some tasks awaiting on the active `Stream`s.\
+    /// Returns the pending items -- which will be non-zero if `timeout` expired.
+    async fn flush(&self, timeout: Duration) -> u32;
 
     /// Closes this Uni, in isolation -- flushing pending events, closing the producers,
     /// waiting for all events to be fully processed and calling the "on close" callback.\
