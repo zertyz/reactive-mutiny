@@ -69,6 +69,19 @@ OgreUnique<DataType, OgreAllocatorType> {
 }
 
 
+impl<DataType:          Debug + Send + Sync,
+     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+AsRef<DataType> for
+OgreUnique<DataType, OgreAllocatorType> {
+
+    #[inline(always)]
+    fn as_ref(&self) -> &DataType {
+        self.data_ref
+    }
+
+}
+
+
 impl<DataType:          Debug + Send + Sync + Display,
      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
 Display for

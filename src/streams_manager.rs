@@ -23,9 +23,7 @@ use minstant::Instant;
 
 /// Basis for all `Uni`s and `Multi`s Stream Managers,
 /// containing all common fields and code.
-pub struct StreamsManagerBase<'a, ItemType:           'a,
-                                  const MAX_STREAMS:  usize,
-                                  DerivativeItemType  : 'a = ItemType> {
+pub struct StreamsManagerBase<const MAX_STREAMS:  usize> {
 
     /// the id # of streams that can be created are stored here.\
     /// synced with `used_streams`, so creating & dropping streams occurs as fast as possible
@@ -51,14 +49,10 @@ pub struct StreamsManagerBase<'a, ItemType:           'a,
     /// for logs
     streams_manager_name:    String,
 
-    _phanrom: PhantomData<(&'a ItemType, &'a DerivativeItemType)>,
-
 }
 
-impl<'a, ItemType:           'a,
-         const MAX_STREAMS:  usize,
-         DerivativeItemType>
-StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
+impl<const MAX_STREAMS:  usize>
+StreamsManagerBase<MAX_STREAMS> {
 
     pub fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Self {
         Self {
@@ -78,7 +72,6 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
             keep_streams_running:   UnsafeCell::new(Box::pin([false; MAX_STREAMS])),
             streams_lock:           AtomicBool::new(false),
             streams_manager_name:   streams_manager_name.into(),
-            _phanrom:               Default::default(),
         }
     }
 
@@ -335,16 +328,12 @@ StreamsManagerBase<'a, ItemType, MAX_STREAMS, DerivativeItemType> {
 
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
-unsafe impl<ItemType,
-            const MAX_STREAMS:  usize,
-            DerivativeItemType>
+unsafe impl<const MAX_STREAMS:  usize>
 Send for
-StreamsManagerBase<'_, ItemType, MAX_STREAMS, DerivativeItemType> {}
+StreamsManagerBase<MAX_STREAMS> {}
 
 // TODO: 2023-06-14: Needed while `SyncUnsafeCell` is still not stabilized
-unsafe impl<ItemType,
-            const MAX_STREAMS:  usize,
-            DerivativeItemType>
+unsafe impl<const MAX_STREAMS:  usize>
 Sync for
-StreamsManagerBase<'_, ItemType, MAX_STREAMS, DerivativeItemType> {}
+StreamsManagerBase<MAX_STREAMS> {}
 

@@ -41,10 +41,10 @@ pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
                       const MAX_STREAMS: usize> {
 
     /// common code for dealing with streams
-    streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    streams_manager: StreamsManagerBase<MAX_STREAMS>,
     /// backing storage for events
     channel:         AtomicZeroCopy<ItemType, OgreAllocatorType, BUFFER_SIZE>,
-    _phantom:        PhantomData<OgreAllocatorType>,
+    _phantom:        PhantomData<&'a OgreAllocatorType>,
 }
 
 

@@ -23,6 +23,7 @@ use std::{
     task::Waker,
     sync::Arc,
 };
+use std::marker::PhantomData;
 use async_trait::async_trait;
 
 
@@ -32,9 +33,10 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug + Default,
                       const MAX_STREAMS: usize> {
 
     /// common code for dealing with streams
-    streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    streams_manager: StreamsManagerBase<MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
     channel:       AtomicMove<ItemType, BUFFER_SIZE>,
+    _phanrom: PhantomData<&'a ItemType>,
 
 }
 
@@ -49,6 +51,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             channel:         AtomicMove::<ItemType, BUFFER_SIZE>::new(),
+            _phanrom: PhantomData,
         })
     }
 

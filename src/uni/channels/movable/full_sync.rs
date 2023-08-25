@@ -22,9 +22,10 @@ use std::{
     time::Duration,
     pin::Pin,
     fmt::Debug,
-    task::{Waker},
+    task::Waker,
     sync::Arc,
 };
+use std::marker::PhantomData;
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
 
@@ -41,9 +42,10 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug + Default,
                         const MAX_STREAMS: usize> {
 
     /// common code for dealing with streams
-    streams_manager: Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>>,
+    streams_manager: Arc<StreamsManagerBase<MAX_STREAMS>>,
     /// backing storage for events -- AKA, channels
     container:       Pin<Box<FullSyncMove<ItemType, BUFFER_SIZE>>>,
+    _phanrom: PhantomData<&'a ItemType>,
 
 }
 
@@ -58,6 +60,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name)),
             container:       Box::pin(FullSyncMove::<ItemType, BUFFER_SIZE>::new()),
+            _phanrom: PhantomData,
         })
     }
 

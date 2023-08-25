@@ -16,6 +16,7 @@ use std::{
     mem::MaybeUninit,
     task::Waker,
 };
+use std::marker::PhantomData;
 use crossbeam_channel::{Sender, Receiver, TryRecvError, TrySendError};
 use async_trait::async_trait;
 
@@ -25,7 +26,8 @@ pub struct Crossbeam<'a, ItemType,
                          const MAX_STREAMS: usize> {
     tx: Sender<ItemType>,
     rx: Receiver<ItemType>,
-    streams_manager: Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>>,
+    streams_manager: Arc<StreamsManagerBase<MAX_STREAMS>>,
+    _phanrom: PhantomData<&'a ItemType>,
 }
 
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
@@ -41,6 +43,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             tx,
             rx,
             streams_manager: Arc::new(StreamsManagerBase::new(streams_manager_name)),
+            _phanrom: PhantomData,
         })
     }
 

@@ -41,10 +41,10 @@ pub struct FullSync<'a, ItemType:          Debug + Send + Sync,
                         const MAX_STREAMS: usize> {
 
     /// common code for dealing with streams
-    streams_manager: Arc<StreamsManagerBase<'a, ItemType, MAX_STREAMS>>,
+    streams_manager: Arc<StreamsManagerBase<MAX_STREAMS>>,
     /// backing storage for events
     channel:         FullSyncZeroCopy<ItemType, OgreAllocatorType, BUFFER_SIZE>,
-    _phantom:        PhantomData<OgreAllocatorType>,
+    _phantom:        PhantomData<&'a OgreAllocatorType>,
 
 }
 

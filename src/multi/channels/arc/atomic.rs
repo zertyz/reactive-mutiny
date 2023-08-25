@@ -18,6 +18,7 @@ use std::{
     task::Waker,
     mem::MaybeUninit,
 };
+use std::marker::PhantomData;
 use async_trait::async_trait;
 use log::warn;
 
@@ -34,9 +35,10 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug + Default,
                       const MAX_STREAMS: usize = 16> {
 
     /// common code for dealing with streams
-    streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    streams_manager: StreamsManagerBase<MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
     channels:        [AtomicMove<Arc<ItemType>, BUFFER_SIZE>; MAX_STREAMS],
+    _phanrom: PhantomData<&'a ItemType>,
 
 }
 
@@ -56,6 +58,7 @@ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 slot.as_mut_ptr().write_bytes(1u8, 1);  // initializing with a non-zero value makes MIRI happily state there isn't any UB involved (actually, any value is equally good)
                 slot.assume_init()
             })),
+            _phanrom: PhantomData,
         })
     }
 

@@ -28,7 +28,7 @@ pub struct MmapLog<'a, ItemType:          Send + Sync + Debug,
                        const MAX_STREAMS: usize = 16> {
 
     /// common code for dealing with streams
-    streams_manager:     StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    streams_manager:     StreamsManagerBase<MAX_STREAMS>,
     /// backing storage for events
     log_queue:           Arc<MMapMeta<'a, ItemType>>,
     /// tracking of each Stream's next event to send

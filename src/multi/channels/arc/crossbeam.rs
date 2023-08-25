@@ -12,6 +12,7 @@ use std::{
     mem::MaybeUninit,
     task::Waker,
 };
+use std::marker::PhantomData;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
 use log::warn;
@@ -22,9 +23,10 @@ pub struct Crossbeam<'a, ItemType:          Send + Sync + Debug,
     const MAX_STREAMS: usize = 16> {
 
     /// common code for dealing with streams
-    streams_manager: StreamsManagerBase<'a, ItemType, MAX_STREAMS>,
+    streams_manager: StreamsManagerBase<MAX_STREAMS>,
     senders:        [Sender<Arc<ItemType>>; MAX_STREAMS],
     receivers:      [Receiver<Arc<ItemType>>; MAX_STREAMS],
+    _phanrom: PhantomData<&'a ItemType>,
 
 }
 
@@ -44,6 +46,7 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             streams_manager: StreamsManagerBase::new(streams_manager_name),
             senders:         [0; MAX_STREAMS].map(|_| senders.pop().unwrap()),
             receivers:       [0; MAX_STREAMS].map(|_| receivers.pop().unwrap()),
+            _phanrom: PhantomData,
         })
     }
 
