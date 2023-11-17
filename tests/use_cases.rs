@@ -408,7 +408,7 @@ fn generics() {
         the_multi: MultiType,
         _phantom: PhantomData<MultiType>,
     }
-    impl<const MULTI_INSTRUMENTS: usize, MultiType: GenericMulti<MULTI_INSTRUMENTS>> GenericMultiUser<MULTI_INSTRUMENTS, MultiType> {
+    impl<const MULTI_INSTRUMENTS: usize, MultiType: GenericMulti<MULTI_INSTRUMENTS> + 'static> GenericMultiUser<MULTI_INSTRUMENTS, MultiType> {
         // type TheMultiType = Multi<MultiType::ItemType, MultiType::MultiChannelType, { MultiType::INSTRUMENTS }, MultiType::DerivedItemType>;   // NOT YET ALLOWED :( when it is, `UNI_INSTRUMENTS` may be dropped
         /// Demonstrates the caller is able to see `MultiType` as a `Multi`
         fn as_multi(self) -> MultiType {

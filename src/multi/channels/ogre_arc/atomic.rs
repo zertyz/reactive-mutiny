@@ -155,7 +155,7 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
             _ = self.send_derived(&ogre_arc_item);
             keen_retry::RetryResult::Ok { reported_input: (), output: () }
         } else {
-            keen_retry::RetryResult::Retry { input: item, error: () }
+            keen_retry::RetryResult::Transient { input: item, error: () }
         }
     }
 
@@ -166,7 +166,7 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
             _ = self.send_derived(&ogre_arc_item);
             keen_retry::RetryResult::Ok { reported_input: (), output: () }
         } else {
-            keen_retry::RetryResult::Retry { input: setter, error: () }
+            keen_retry::RetryResult::Transient { input: setter, error: () }
         }
     }
 

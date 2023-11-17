@@ -112,7 +112,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             _ => self.tx.try_send(item),
         }
             .map_or_else(|item| match item {
-                                                                TrySendError::Full(item) => keen_retry::RetryResult::Retry { input: item, error: () },
+                                                                TrySendError::Full(item) => keen_retry::RetryResult::Transient { input: item, error: () },
                                                                 TrySendError::Disconnected(item) => keen_retry::RetryResult::Fatal { input: item, error: () }
                                                             },
                          |_ok| keen_retry::RetryResult::Ok { reported_input: (), output: () })
@@ -123,7 +123,7 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     // taking the crossbeam channel out of Tier-1 channels for this lib
     fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         if self.tx.is_full() {
-            return keen_retry::RetryResult::Retry { input: setter, error: () }
+            return keen_retry::RetryResult::Transient { input: setter, error: () }
         }
         // from this point on, this method never returns Some, meaning it may block
         // (crossbeam channels don't have an API that plays nice with setting the value from a closure)

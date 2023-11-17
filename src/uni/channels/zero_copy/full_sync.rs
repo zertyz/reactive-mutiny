@@ -136,7 +136,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                 keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
             (None, some_item) => {
-                keen_retry::RetryResult::Retry { input: some_item.expect("reactive-mutiny: uni zero-copy full_sync::send() BUG! None `some_item`"), error: () }
+                keen_retry::RetryResult::Transient { input: some_item.expect("reactive-mutiny: uni zero-copy full_sync::send() BUG! None `some_item`"), error: () }
             },
         }
     }
@@ -152,7 +152,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                 keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
             (None, some_setter) => {
-                keen_retry::RetryResult::Retry { input: some_setter.expect("reactive-mutiny: uni zero-copy full_sync::send_with() BUG! None `some_setter`"), error: () }
+                keen_retry::RetryResult::Transient { input: some_setter.expect("reactive-mutiny: uni zero-copy full_sync::send_with() BUG! None `some_setter`"), error: () }
             },
         }
     }

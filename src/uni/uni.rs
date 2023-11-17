@@ -224,7 +224,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
                                                  OutStreamType:      Stream<Item=OutItemType> + Send + 'static,
                                                  CloseVoidAsyncType: Future<Output=()>        + Send + 'static>
 
-                                                (self,
+                                                (mut self,
                                                  concurrency_limit:        u32,
                                                  pipeline_builder:         impl Fn(MutinyStream<'static, Self::ItemType, Self::UniChannelType, Self::DerivedItemType>) -> OutStreamType,
                                                  on_close_callback:        impl FnOnce(Arc<dyn StreamExecutorStats + Send + Sync>)                                     -> CloseVoidAsyncType + Send + Sync + 'static)
@@ -233,15 +233,14 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
         let on_close_callback = Arc::new(latch_callback_1p(UniChannelType::MAX_STREAMS as u32, on_close_callback));
         let in_streams = self.consumer_stream_internal();
-        let mut stream_executors = vec![];
         for i in 0..=in_streams.len() {
             let pipeline_name = format!("Consumer #{i} for Uni '{}'", self.channel.name());
             let executor = StreamExecutor::<INSTRUMENTS>::new(pipeline_name);
-            stream_executors.push(executor);
+            self.stream_executors.push(executor);
         }
         let arc_self = Arc::new(self);
         let arc_self_ref = Arc::clone(&arc_self);
-        stream_executors.iter().zip(in_streams.into_iter())
+        arc_self.stream_executors.iter().zip(in_streams.into_iter())
             .for_each(|(executor, in_stream)| {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);
@@ -269,7 +268,7 @@ impl<ItemType:          Send + Sync + Debug + 'static,
      DerivedItemType:   Send + Sync + Debug + 'static>
 Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 
-    /// similar to [consumer_stream()], but without consuming `self`
+    /// similar to [Self::consumer_stream()], but without consuming `self`
     #[must_use]
     fn consumer_stream_internal(&self) -> Vec<MutinyStream<'static, ItemType, UniChannelType, DerivedItemType>> {
         (0..UniChannelType::MAX_STREAMS)

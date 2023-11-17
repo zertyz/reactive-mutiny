@@ -87,20 +87,21 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
     #[cfg(debug_assertions)]
     const ITERATIONS: u32 = 1<<20;
 
-    let mut counters: Vec<u64> = Vec::with_capacity(8 * number_of_listeners as usize);  // we will use counters spaced by 64 bytes, to avoid false sharing of CPU caches
-    (0..(8 * number_of_listeners)).for_each(|_| counters.push(0));
+    let mut counters = Vec::with_capacity(8 * number_of_listeners as usize);  // we will use counters spaced by 64 bytes, to avoid false sharing of CPU caches
+    (0..(8 * number_of_listeners)).for_each(|_| counters.push(AtomicU64::new(0)));
+    let counters = Arc::new(counters);
     let listeners_count = AtomicU64::new(0);
 
     for listener_number in 0..number_of_listeners {
         let listener_name = format!("#{}: {} for multi {}", listener_number, name, multi.multi_name);
+        let counters_for_listener = Arc::clone(&counters);
         multi
             .spawn_non_futures_non_fallible_executor(1, listener_name, |stream| {
                 let listener_id = listeners_count.fetch_add(1, Relaxed);
-                let counter: &u64 = counters.get(8 * listener_id as usize).unwrap();
-                let counter = unsafe {&mut *((counter as *const u64) as *mut u64)};
                 stream.map(move |exchange_event| {
                     if let ExchangeEvent::TradeEvent { quantity, .. } = *exchange_event {
-                        *counter = *counter + quantity as u64;
+                        let counter = counters_for_listener.get(8 * listener_id as usize).unwrap();
+                        counter.fetch_add(quantity as u64, Relaxed);
                     }
                 })
             }, |_| async {}).await
@@ -128,7 +129,7 @@ async fn multi_builder_benchmark<DerivedEventType: Debug + Send + Sync + Deref<T
     }
     multi.close(Duration::from_secs(5)).await;
     let elapsed = start.elapsed();
-    let observed = counters.into_iter().sum::<u64>();
+    let observed = counters.iter().map(|n| n.load(Relaxed)).sum::<u64>();
     let expected = number_of_listeners as u64 * ( (1 + ITERATIONS) as u64 * (ITERATIONS / 2) as u64 );
     println!("{:10.2}/s {}",
              ITERATIONS as f64 / elapsed.as_secs_f64(),

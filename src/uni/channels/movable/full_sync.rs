@@ -129,7 +129,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
             (None, some_item) => {
-                keen_retry::RetryResult::Retry { input: some_item.expect("reactive-mutiny: uni movable full_sync::send() BUG! None `some_setter`"), error: () }
+                keen_retry::RetryResult::Transient { input: some_item.expect("reactive-mutiny: uni movable full_sync::send() BUG! None `some_setter`"), error: () }
             },
         }
     }
@@ -144,7 +144,7 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         // implementation note: superior branch prediction over using `.map_or_else()` directly, as `None` is more likely
         match setter_option {
             None => keen_retry::RetryResult::Ok { reported_input: (), output: () },
-            Some(setter) => keen_retry::RetryResult::Retry { input: setter, error: () }
+            Some(setter) => keen_retry::RetryResult::Transient { input: setter, error: () }
         }
     }
 }

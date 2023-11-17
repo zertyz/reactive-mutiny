@@ -127,7 +127,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                 keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
             (None, some_item) => {
-                keen_retry::RetryResult::Retry { input: some_item.unwrap(), error: () }
+                keen_retry::RetryResult::Transient { input: some_item.unwrap(), error: () }
             },
         }
     }
@@ -148,7 +148,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         // implementation note: superior branch prediction over using `.map_or_else()` directly, as `None` is more likely
         match setter_option {
             None => keen_retry::RetryResult::Ok { reported_input: (), output: () },
-            Some(setter) => keen_retry::RetryResult::Retry { input: setter, error: () }
+            Some(setter) => keen_retry::RetryResult::Transient { input: setter, error: () }
         }
     }
 

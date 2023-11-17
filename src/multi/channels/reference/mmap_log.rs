@@ -157,7 +157,7 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
                 keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
             (None, some_item) => {
-                keen_retry::RetryResult::Retry { input: some_item.expect("reactive-mutiny: mmap_log::send() BUG! None `some_item`"), error: () }
+                keen_retry::RetryResult::Transient { input: some_item.expect("reactive-mutiny: mmap_log::send() BUG! None `some_item`"), error: () }
             }
         }
     }
@@ -177,7 +177,7 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
                 keen_retry::RetryResult::Ok { reported_input: (), output: () }
             },
             (None, some_setter) => {
-                keen_retry::RetryResult::Retry { input: some_setter.expect("reactive-mutiny: mmap_log::send_with() BUG! None `some_setter`"), error: () }
+                keen_retry::RetryResult::Transient { input: some_setter.expect("reactive-mutiny: mmap_log::send_with() BUG! None `some_setter`"), error: () }
             },
         }
     }
