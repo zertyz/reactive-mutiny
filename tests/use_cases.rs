@@ -12,15 +12,12 @@ use std::{
             Ordering::Relaxed,
         },
     },
-    fmt::Debug, marker::PhantomData,
-    future::Future,
+    marker::PhantomData,
 };
 use reactive_mutiny::prelude::advanced::{
-    Uni,
     GenericUni,
     UniMoveAtomic,
     UniMoveFullSync,
-    Multi,
     GenericMulti,
     MultiAtomicOgreArc,
     MultiMmapLog,

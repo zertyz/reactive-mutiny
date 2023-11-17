@@ -153,7 +153,7 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
                     let _ = sender.try_send(arc_item.clone());
                     self.streams_manager.wake_stream(*stream_id);
                 },
-                _ => while !sender.try_send(arc_item.clone()).is_ok() {
+                _ => while sender.try_send(arc_item.clone()).is_err() {
                     self.streams_manager.wake_stream(*stream_id);
 // TODO 2023-08-02: the possibility of this code indicates all our arc based channels is not a good fit for our retrying semantics. A possible correction would be to use a lock + count all listener's free slots... but OgreArc based ones seem to be a better design
 warn!("Multi Channel's Arc Crossbeam (named '{channel_name}', {used_streams_count} streams): One of the streams (#{stream_id}) is full of elements. Multi producing performance has been degraded. Increase the Multi buffer size (currently {BUFFER_SIZE}) to overcome that.",

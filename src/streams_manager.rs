@@ -15,7 +15,6 @@ use std::{
     sync::atomic::{AtomicU32, AtomicBool, Ordering::Relaxed},
     pin::Pin,
     task::Waker,
-    marker::PhantomData,
 };
 use std::cell::UnsafeCell;
 use minstant::Instant;

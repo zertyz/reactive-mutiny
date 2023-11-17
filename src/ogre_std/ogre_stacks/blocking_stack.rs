@@ -137,7 +137,7 @@ for Stack<SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
 
     #[inline(always)]
     fn push(&self, element: SlotType) -> bool {
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
         while self.head >= BUFFER_SIZE as u32 {
             let no_longer_full = mutable_self.report_full();
@@ -162,7 +162,7 @@ for Stack<SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
 
     #[inline(always)]
     fn pop(&self) -> Option<SlotType> {
-        let mutable_self = unsafe { &mut *(&*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
+        let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
         while self.head == 0 {
             let no_longer_empty = mutable_self.report_empty();
@@ -190,6 +190,10 @@ for Stack<SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
         self.head as usize
     }
 
+    fn is_empty(&self) -> bool {
+        self.head == 0
+    }
+
     fn buffer_size(&self) -> usize {
         BUFFER_SIZE
     }
@@ -209,6 +213,7 @@ for Stack<SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
     fn implementation_name(&self) -> &str {
         "non_blocking_full_sync_stack"
     }
+
 }
 
 

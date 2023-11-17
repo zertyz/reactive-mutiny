@@ -111,6 +111,10 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
         self.head as usize
     }
 
+    fn is_empty(&self) -> bool {
+        self.head == 0
+    }
+
     fn buffer_size(&self) -> usize {
         BUFFER_SIZE
     }
@@ -130,6 +134,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
     fn implementation_name(&self) -> &str {
         "non_blocking_full_sync_stack"
     }
+
 }
 
 

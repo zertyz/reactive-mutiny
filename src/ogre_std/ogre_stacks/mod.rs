@@ -9,6 +9,7 @@ pub trait OgreStack<SlotType> {
     fn push(&self, element: SlotType) -> bool;
     fn pop(&self) -> Option<SlotType>;
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
     fn buffer_size(&self) -> usize;
     fn debug_enabled(&self) -> bool;
     fn metrics_enabled(&self) -> bool;
@@ -22,6 +23,7 @@ pub trait OgreBlockingStack<SlotType> {
     fn push(&self, element: SlotType);
     fn pop(&self) -> SlotType;
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
     fn buffer_size(&self) -> usize;
     fn debug_enabled(&self) -> bool;
     fn metrics_enabled(&self) -> bool;

@@ -72,7 +72,7 @@ sloggers    = "2"
 
 # deprecated
 lazy_static    = "1.4"  # as of 2023-03-29: use `one_cell` instead
-neat-date-time = "0.1"  # as of 2023-04-05: scheduled to be removed once ogre is removed from here
+neat-date-time = "0.2"  # as of 2023-04-05: scheduled to be removed once the ogre examples are removed from here
 
 # dependencies for benchmarks
 #############################

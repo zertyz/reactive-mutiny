@@ -110,7 +110,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         }
         let arc_self = Arc::new(self);
         let arc_self_ref = Arc::clone(&arc_self);
-        arc_self.stream_executors.iter().zip(in_streams.into_iter())
+        arc_self.stream_executors.iter().zip(in_streams)
             .for_each(|(executor, in_stream)| {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);
@@ -154,7 +154,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         }
         let arc_self = Arc::new(self);
         let arc_self_ref = Arc::clone(&arc_self);
-        arc_self.stream_executors.iter().zip(in_streams.into_iter())
+        arc_self.stream_executors.iter().zip(in_streams)
             .for_each(|(executor, in_stream)| {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);
@@ -199,7 +199,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         }
         let arc_self = Arc::new(self);
         let arc_self_ref = Arc::clone(&arc_self);
-        arc_self.stream_executors.iter().zip(in_streams.into_iter())
+        arc_self.stream_executors.iter().zip(in_streams)
             .for_each(|(executor, in_stream)| {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);
@@ -240,7 +240,7 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         }
         let arc_self = Arc::new(self);
         let arc_self_ref = Arc::clone(&arc_self);
-        arc_self.stream_executors.iter().zip(in_streams.into_iter())
+        arc_self.stream_executors.iter().zip(in_streams)
             .for_each(|(executor, in_stream)| {
                 let arc_self = Arc::clone(&arc_self);
                 let on_close_callback = Arc::clone(&on_close_callback);

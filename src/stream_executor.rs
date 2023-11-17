@@ -511,8 +511,15 @@ StreamExecutor<INSTRUMENTS_USIZE> {
                 }
             };
             match concurrency_limit {
-                1 => stream.for_each(|item| future::ready(item_processor(item))).await,     // faster in `futures 0.3` -- may be useless in the future
-                _ => stream.for_each_concurrent(concurrency_limit as usize, |item| future::ready(item_processor(item))).await,
+                // faster in `futures 0.3` -- may be useless in the future
+                1 => stream.for_each(|item| {
+                    item_processor(item);
+                    future::ready(())
+                }).await,
+                _ => stream.for_each_concurrent(concurrency_limit as usize, |item| {
+                    item_processor(item);
+                    future::ready(())
+                }).await,
             }
             on_executor_end!(self, false, true, Duration::ZERO, Self::INSTRUMENTS);
             stream_ended_callback(self).await;
@@ -537,8 +544,15 @@ StreamExecutor<INSTRUMENTS_USIZE> {
                 }
             };
             match concurrency_limit {
-                1 => stream.for_each(|fallible_item| future::ready(item_processor(fallible_item))).await,     // faster in `futures 0.3` -- may be useless in other versions
-                _ => stream.for_each_concurrent(concurrency_limit as usize, |fallible_item| future::ready(item_processor(fallible_item))).await,
+                // faster in `futures 0.3` -- may be useless in other versions
+                1 => stream.for_each(|fallible_item| {
+                    item_processor(fallible_item);
+                    future::ready(())
+                }).await,
+                _ => stream.for_each_concurrent(concurrency_limit as usize, |fallible_item| {
+                    item_processor(fallible_item);
+                    future::ready(())
+                }).await,
             }
             on_executor_end!(self, false, true, Duration::ZERO, Self::INSTRUMENTS);
             stream_ended_callback(self).await;
@@ -558,8 +572,15 @@ StreamExecutor<INSTRUMENTS_USIZE> {
             on_executor_start!(self, false, false, Duration::ZERO, Self::INSTRUMENTS);
             let item_processor = |yielded_item| on_non_timed_ok_item!(self, yielded_item, Self::INSTRUMENTS);
             match concurrency_limit {
-                1 => stream.for_each(|item| future::ready(item_processor(item))).await,     // faster in `futures 0.3` -- may be useless in the near future?
-                _ => stream.for_each_concurrent(concurrency_limit as usize, |item| future::ready(item_processor(item))).await,
+                // faster in `futures 0.3` -- may be useless in the near future?
+                1 => stream.for_each(|item| {
+                    item_processor(item);
+                    future::ready(())
+                }).await,
+                _ => stream.for_each_concurrent(concurrency_limit as usize, |item| {
+                    item_processor(item);
+                    future::ready(())
+                }).await,
             }
             on_executor_end!(self, false, false, Duration::ZERO, Self::INSTRUMENTS);
             stream_ended_callback(self).await;
