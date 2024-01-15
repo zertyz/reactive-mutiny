@@ -35,6 +35,22 @@ pub struct MmapLog<'a, ItemType:          Send + Sync + Debug,
     subscribers:         [MMapMetaSubscriber<'a, ItemType>; MAX_STREAMS],
 }
 
+impl<'a, ItemType:          Send + Sync + Debug + 'a,
+         const MAX_STREAMS: usize>
+MmapLog<'a, ItemType, MAX_STREAMS> {
+
+    /// NOTE: currently the file contents are ignored, but this is to change in the future: we should continue from where we left
+    fn from_file<IntoString: Into<String>>(mmap_file_path: IntoString) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
+        let mmap_file_path = mmap_file_path.into();
+        let log_queue = MMapMeta::new(&mmap_file_path, BUFFER_SIZE as u64)
+            .map_err(|err| format!("`mmap_log` channel couldn't mmap file '{mmap_file_path}': {err}"))?;
+        Ok(Arc::new(Self {
+            streams_manager: StreamsManagerBase::new(mmap_file_path),
+            log_queue:       log_queue.clone(),
+            subscribers:     [0; MAX_STREAMS].map(|_| MMapMetaSubscriber::Dynamic(log_queue.subscribe_to_new_events_only())),    // TODO 2023-05-28: Option<> to avoid unnecessary setting the values here?
+        }))
+    }
+}
 
 #[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
@@ -42,15 +58,11 @@ impl<'a, ItemType:          Send + Sync + Debug + 'a,
 ChannelCommon<'a, ItemType, &'static ItemType> for
 MmapLog<'a, ItemType, MAX_STREAMS> {
 
+    /// IMPLEMENTATION NOTE: use Self::from_file() instead for better control over the mmap file name and error handling
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {
         let name = name.into();
         let mmap_file_path = format!("/tmp/{}.mmap", name.chars().map(|c| if c == ' ' || c >= '0' || c <= '9' || c >= 'A' || c <= 'z' { c } else { '_' }).collect::<String>());
-        let log_queue = MMapMeta::new(mmap_file_path, BUFFER_SIZE as u64).expect("TODO: 2023-05-24: MAKE THIS TRAIT ALLOW RETURNING AN ERROR");
-        Arc::new(Self {
-            streams_manager: StreamsManagerBase::new(name),
-            log_queue:       log_queue.clone(),
-            subscribers:     [0; MAX_STREAMS].map(|_| MMapMetaSubscriber::Dynamic(log_queue.subscribe_to_new_events_only())),    // TODO 2023-05-28: Option<> to avoid unnecessary setting the values here?
-        })
+        Self::from_file(mmap_file_path).unwrap()
     }
 
     async fn flush(&self, timeout: Duration) -> u32 {
