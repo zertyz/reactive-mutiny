@@ -171,7 +171,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         let ((oldies_in_stream, oldies_in_stream_id),
              (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
 
-        let cloned_self = Arc::clone(&self);
+        let cloned_self = Arc::clone(self);
         let oldies_pipeline_name = oldies_pipeline_name.into();
         let newies_pipeline_name = Arc::new(newies_pipeline_name.into());
         let on_err_callback_ref1 = Arc::new(on_err_callback);
@@ -296,7 +296,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         let ((oldies_in_stream, oldies_in_stream_id),
              (newies_in_stream, newies_in_stream_id)) = self.channel.create_streams_for_old_and_new_events();
 
-        let cloned_self = Arc::clone(&self);
+        let cloned_self = Arc::clone(self);
         let oldies_pipeline_name = oldies_pipeline_name.into();
         let newies_pipeline_name = Arc::new(newies_pipeline_name.into());
         let oldies_out_stream = oldies_pipeline_builder(oldies_in_stream);
@@ -540,7 +540,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
                                                                              let newies_pipeline_name = Arc::clone(&newies_pipeline_name);
                                                                              async move {
                                                                                  cloned_self.spawn_non_futures_non_fallible_executor_from_stream(concurrency_limit, newies_pipeline_name.as_str(), newies_in_stream_id, newies_out_stream,
-                                                                                                                                                move |executor| newies_on_close_callback(executor)).await
+                                                                                                                                                newies_on_close_callback).await
                                                                                      .map_err(|err| format!("Multi::spawn_non_futures_non_fallible_oldies_executor(): could not start `newies` executor: {:?}", err))
                                                                                      .expect("CANNOT SPAWN NEWIES EXECUTOR AFTER OLDIES HAD COMPLETE");
                                                                                  oldies_on_close_callback(executor).await;

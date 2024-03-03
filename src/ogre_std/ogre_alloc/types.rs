@@ -75,5 +75,6 @@ pub trait BoundedOgreAllocator<SlotType: Debug>
 
     /// returns a reference to the slot position pointed to by `slot_id`
     /// IMPLEMENTORS: #[inline(always)]
+    #[allow(clippy::mut_from_ref)]
     fn ref_from_id(&self, slot_id: u32) -> &mut SlotType;
 }

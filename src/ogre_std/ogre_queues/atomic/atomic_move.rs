@@ -53,7 +53,8 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     }
 
     fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
-        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // ignore the compiler warning regarding this 'path statement having no effect' -- it does: assures no non-power of 2 buffer may be used
+        #[warn(clippy::no_effect)]
+        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
         // }
@@ -173,6 +174,7 @@ impl<'a, SlotType:          'a + Debug + Default,
 AtomicMove<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
+    #[allow(clippy::erasing_op)]
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
 
 
@@ -215,7 +217,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
             match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Relaxed) {
                 Ok(_) => break,
                 Err(_reloaded_tail) => {
-                    relaxed_wait::<SlotType>()
+                    relaxed_wait()
                 },
             }
         }
@@ -228,7 +230,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
         match self.enqueuer_tail.compare_exchange_weak(slot_id + 1, slot_id, Relaxed, Relaxed) {
             Ok(_) => true,
             Err(_reloaded_enqueuer_tail) => {
-                relaxed_wait::<SlotType>();
+                relaxed_wait();
                 false
             }
         }
@@ -264,7 +266,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
                         }
                     },
                     Err(_reloaded_dequeuer_head) => {
-                        relaxed_wait::<SlotType>();
+                        relaxed_wait();
                     }
                 }
             }
@@ -279,7 +281,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
             match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
                 Ok(_) => break,
                 Err(_reloaded_head) => {
-                    relaxed_wait::<SlotType>();
+                    relaxed_wait();
                 }
             }
         }
@@ -331,7 +333,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {}
 
 
 #[inline(always)]
-fn relaxed_wait<SlotType>() {
+fn relaxed_wait() {
     std::hint::spin_loop();
 }
 

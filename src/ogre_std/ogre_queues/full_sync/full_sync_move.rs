@@ -50,7 +50,8 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     }
 
     fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
-        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // ignore the compiler warning regarding 'path statement having no effect' -- it does: assures no non-power of 2 buffer may be used
+        #[allow(clippy::no_effect)]
+        Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
         // }
@@ -179,6 +180,7 @@ impl<'a, SlotType:          'a + Debug + Default,
 FullSyncMove<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
+    #[allow(clippy::erasing_op)]
     const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
 
 

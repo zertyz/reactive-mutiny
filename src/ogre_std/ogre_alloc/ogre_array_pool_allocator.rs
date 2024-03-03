@@ -7,7 +7,6 @@ use crate::ogre_std::{
 use std::{fmt::{Debug, Formatter}, mem::MaybeUninit, ptr};
 use std::cell::UnsafeCell;
 use std::future::Future;
-use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::pin::Pin;
 

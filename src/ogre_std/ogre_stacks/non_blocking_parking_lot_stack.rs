@@ -71,7 +71,7 @@ impl<SlotType: Copy+Debug, const BUFFER_SIZE: usize, const METRICS: bool, const 
     fn pop(&self) -> Option<SlotType> {
         let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
-        while self.head == 0 {
+        if self.head == 0 {
             if METRICS {
                 mutable_self.pop_empty_count += 1;
             }

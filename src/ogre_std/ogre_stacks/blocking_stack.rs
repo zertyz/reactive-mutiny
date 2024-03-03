@@ -139,6 +139,7 @@ for Stack<SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
     fn push(&self, element: SlotType) -> bool {
         let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
+        #[allow(clippy::while_immutable_condition)]     // self.head might indeed be changed concurrently 
         while self.head >= BUFFER_SIZE as u32 {
             let no_longer_full = mutable_self.report_full();
             if !no_longer_full {
@@ -164,6 +165,7 @@ for Stack<SlotType, BUFFER_SIZE, METRICS, DEBUG, LOCK_TIMEOUT_MILLIS> {
     fn pop(&self) -> Option<SlotType> {
         let mutable_self = unsafe { &mut *(*(self as *const Self as *const std::cell::UnsafeCell<Self>)).get() };
         self.concurrency_guard.lock();
+        #[allow(clippy::while_immutable_condition)]     // self.head might indeed be changed concurrently
         while self.head == 0 {
             let no_longer_empty = mutable_self.report_empty();
             if !no_longer_empty {
