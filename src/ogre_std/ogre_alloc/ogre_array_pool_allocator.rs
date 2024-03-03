@@ -1,11 +1,13 @@
 //! Resting place for [OgreArrayPoolAllocator]
 
 use crate::ogre_std::{
-        ogre_queues::meta_container::MoveContainer,
-        ogre_alloc::types::OgreAllocator,
+    ogre_queues::meta_container::MoveContainer,
+    ogre_alloc::types::BoundedOgreAllocator,
     };
 use std::{fmt::{Debug, Formatter}, mem::MaybeUninit, ptr};
 use std::cell::UnsafeCell;
+use std::future::Future;
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::pin::Pin;
 
@@ -35,8 +37,9 @@ OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
 impl<DataType:        Debug + Send + Sync,
      ContainerType:   MoveContainer<u32>,
      const POOL_SIZE: usize>
-OgreAllocator<DataType> for
+BoundedOgreAllocator<DataType> for
 OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
+    type OwnedSlotType = DataType;
 
     fn new() -> Self {
         Self {
@@ -58,22 +61,34 @@ OgreArrayPoolAllocator<DataType, ContainerType, POOL_SIZE> {
     #[inline(always)]
     fn alloc_ref(&self) -> Option<(&mut DataType, u32)> {
         if let Some(slot_id) = self.free_list.consume_movable() {
-            let mutable_pool = unsafe { &mut * (self.pool.get() as *mut Box<[DataType; POOL_SIZE]>) };
+            let mutable_pool = unsafe { &mut *(self.pool.get() as *mut Box<[DataType; POOL_SIZE]>) };
             let slot_ref = unsafe { mutable_pool.get_unchecked_mut(slot_id as usize) };
-            return Some( ( slot_ref, slot_id) );
+            return Some((slot_ref, slot_id));
         }
         None
     }
 
     #[inline(always)]
-    fn alloc_with<F: FnOnce(&mut DataType)>
-                 (&self, setter: F)
+    fn alloc_with(&self,
+                  setter: impl FnOnce(&mut DataType))
                  -> Option<(/*ref:*/ &mut DataType, /*slot_id:*/ u32)> {
         self.alloc_ref()
             .map(|(slot_ref, slot_id)| {
                 setter(slot_ref);
                 (slot_ref, slot_id)
             })
+    }
+
+    #[inline(always)]
+    async fn alloc_with_async<'r, Fut: Future<Output=(/*ref:*/ &'r mut DataType, /*slot_id:*/ u32)>>
+                             (&'r self,
+                              setter: impl FnOnce(/*ref:*/ &'r mut DataType, /*slot_id:*/ u32) -> Fut)
+                             -> Option<(/*ref:*/ &'r mut DataType, /*slot_id:*/ u32)> {
+        if let Some((slot_ref, slot_id)) = self.alloc_ref() {
+            Some(setter(slot_ref, slot_id).await)
+        } else {
+            None
+        }
     }
 
     #[inline(always)]

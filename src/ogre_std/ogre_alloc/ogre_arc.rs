@@ -1,6 +1,6 @@
 //! Resting place for [OgreArc<>]
 
-use super::types::OgreAllocator;
+use super::types::BoundedOgreAllocator;
 use std::{
     sync::atomic::{
             self,
@@ -15,16 +15,16 @@ use std::{
 
 
 /// Wrapper type for data providing an atomic reference counter for dropping control, similar to `Arc`,
-/// but allowing a custom allocator to be used -- [OgreAllocator].
+/// but allowing a custom allocator to be used -- [BoundedOgreAllocator].
 /// providing reference counting similar to Arc
 pub struct OgreArc<DataType:          Debug + Send + Sync,
-                   OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
+                   OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync + 'static> {
     inner:    NonNull<InnerOgreArc<DataType, OgreAllocatorType>>,
 }
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 OgreArc<DataType, OgreAllocatorType> {
 
 
@@ -135,7 +135,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Default for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -147,7 +147,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Deref for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -162,7 +162,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 DerefMut for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -175,7 +175,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:         Debug + Send + Sync,
-    OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+    OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Clone for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -191,7 +191,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync + Display,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Display for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -202,7 +202,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Debug for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -214,7 +214,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 PartialEq<Self> for
 OgreArc<DataType, OgreAllocatorType>
 where DataType: PartialEq {
@@ -226,7 +226,7 @@ where DataType: PartialEq {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Drop for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -246,19 +246,19 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 unsafe impl<DataType:          Debug + Send + Sync,
-            OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+            OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Send for
 OgreArc<DataType, OgreAllocatorType> {}
 
 unsafe impl<DataType:          Debug + Send + Sync,
-            OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+            OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Sync for
 OgreArc<DataType, OgreAllocatorType> {}
 
 
 /// This is the Unique part that cloned [OgreArc]s reference to
 struct InnerOgreArc<DataType:          Debug + Send + Sync,
-                    OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
+                    OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync + 'static> {
     allocator:        &'static OgreAllocatorType,
     data_id:          u32,
     references_count: AtomicU32,
@@ -267,7 +267,7 @@ struct InnerOgreArc<DataType:          Debug + Send + Sync,
 
 
 impl<DataType:         Debug + Send + Sync,
-    OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+    OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Debug for
 InnerOgreArc<DataType, OgreAllocatorType> {
 

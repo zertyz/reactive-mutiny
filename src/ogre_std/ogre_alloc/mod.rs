@@ -7,7 +7,7 @@
 //! additions, as the possibility of sharing them with other processes or offloading fat ones to the disk, to avoid swapping.
 
 mod types;
-pub use types::{OgreAllocator};
+pub use types::{BoundedOgreAllocator};
 mod types_impls;
 
 pub mod ogre_arc;

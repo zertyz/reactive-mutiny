@@ -7,7 +7,7 @@ use crate::ogre_std::{
         meta_subscriber::{MetaSubscriber,MoveSubscriber},
         meta_container::{MetaContainer, MoveContainer},
     },
-    ogre_alloc::OgreAllocator,
+    ogre_alloc::BoundedOgreAllocator,
 };
 use std::{
     fmt::Debug,
@@ -26,7 +26,7 @@ use std::{
 /// For thinner payloads, [AtomicMove] should be a better fit, as it doesn't require a secondary container to
 /// hold the objects.
 pub struct AtomicZeroCopy<SlotType:          Debug,
-                          OgreAllocatorType: OgreAllocator<SlotType>,
+                          OgreAllocatorType: BoundedOgreAllocator<SlotType>,
                           const BUFFER_SIZE: usize> {
 
     pub(crate) allocator: Arc<OgreAllocatorType>,
@@ -36,7 +36,7 @@ pub struct AtomicZeroCopy<SlotType:          Debug,
 
 
 impl<'a, SlotType:          'a + Debug,
-         OgreAllocatorType: OgreAllocator<SlotType> + 'a,
+         OgreAllocatorType: BoundedOgreAllocator<SlotType> + 'a,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
 AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
@@ -52,7 +52,7 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
 
 impl<'a, SlotType:          'a + Debug,
-         OgreAllocatorType: OgreAllocator<SlotType> + 'a,
+         OgreAllocatorType: BoundedOgreAllocator<SlotType> + 'a,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
 AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
@@ -121,7 +121,7 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
 
 impl<'a, SlotType:          'a + Debug,
-         OgreAllocatorType: OgreAllocator<SlotType> + 'a,
+         OgreAllocatorType: BoundedOgreAllocator<SlotType> + 'a,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
 AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {

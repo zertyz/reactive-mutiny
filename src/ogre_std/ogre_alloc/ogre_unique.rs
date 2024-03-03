@@ -1,8 +1,8 @@
 //! Resting place for [OgreUnique<>]
 
 use crate::ogre_std::ogre_alloc::{
-        ogre_arc::OgreArc,
-        OgreAllocator,
+    ogre_arc::OgreArc,
+    BoundedOgreAllocator,
     };
 use std::{
     ops::Deref,
@@ -10,17 +10,17 @@ use std::{
 };
 
 
-/// Wrapper type for data that requires a custom Drop to be called (through an [OgreAllocator]).
+/// Wrapper type for data that requires a custom Drop to be called (through an [BoundedOgreAllocator]).
 /// Similar to C++'s `unique_ptr`
 pub struct OgreUnique<DataType:          Debug + Send + Sync + 'static,
-                      OgreAllocatorType: OgreAllocator<DataType> + Send + Sync + 'static> {
+                      OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync + 'static> {
     allocator: &'static OgreAllocatorType,
     data_ref:  &'static DataType,
 }
 
 
 impl<DataType:          Debug + Send + Sync + 'static,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 OgreUnique<DataType, OgreAllocatorType> {
 
     #[inline(always)]
@@ -56,7 +56,7 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Deref for
 OgreUnique<DataType, OgreAllocatorType> {
 
@@ -70,7 +70,7 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 AsRef<DataType> for
 OgreUnique<DataType, OgreAllocatorType> {
 
@@ -83,7 +83,7 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync + Display,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Display for
 OgreUnique<DataType, OgreAllocatorType> {
 
@@ -94,7 +94,7 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Debug for
 OgreUnique<DataType, OgreAllocatorType> {
 
@@ -106,7 +106,7 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 PartialEq<DataType> for
 OgreUnique<DataType, OgreAllocatorType>
 where DataType: PartialEq {
@@ -119,7 +119,7 @@ where DataType: PartialEq {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 From<OgreUnique<DataType, OgreAllocatorType>> for
 OgreArc<DataType, OgreAllocatorType> {
 
@@ -131,7 +131,7 @@ OgreArc<DataType, OgreAllocatorType> {
 
 
 impl<DataType:          Debug + Send + Sync,
-     OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Drop for
 OgreUnique<DataType, OgreAllocatorType> {
 
@@ -143,12 +143,12 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 
 unsafe impl<DataType:          Debug + Send + Sync,
-            OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+            OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Send for
 OgreUnique<DataType, OgreAllocatorType> {}
 
 unsafe impl<DataType:          Debug + Send + Sync,
-            OgreAllocatorType: OgreAllocator<DataType> + Send + Sync>
+            OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
 Sync for
 OgreUnique<DataType, OgreAllocatorType> {}
 

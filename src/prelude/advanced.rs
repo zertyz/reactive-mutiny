@@ -7,7 +7,7 @@ pub use crate::{
     prelude::*,
     types::{FullDuplexUniChannel, FullDuplexMultiChannel},
     ogre_std::ogre_alloc::{
-        OgreAllocator,
+        BoundedOgreAllocator,
         ogre_arc::OgreArc,
         ogre_unique::OgreUnique,
     }

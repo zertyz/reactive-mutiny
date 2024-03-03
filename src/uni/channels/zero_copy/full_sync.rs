@@ -10,7 +10,7 @@ use crate::{
         },
         ogre_alloc::{
             ogre_unique::OgreUnique,
-            OgreAllocator,
+            BoundedOgreAllocator,
         }
     },
     streams_manager::StreamsManagerBase,
@@ -36,7 +36,7 @@ use async_trait::async_trait;
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
 /// operation -- no copies either when producing the event nor when consuming it, nor when passing it along to application logic functions.
 pub struct FullSync<'a, ItemType:          Debug + Send + Sync,
-                        OgreAllocatorType: OgreAllocator<ItemType> + 'a,
+                        OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'a,
                         const BUFFER_SIZE: usize,
                         const MAX_STREAMS: usize> {
 
@@ -51,7 +51,7 @@ pub struct FullSync<'a, ItemType:          Debug + Send + Sync,
 
 #[async_trait]
 impl<'a, ItemType:          Debug + Send + Sync,
-         OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
+         OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelCommon<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
@@ -103,7 +103,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl<'a, ItemType:          Debug + Send + Sync,
-         OgreAllocatorType: OgreAllocator<ItemType> + 'a + Send + Sync,
+         OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelUni<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
@@ -119,7 +119,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl<'a, ItemType:          'a + Debug + Send + Sync,
-         OgreAllocatorType: 'a + OgreAllocator<ItemType> + Send + Sync,
+         OgreAllocatorType: 'a + BoundedOgreAllocator<ItemType> + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelProducer<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
@@ -160,7 +160,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl<'a, ItemType:          'a + Debug + Send + Sync,
-         OgreAllocatorType: 'a + OgreAllocator<ItemType> + Send + Sync,
+         OgreAllocatorType: 'a + BoundedOgreAllocator<ItemType> + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
 ChannelConsumer<'a, OgreUnique<ItemType, OgreAllocatorType>>
@@ -189,7 +189,7 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
 
 impl <ItemType:          'static + Debug + Send + Sync,
-      OgreAllocatorType: OgreAllocator<ItemType> + 'static + Send + Sync,
+      OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'static + Send + Sync,
       const BUFFER_SIZE: usize,
       const MAX_STREAMS: usize>
 FullDuplexUniChannel

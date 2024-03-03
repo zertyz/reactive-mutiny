@@ -17,6 +17,22 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 
 # Being-Done
 
+**(f20)** 2024-03-02: Expose `BoundedOgreAllocator` functionalities to the `ChannelProducer`:
+Some users of our trait -- specially `reactive-messaging` -- work in close relation with `ChannelProducer`s.
+To allow them to have a simpler type system, we should add more items to our trait to intermediate the talk with the
+underlying allocator:
+  1) Allocate a slot
+  2) Free an allocated slot
+  3) Upgrade the medium version, as this API change introduces backwards incompatibilities 
+
+**(f21)** 2024-03-02: Possibly introduce the `OgreBoundedBoxAllocator` to enable advanced usage in `reactive-messaging`:
+This will enable `reactive-messaging` to receive variable sized binary messages.
+This should be better explored, as it seems there are options. Use cases tests should be added for sending
+RKYV's "Archived" structs and changes / implementations should follow from there.
+
+
+# Backlog
+  
 **(r18)** 2023-08-02: Eventually drop all Multi Arc channels, as they are a not good fit for our retrying model -- see the TODOs with the same date 
 
 **(b8)** 2023-05-30: No function should panic! for non-bug scenarios: `Result<>`s should be returned instead
@@ -29,11 +45,6 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 
 **(n9)** Include benchmarks for tokio::sync::broadcast -- a Multi channel. If they have good performance, include this channel in our Multi. They also have a "watch" in addition to "broadcast", but it is unknown if watch attends to our requisites
 
-
-
-
-# Backlog
-  
 **(b4)** 2023-05-30: fix the broken tests for the broken queues after the last abstractions added to it in early May
 
 **(r5)** 2023-05-30: add the github actions for CI/CD
@@ -52,15 +63,17 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 
 # Done
 
-**(0)** 2022/2023: ((past improvements were not documented here yet))
-
-**(r1)** 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
-
-**(f10)** 2023-06-05: Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures -- the same for Multi
-
-**(b11)** 2023-06-14: there seems to be no known way of passing the stream processing logic down a complex call chain
-
-**(r12)** 2023-06-14: Unify `UniBuilder` & `Uni`, for types simplification & symmetry with how `Multi`s work -- causing a MAJOR version upgrade
+**(r19)** 2024-03-02: Flexibilize our `OgreAllocator`:
+Currently, our `OgreAllocator` is better described as a `BoundedOgreAllocator` -- due to the fact that allocated slots have an `id`.
+Although we are Generic on the `SlotType`, the returned product of the allocation operations is fixed as `&mut SlotType`.
+and, more importantly, there is no way for an allocation to be done externally -- as required in **f(21)**.
+This task is about improving this situation to enabling **(f20)** and **(f21)** along the way. Steps:
+  1) Introduce the GAT type `OwnedSlotType`. For reference, all current usages of this trait
+     will have it set to `SlotType` -- a different usage will be `Box<SlotType` when doing **f(21)**
+  2) Add the **f(21)** related function `with_external_alloc()`, enabling an allocation to be done externally, via a callback.
+     Note that implementing this method might not make sense to the current Array Allocator... maybe a future refactor may solve this better. 
+  3) Add the async version of `alloc_with()`, also related to **f(21)**
+  4) Rename the trait to `BoundedOgreAllocator`.
 
 **(f14)** 2023-08-02: Some API changes due to user feedback regarding retries:
   1) All the Channel publishing functions (all the way down to the containers) are now fully zero-copy compliant -- including any retrying.
@@ -70,6 +83,16 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
   3) The aforementioned functions returns a `keen-retry` result, enabling users to add their own retry logic 
   4) Introduced Uni/Multi Channels `is_channel_open()` to provide information for retrying logic
   5) **(b8)** can also be considered done, as panic! is no longer part of any (non-bug) logic
+
+**(r12)** 2023-06-14: Unify `UniBuilder` & `Uni`, for types simplification & symmetry with how `Multi`s work -- causing a MAJOR version upgrade
+
+**(b11)** 2023-06-14: there seems to be no known way of passing the stream processing logic down a complex call chain
+
+**(f10)** 2023-06-05: Unis must be able to process all the combinations of fallible/non-fallible & futures/non-futures -- the same for Multi
+
+**(r1)** 2023-05-30: Images used in the README must be .png rather than .svg, so they may appear in crates.io
+
+**(0)** 2022/2023: ((past improvements were not documented here yet))
 
 
 

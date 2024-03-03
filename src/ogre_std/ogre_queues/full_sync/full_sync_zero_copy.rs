@@ -7,7 +7,7 @@ use crate::ogre_std::{
         meta_subscriber::{MetaSubscriber,MoveSubscriber},
         meta_container::{MetaContainer, MoveContainer},
     },
-    ogre_alloc::OgreAllocator,
+    ogre_alloc::BoundedOgreAllocator,
 };
 use std::{
     num::NonZeroU32,
@@ -26,7 +26,7 @@ use std::{
 /// For thinner payloads, [FullSyncMove] should be a better fit, as it doesn't require a secondary container to
 /// hold the objects.
 pub struct FullSyncZeroCopy<SlotType:          Debug + Send + Sync,
-                            OgreAllocatorType: OgreAllocator<SlotType>,
+                            OgreAllocatorType: BoundedOgreAllocator<SlotType>,
                             const BUFFER_SIZE: usize> {
 
     pub(crate) allocator: Arc<OgreAllocatorType>,
@@ -37,7 +37,7 @@ pub struct FullSyncZeroCopy<SlotType:          Debug + Send + Sync,
 
 
 impl<'a, SlotType:          'a + Debug + Send + Sync,
-         OgreAllocatorType: OgreAllocator<SlotType>,
+         OgreAllocatorType: BoundedOgreAllocator<SlotType>,
          const BUFFER_SIZE: usize>
 MetaContainer<'a, SlotType> for
 FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
@@ -53,7 +53,7 @@ FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
 
 impl<'a, SlotType:          'a + Debug + Send + Sync,
-         OgreAllocatorType: OgreAllocator<SlotType>,
+         OgreAllocatorType: BoundedOgreAllocator<SlotType>,
          const BUFFER_SIZE: usize>
 MetaPublisher<'a, SlotType> for
 FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
@@ -122,7 +122,7 @@ FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 
 
 impl<'a, SlotType:          'a + Debug + Sync + Send,
-         OgreAllocatorType: OgreAllocator<SlotType>,
+         OgreAllocatorType: BoundedOgreAllocator<SlotType>,
          const BUFFER_SIZE: usize>
 MetaSubscriber<'a, SlotType> for
 FullSyncZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
