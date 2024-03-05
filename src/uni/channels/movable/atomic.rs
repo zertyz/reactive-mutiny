@@ -23,8 +23,10 @@ use std::{
     task::Waker,
     sync::Arc,
 };
+use std::future::Future;
 use std::marker::PhantomData;
 use async_trait::async_trait;
+use keen_retry::RetryConsumerResult;
 
 
 /// A Uni channel, backed by an [AtomicMove], that may be used to create as many streams as `MAX_STREAMS` -- which must only be dropped when it is time to drop this channel
@@ -35,8 +37,8 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug + Default,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channel:       AtomicMove<ItemType, BUFFER_SIZE>,
-    _phanrom: PhantomData<&'a ItemType>,
+    channel:         AtomicMove<ItemType, BUFFER_SIZE>,
+    _phantom:        PhantomData<&'a ItemType>,
 
 }
 
@@ -51,7 +53,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             channel:         AtomicMove::<ItemType, BUFFER_SIZE>::new(),
-            _phanrom: PhantomData,
+            _phantom: PhantomData,
         })
     }
 
@@ -152,6 +154,40 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         }
     }
 
+    #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
+                             Fut: Future<Output=()>>
+                            (&self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((mut slot, slot_id, len_before)) = self.channel.leak_slot_internal(|| false) {
+            setter(&mut slot).await;
+            self.channel.publish_leaked_internal(slot_id);
+            if len_before < MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_before);
+            }
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+        self.channel.leak_slot_internal(|| false)
+            .map(|(slot_ref, _slot_id, _len_before)| slot_ref)
+    }
+
+    #[inline(always)]
+    fn send_reserved(&self, reserved_slot: &mut ItemType) {
+        let slot_id = self.channel.slot_id_from_slot_ref(reserved_slot);
+        self.channel.publish_leaked_internal(slot_id);
+    }
+
+    #[inline(always)]
+    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
+        let slot_id = self.channel.slot_id_from_slot_ref(reserved_slot);
+        self.channel.release_leaked_internal(slot_id);
+    }
 }
 
 impl<'a, ItemType:          'a + Send + Sync + Debug + Default,

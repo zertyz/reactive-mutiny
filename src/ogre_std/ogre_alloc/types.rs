@@ -56,7 +56,7 @@ pub trait BoundedOgreAllocator<SlotType: Debug>
     ///       but Box<> allocators do.
     /// IMPLEMENTORS: #[inline(always)]
     fn with_external_alloc(&self,
-                           _f: impl FnOnce(/*externally_allocated_slot: */) -> Self::OwnedSlotType)
+                           _f: impl FnOnce() -> Self::OwnedSlotType)
                           -> Option<(/*ref:*/ &mut SlotType, /*slot_id:*/ u32)> {
         panic!("This method is not available to {}, as this couldn't be made zero-copy",
                std::any::type_name::<Self>());

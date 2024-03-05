@@ -185,7 +185,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     /// This implementation enables other slots to be returned to the pool while there are allocated (but still unpublished) slots around,
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
-    fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&mut SlotType, /*slot_id:*/ u32, /*len_before:*/ u32)> {
+    pub fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&mut SlotType, /*slot_id:*/ u32, /*len_before:*/ u32)> {
         let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
         let mut slot_id = self.enqueuer_tail.fetch_add(1, Relaxed);
         let mut len_before;
@@ -212,7 +212,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     /// marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
     /// that started with a call to [leak_slot_internal()]
     #[inline(always)]
-    fn publish_leaked_internal(&'a self, slot_id: u32) {
+    pub fn publish_leaked_internal(&'a self, slot_id: u32) {
         loop {
             match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Relaxed) {
                 Ok(_) => break,
@@ -276,7 +276,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     /// makes the `slot_id` available to the pool, for reuse,
     /// after the referenced data has been processed (aka, consumed)
     #[inline(always)]
-    fn release_leaked_internal(&self, slot_id: u32) {
+    pub fn release_leaked_internal(&self, slot_id: u32) {
         loop {
             match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
                 Ok(_) => break,
@@ -289,7 +289,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
 
     /// returns the id (within the Ring Buffer) that the given `slot` reference occupies
     #[inline(always)]
-    fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
+    pub fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
         (( unsafe { (slot as *const SlotType).offset_from(self.buffer.get() as *const SlotType) } ) as usize) as u32
     }
 

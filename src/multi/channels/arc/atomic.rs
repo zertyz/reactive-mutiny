@@ -18,8 +18,10 @@ use std::{
     task::Waker,
     mem::MaybeUninit,
 };
+use std::future::Future;
 use std::marker::PhantomData;
 use async_trait::async_trait;
+use keen_retry::RetryConsumerResult;
 use log::warn;
 
 
@@ -153,6 +155,20 @@ Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
+                             Fut: Future<Output=()>>
+                            (&self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        let mut item = MaybeUninit::uninit();
+        let item_ref = unsafe { &mut *item.as_mut_ptr() };
+        setter(item_ref).await;
+        let item = unsafe { item.assume_init() };
+        let arc_item = Arc::new(item);
+        _ = self.send_derived(&arc_item);
+        keen_retry::RetryResult::Ok { reported_input: (), output: () }
+    }
+
+    #[inline(always)]
     fn send_derived(&self, arc_item: &Arc<ItemType>) -> bool {
         for stream_id in self.streams_manager.used_streams() {
             if *stream_id == u32::MAX {
@@ -178,6 +194,24 @@ std::thread::sleep(Duration::from_millis(500));
             }
         }
         true
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&self) -> Option<&'a mut ItemType> {
+        panic!("This doesn't, currently, make sense for this implementation")
+        // Some(&mut Arc::new(ItemType::default()))
+    }
+
+    #[inline(always)]
+    fn send_reserved(&self, reserved_slot: &mut ItemType) {
+        panic!("This doesn't, currently, make sense for this implementation")
+        // _ = self.send_derived(reserved_slot);
+    }
+
+    #[inline(always)]
+    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
+        panic!("This doesn't, currently, make sense for this implementation")
+        // noop?
     }
 }
 

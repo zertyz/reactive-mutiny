@@ -75,7 +75,6 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
             Some( (slot, len_before) ) => {
                 unsafe { ptr::write(slot, item); }
                 self.publish_leaked_internal();
-                ogre_sync::unlock(&self.concurrency_guard);
                 (NonZeroU32::new(len_before+1), None)
             },
             None => (None, Some(item)),
@@ -95,7 +94,6 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
             Some( (slot_ref, len_before) ) => {
                 setter_fn(slot_ref);
                 self.publish_leaked_internal();
-                ogre_sync::unlock(&self.concurrency_guard);
                 report_len_after_enqueueing_fn(len_before+1);
                 None
             }
@@ -191,7 +189,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// This implementation enables other slots to be returned to the pool while there are allocated (but still unpublished) slots around,
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
-    fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ u32)> {
+    pub fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ u32)> {
         let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
         let mut len_before;
         loop {
@@ -215,17 +213,19 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// that started with a call to [leak_slot_internal()].\
     /// -- assumes the lock is in the acquired state
     #[inline(always)]
-    fn publish_leaked_internal(&self) {
+    pub fn publish_leaked_internal(&self) {
         let tail = unsafe { &mut * self.tail.get() };
         *tail = tail.overflowing_add(1).0;
+        ogre_sync::unlock(&self.concurrency_guard);
     }
 
     /// adds back to the pool the slot just acquired by [leak_slot_internal()], disrupting the publishing pattern\
     /// -- assumes the lock is in the acquired state, leaving it untouched
     #[inline(always)]
-    fn unleak_internal(&self) {
+    pub fn unleak_internal(&self) {
         let tail = unsafe { &mut * self.tail.get() };
         *tail = tail.overflowing_sub(1).0;
+        ogre_sync::unlock(&self.concurrency_guard);
     }
 
     /// gets hold of a reference to the slot containing the next data to be processed, LEAVING THE LOCK IN THE ACQUIRED STATE IN CASE IT SUCCEEDS,\

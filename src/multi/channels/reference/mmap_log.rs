@@ -18,7 +18,9 @@ use std::{
     fmt::Debug,
     task::Waker,
 };
+use std::future::Future;
 use async_trait::async_trait;
+use keen_retry::RetryConsumerResult;
 
 
 const BUFFER_SIZE: usize = 1<<38;
@@ -180,6 +182,7 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
             (Some(_tail), _none_setter) => {
                 let running_streams_count = self.streams_manager.running_streams_count();
                 let used_streams = self.streams_manager.used_streams();
+                // TODO 2024-03-05: can this Stream awakening be optimized, like on the zero-copy channels? Tests should prove it.
                 for i in 0..running_streams_count {
                     let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
                     if stream_id != u32::MAX {
@@ -195,8 +198,49 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
     }
 
     #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
+                             Fut: Future<Output=()>>
+                            (&self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((slot, _slot_id)) = self.log_queue.leak_slot() {
+            setter(slot).await;
+            self.log_queue.publish_leaked_ref(slot);
+            let running_streams_count = self.streams_manager.running_streams_count();
+            let used_streams = self.streams_manager.used_streams();
+            // TODO 2024-03-05: can this Stream awakening be optimized, like on the zero-copy channels? Tests should prove it.
+            for i in 0..running_streams_count {
+                let stream_id = *unsafe { used_streams.get_unchecked(i as usize) };
+                if stream_id != u32::MAX {
+                    self.streams_manager.wake_stream(stream_id);
+                }
+            }
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+    }
+
+    #[inline(always)]
     fn send_derived(&self, _derived_item: &&'static ItemType) -> bool {
         todo!("reactive_mutiny::multi::channels::references::MMapLog: `send_derived()` is not implemented for the MMapLog Multi channel '{}' -- it doesn't make sense to place a reference in an mmap", self.streams_manager.name())
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+        self.log_queue.leak_slot()
+            .map(|(slot_ref, _slot_id)| slot_ref)
+    }
+
+    #[inline(always)]
+    fn send_reserved(&self, reserved_slot: &mut ItemType) {
+        if self.log_queue.publish_leaked_ref(reserved_slot).is_none() {
+            panic!("reactive-mutiny: mmap_log channel :: send_reserved() BUG! could not publish a previously leaked slot");
+        }
+    }
+
+    #[inline(always)]
+    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
+        self.log_queue.unleak_slot_ref(reserved_slot)
     }
 }
 

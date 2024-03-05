@@ -30,7 +30,9 @@ use std::{
     sync::Arc,
     marker::PhantomData,
 };
+use std::future::Future;
 use async_trait::async_trait;
+use keen_retry::RetryConsumerResult;
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -166,6 +168,50 @@ for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
                 keen_retry::RetryResult::Transient { input: some_setter.expect("reactive-mutiny: uni zero-copy atomic::send_with() BUG! None `some_setter`"), error: () }
             },
         }
+    }
+
+    #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
+                             Fut: Future<Output=()>>
+                            (&self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((mut slot, _slot_id)) = self.channel.leak_slot() {
+            setter(&mut slot).await;
+            let Some(len_after) = self.channel.publish_leaked_ref(slot) else {
+                panic!("reactive-mutiny: uni zero-copy atomic::send_with_async() BUG! could not publish a previously leaked slot");
+            };
+            let len_after = len_after.get();
+            if len_after <= MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_after - 1)
+            } else if len_after == 1 + MAX_STREAMS as u32 {
+                // the Atomic queue may enqueue at the same time it dequeues, so,
+                // on high pressure for production / consumption & low event payloads (like in our tests),
+                // the Stream might have dequeued the last element, another enqueue just finished and we triggered the wake before
+                // the Stream had returned, leaving an element stuck. This code works around this and is required only for the Atomic Queue.
+                self.streams_manager.wake_stream(len_after - 2)
+            }
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+        self.channel.leak_slot()
+            .map(|(slot_ref, _slot_id)| slot_ref)
+    }
+
+    #[inline(always)]
+    fn send_reserved(&self, reserved_slot: &mut ItemType) {
+        if self.channel.publish_leaked_ref(reserved_slot).is_none() {
+            panic!("reactive-mutiny: uni zero-copy atomic::send_reserved() BUG! could not publish a previously leaked slot");
+        }
+    }
+
+    #[inline(always)]
+    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
+        self.channel.release_leaked_ref(reserved_slot)
     }
 }
 

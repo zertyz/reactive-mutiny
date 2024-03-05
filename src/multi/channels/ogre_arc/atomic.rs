@@ -23,9 +23,11 @@ use std::{
     fmt::Debug,
     task::Waker,
 };
+use std::future::Future;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use async_trait::async_trait;
+use keen_retry::RetryConsumerResult;
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
@@ -171,6 +173,20 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
+                             Fut: Future<Output=()>>
+                            (&self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((ogre_arc_item, slot)) = OgreArc::new(&self.allocator) {
+            setter(slot).await;
+            _ = self.send_derived(&ogre_arc_item);
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+    }
+
+    #[inline(always)]
     fn send_derived(&self, ogre_arc_item: &OgreArc<ItemType, OgreAllocatorType>) -> bool {
         let running_streams_count = self.streams_manager.running_streams_count();
         unsafe { ogre_arc_item.increment_references(running_streams_count) };
@@ -195,6 +211,24 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
             }
         }
         true
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+        self.allocator.alloc_ref()
+            .map(|(slot_ref, _slot_id)| slot_ref)
+    }
+
+    #[inline(always)]
+    fn send_reserved(&self, reserved_slot: &mut ItemType) {
+        let slot_id = self.allocator.id_from_ref(reserved_slot);
+        let ogre_arc = OgreArc::from_allocated(slot_id, &self.allocator);
+        _ = self.send_derived(&ogre_arc);
+    }
+
+    #[inline(always)]
+    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
+        self.allocator.dealloc_ref(reserved_slot)
     }
 }
 

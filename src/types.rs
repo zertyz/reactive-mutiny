@@ -7,6 +7,7 @@ use std::{
     task::Waker,
     fmt::Debug,
 };
+use std::future::Future;
 use std::sync::Arc;
 use async_trait::async_trait;
 
@@ -121,7 +122,7 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
                               DerivedItemType: 'a + Debug> {
 
     /// Similar to [Self::send_with()], but for sending the already-built `item`.\
-    /// See there for how to deal with the returned type.
+    /// See there for how to deal with the returned type.\
     /// IMPLEMENTORS: #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
     fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()>;
@@ -137,10 +138,36 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     ///         .into()?;
     /// ```
     /// NOTE: this type may allow the compiler some extra optimization steps when compared to [Self::send()]. When tuning for performance,
-    /// it is advisable to try this method
+    /// it is advisable to try this method.\
     /// IMPLEMENTORS: #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), F>`"]
-    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
+    fn send_with<F: FnOnce(&mut ItemType)>
+                (&self,
+                 setter: F)
+                -> keen_retry::RetryConsumerResult<(), F, ()>;
+    
+    /// Similar to [Self::send_with(), but accepts an async `setter`.
+    /// This method is useful on sending operations that depend on data acquired by IO operations, allowing
+    /// select loops like the following to be built:
+    /// ```nocompile
+    ///     tokio::select! {
+    ///         _ => async {
+    ///             channel_producer.send_with_async(|slot| async {
+    ///                 let data = data_source.read().await;
+    ///                 fill_slot(data, &mut slot);
+    ///             }).await
+    ///         },
+    ///        (...other select arms that may execute concurrently with the above arm...)
+    ///     }
+    /// ```
+    /// IMPLEMENTORS: #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
+                             Fut: Future<Output=()>>
+                            (&self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
+    
+    // TODO: 2024-03-04: this is to be filled in by **(f21)**. Possibly an extra dependency on the allocator will be needed for the `BoundedOgreAllocator::OwnedSlotType`
+    // fn send_with_external_alloc();
 
     /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
     /// -- for instance: if the Stream consumes `Arc<String>` (the derived item type) and the channel is for `Strings`, With this method one may send an `Arc` directly.\
@@ -151,6 +178,17 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     fn send_derived(&self, _derived_item: &DerivedItemType) -> bool {
         todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose `Stream` items will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
+    
+    /// Proxy to [crate::prelude::advanced::BoundedOgreAllocator::alloc_ref()] from the underlying allocator,
+    /// allowing caller to fill in the data as they wish -- in a non-blocking prone API.\
+    /// See also [Self::send_reserved()] and [Self::cancel_slot_reserve()].
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType>;
+
+    /// Sends an item previously reserved by [Self::reserve_slot()].
+    fn send_reserved(&self, reserved_slot: &mut ItemType);
+    
+    /// Give up sending an item previously reserved by [Self::reserve_slot()], freeing it / setting its resources for reuse.
+    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType);
 
 }
 
