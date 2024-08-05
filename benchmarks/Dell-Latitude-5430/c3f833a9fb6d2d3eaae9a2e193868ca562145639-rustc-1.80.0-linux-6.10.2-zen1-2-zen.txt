@@ -1,0 +1,23 @@
+On this code, you may see how to build `Uni`s and `Multi`s using all the available channels
+-- each providing tradeoffs between features and performance.
+So, here are performance characteristics of passing our `ExchangeEvent` through all the different channels -- for all `Uni`s and `Multi`s:
+
+Uni:
+    Move:
+        Atomic    : 15475336.87/s ✓
+        Crossbeam : 22040273.44/s ✓
+        Full Sync : 35061025.29/s ✓
+    Zero-Copy:
+        Atomic    : 9175011.26/s ✓
+        Full Sync : 19802137.42/s ✓
+
+Multi:
+    Arc:
+        Atomic    : 3042552.99/s ✓
+        Crossbeam : 3765493.93/s ✓
+        FullSync  : 2860867.65/s ✓
+    OgreArc:
+        Atomic    : 2724939.07/s ✓
+        FullSync  : 2859997.51/s ✓
+    Reference:
+        MmapLog   : 7826770.62/s ✓
