@@ -20,7 +20,6 @@ use std::{
 };
 use std::future::Future;
 use async_trait::async_trait;
-use keen_retry::RetryConsumerResult;
 
 
 const BUFFER_SIZE: usize = 1<<38;
@@ -198,12 +197,12 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
-                             Fut: Future<Output=()>>
-                            (&self,
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
                              setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         if let Some((slot, _slot_id)) = self.log_queue.leak_slot() {
-            setter(slot).await;
+            let slot = setter(slot).await;
             self.log_queue.publish_leaked_ref(slot);
             let running_streams_count = self.streams_manager.running_streams_count();
             let used_streams = self.streams_manager.used_streams();
@@ -232,15 +231,14 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn send_reserved(&self, reserved_slot: &mut ItemType) {
-        if self.log_queue.publish_leaked_ref(reserved_slot).is_none() {
-            panic!("reactive-mutiny: mmap_log channel :: send_reserved() BUG! could not publish a previously leaked slot");
-        }
+    fn try_send_reserved(&self, reserved_slot: &mut ItemType) -> bool {
+        self.log_queue.publish_leaked_ref(reserved_slot).is_some()
     }
 
     #[inline(always)]
-    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
-        self.log_queue.unleak_slot_ref(reserved_slot)
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut ItemType) -> bool {
+        self.log_queue.unleak_slot_ref(reserved_slot);
+        todo!("Complete this implementation");
     }
 }
 

@@ -283,7 +283,8 @@ StreamExecutor<INSTRUMENTS_USIZE> {
 
     /// Spawns an optimized executor for a Stream of `ItemType`s which are:
     ///   * Futures  -- `ItemType := Future<Output=InnerFallibleType>`
-    ///   * Fallible -- `InnerFallibleType := Result<InnerType, Box<dyn std::error::Error>>.`\
+    ///   * Fallible -- `InnerFallibleType := Result<InnerType, Box<dyn std::error::Error>>.`
+    /// 
     /// NOTE: special (optimized) versions are spawned depending if we should or not enforce each item's `Future` a resolution timeout.\
     /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
     pub fn spawn_executor<OutItemType:        Send + Debug,
@@ -488,6 +489,7 @@ StreamExecutor<INSTRUMENTS_USIZE> {
 
     /// Spawns an optimized executor for a Stream of `FallibleItemType`s, where:\
     ///   * `FallibleItemType := Result<OutItemType, Box<dyn std::error::Error + Send + Sync>>`
+    /// 
     /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
     pub fn spawn_fallibles_executor<OutItemType:        Send + Debug,
                                     CloseVoidAsyncType: Future<Output=()> + Send + 'static>
@@ -528,6 +530,7 @@ StreamExecutor<INSTRUMENTS_USIZE> {
 
     /// Spawns an executor for a Stream of `ItemType`s which are not Futures but are fallible:
     ///   * `InnerFallibleType := Result<ItemType, Box<dyn std::error::Error>>`
+    /// 
     /// `stream_ended_callback()` should be either a closure or a generic function declared with `<StreamExecutorType: StreamExecutorStats>(executor_stats: Arc<StreamExecutorStats>)`
     pub fn spawn_non_futures_executor<ItemType:          Send + Debug,
                                       VoidAsyncType:     Future<Output=()> + Send + 'static>

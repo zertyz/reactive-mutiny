@@ -23,12 +23,52 @@ To allow them to have a simpler type system, we should add more items to our tra
 underlying allocator:
   1) Allocate a slot
   2) Free an allocated slot
-  3) Upgrade the medium version, as this API change introduces backwards incompatibilities 
+  3) Upgrade the medium version, as this API change introduces backwards incompatibilities
+  4) Bonus: The above lets us easily add a `.send_with_async(async_producer_closure)` method. Lets do it! 
 
 **(f21)** 2024-03-02: Possibly introduce the `OgreBoundedBoxAllocator` to enable advanced usage in `reactive-messaging`:
 This will enable `reactive-messaging` to receive variable sized binary messages.
 This should be better explored, as it seems there are options. Use cases tests should be added for sending
 RKYV's "Archived" structs and changes / implementations should follow from there.
+
+**(f22)** 2024-09-01: Complete & homogenize all channel implementations:
+Specially after **(f20)**, channels got new experimental & cool functionalities -- even if not all channels got an initial
+implementation for the features introduced there. This story is about making sure channels properly implement all the features
+they support & that a final pass was made to make all of them use similar patterns and, preferably, the same traits.
+  * **New Traits**: The new traits would be: `AsyncChannel`, `AdvancedChannelSemantics` & possibly others. Those are
+    "Functional Traits", as they specify additional operations the channel support. Keep in mind that not all channels may implement
+    all functionalities efficiently. As an example, the Crossbeam channel would need an auxiliary vector to support the
+    `reserve_slot()` / `try_send_reserved()` / `try_cancel_slot_reserve()` semantics -- and, since our crate is to provide
+    as-efficient-as-possible channels, this kind of workaround should not be done.
+  * Multi (arc) channels bug: The issue reported at https://github.com/zertyz/reactive-mutiny/issues/1 can also make part
+    of this review and, should we choose not to drop those channels, the inability to support the use case described there
+    should be expressed by the traits the affected channels implement or not.
+  * Take an extra care to complete the implementation of the `mmap_log` channel, also adding traits that expresses its
+    unique abilities.
+  * Some trait patterns, coded here in base64, may serve as an inspiration:
+    dHJhaXQgQ2hhbm5lbCB7CiAgICBmbiBzZW5kKCZzZWxmKTsKfQoKdHJhaXQgQWR2YW5jZWRDaGFu
+    bmVsU2VtYW50aWNzIHsKICAgIGZuIHJlc2VydmUoJnNlbGYpOwp9Cgp0cmFpdCBBc3luY0NoYW5u
+    ZWw6IENoYW5uZWwgKyBBZHZhbmNlZENoYW5uZWxTZW1hbnRpY3MgewogICAgZm4gc2VuZF93aXRo
+    X2FzeW5jKCZzZWxmKSB7CiAgICAgICAgcHJpbnRsbiEoIlRoaXMgY2hhbm5lbCBhdXRvbWF0aWNh
+    bGx5IGltcGxlbWVudHMgYEFzeW5jQ2hhbm5lbGAiKTsKICAgIH0KfQoKLy8gTm8gYmxhbmtldCBp
+    bXBsZW1lbnRhdGlvbiBuZWVkZWQgaGVyZQoKLy8gVXNhZ2UKCnN0cnVjdCBGdWxsU3luYzsKaW1w
+    bCBDaGFubmVsIGZvciBGdWxsU3luYyB7CiAgICBmbiBzZW5kKCZzZWxmKSB7CiAgICAgICAgcHJp
+    bnRsbiEoIkZ1bGxTeW5jIGltcGxlbWVudHMgQ2hhbm5lbCIpOwogICAgfQp9CgpzdHJ1Y3QgQXRv
+    bWljOwppbXBsIENoYW5uZWwgZm9yIEF0b21pYyB7CiAgICBmbiBzZW5kKCZzZWxmKSB7CiAgICAg
+    ICAgcHJpbnRsbiEoIkF0b21pYyBpbXBsZW1lbnRzIENoYW5uZWwiKTsKICAgIH0KfQoKaW1wbCBB
+    ZHZhbmNlZENoYW5uZWxTZW1hbnRpY3MgZm9yIEF0b21pYyB7CiAgICBmbiByZXNlcnZlKCZzZWxm
+    KSB7CiAgICAgICAgcHJpbnRsbiEoIkF0b21pYyBpbXBsZW1lbnRzIEFkdmFuY2VkQ2hhbm5lbFNl
+    bWFudGljcyIpOwogICAgfQp9CgovLyBPdmVycmlkZSB0aGUgZGVmYXVsdCBpbXBsZW1lbnRhdGlv
+    biBmb3IgQXN5bmNDaGFubmVsIGZvciBBdG9taWMKaW1wbCBBc3luY0NoYW5uZWwgZm9yIEF0b21p
+    YyB7CiAgICBmbiBzZW5kX3dpdGhfYXN5bmMoJnNlbGYpIHsKICAgICAgICBwcmludGxuISgiQXRv
+    bWljIGNoYW5uZWwgYWxzbyBpbXBsZW1lbnRzIGBBc3luY0NoYW5uZWxgIC0tIG92ZXJyaWRpbmcg
+    dGhlIGRlZmF1bHQgaW1wbGVtZW50YXRpb24iKTsKICAgIH0KfQoKZm4gbWFpbigpIHsKICAgIGxl
+    dCBzMSA9IEZ1bGxTeW5jOwogICAgczEuc2VuZCgpOwogICAgLy8gczEuc2VuZF93aXRoX2FzeW5j
+    KCk7IC8vIENvbXBpbGUgZXJyb3IsIEZ1bGxTeW5jIGRvZXMgbm90IGltcGxlbWVudCBBZHZhbmNl
+    ZENoYW5uZWxTZW1hbnRpY3Mgb3IgQXN5bmNDaGFubmVsCgogICAgbGV0IHMyID0gQXRvbWljOwog
+    ICAgczIuc2VuZCgpOwogICAgczIucmVzZXJ2ZSgpOwogICAgczIuc2VuZF93aXRoX2FzeW5jKCk7
+    IC8vIFdvcmtzIGJlY2F1c2UgQXRvbWljIGltcGxlbWVudHMgYm90aCBDaGFubmVsIGFuZCBBZHZh
+    bmNlZENoYW5uZWxTZW1hbnRpY3MKfQoK
 
 
 # Backlog

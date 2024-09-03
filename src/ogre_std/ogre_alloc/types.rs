@@ -10,13 +10,16 @@ use std::future::Future;
 ///   2) Their allocated data are made to not exceed certain limits -- hence, "Bounded". The `id` parameters
 ///      in several methods defined here emphasize this idea.
 ///   3) They may be implemented backed by Box/malloc or by Arrays -- which offers better allocation performance
-///      and less "false sharing" performance degradation). 
+///      and less "false sharing" performance degradation).
+/// 
 /// Four APIs are available:
 ///   - functional / async: see [Self::alloc_with()] & [Self::alloc_with_async()]. Consider these as the "high level" API usage.
 ///   - [Self::register_external_alloc()] -- allows some use cases that requires allocations to be done externally
+/// 
 /// The other usages of the API are to be considered "low level":
 ///   - by ref: offers mutable references upon allocation and requiring them for deallocation
 ///   - by id:  offers u32 ids, which should be translated to mutable references before usage... from there, freeing might either be done from the id or the mut ref.
+/// 
 /// Regarding comparisons, the `PartialEq` trait should be implemented so any wrapper types using the allocator can be compared: two allocators are only equal if they
 /// share the same exact address.
 pub trait BoundedOgreAllocator<SlotType: Debug>

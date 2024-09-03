@@ -29,7 +29,6 @@ use std::future::Future;
 use std::marker::PhantomData;
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
-use keen_retry::RetryConsumerResult;
 
 
 /// This channel uses the fastest of the queues [FullSyncMove], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
@@ -151,12 +150,12 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
-                             Fut: Future<Output=()>>
-                            (&self,
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
                              setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
-        if let Some((mut slot, len_before)) = self.container.leak_slot_internal(|| false) {
-            setter(&mut slot).await;
+        if let Some((slot, _slot_id, len_before)) = self.container.leak_slot_internal(|| false) {
+            setter(slot).await;
             self.container.publish_leaked_internal();
             if len_before < MAX_STREAMS as u32 {
                 self.streams_manager.wake_stream(len_before);
@@ -169,18 +168,17 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn reserve_slot(&self) -> Option<&'a mut ItemType> {
-        self.container.leak_slot_internal(|| false)
-            .map(|(slot_ref, _len_before)| slot_ref)
+        unimplemented!("`reserve_slot()` is not yet implemented for FullSync (movable). It is currently available in Atomic (movable) and zero-copy for both FullSync and Atomic channels.")
     }
 
     #[inline(always)]
-    fn send_reserved(&self, _reserved_slot: &mut ItemType) {
-        self.container.publish_leaked_internal()
+    fn try_send_reserved(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_send_reserved()` is not yet implemented for FullSync (movable). It is currently available in Atomic (movable) and zero-copy for both FullSync and Atomic channels.")
     }
 
     #[inline(always)]
-    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
-        self.container.unleak_internal()
+    fn try_cancel_slot_reserve(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_cancel_slot_reserve()` is not yet implemented for FullSync (movable). It is currently available in Atomic (movable) and zero-copy for both FullSync and Atomic channels.")
     }
 }
 

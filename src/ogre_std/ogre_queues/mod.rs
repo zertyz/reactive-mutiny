@@ -16,6 +16,7 @@ pub trait OgreQueue<SlotType> {
     /// Returns:
     ///   - `None` if the element was added
     ///   - `Some<element>` if the enqueueing was denied (queue full) -- returning back the element to the caller to allow zero-copy retrying actions.
+    /// 
     /// TODO 2023-08-01 review this whole... is this a blocking or non-blocking queue? does it still make sense when put together with all the other queue traits?
     fn enqueue(&self, element: SlotType) -> Option<SlotType>;
     /// Attempts to dequeue an element from the queue, returning immediately for non-blocking queues... possibly blocking otherwise.

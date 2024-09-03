@@ -5,18 +5,10 @@ use super::super::{
     meta_subscriber::MoveSubscriber,
     meta_container::MoveContainer,
 };
-use std::{
-    fmt::Debug,
-    sync::atomic::{
-        AtomicU32,
-        Ordering::{Relaxed, Release},
-    },
-    ptr,
-    cell::UnsafeCell,
-    num::NonZeroU32,
-    pin::Pin,
-    mem::ManuallyDrop,
-};
+use std::{fmt::Debug, sync::atomic::{
+    AtomicU32,
+    Ordering::{Relaxed, Release},
+}, ptr, cell::UnsafeCell, num::NonZeroU32, pin::Pin, mem::ManuallyDrop};
 use crossbeam::utils::CachePadded;
 
 
@@ -53,7 +45,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     }
 
     fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
-        #[warn(clippy::no_effect)]
+        #[allow(path_statements)]
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
@@ -208,30 +200,88 @@ AtomicMove<SlotType, BUFFER_SIZE> {
             }
         }
     }
-
-    /// marks the given data sitting at `slot_id` as ready to be consumed, completing the publishing pattern
-    /// that started with a call to [leak_slot_internal()]
+    
+    /// Marks the given data, under `slot_id`, as ready to be consumed -- completing the publishing pattern
+    /// that started with a call to [Self::leak_slot_internal()].\
+    /// Keep in mind that `slot_id` is not an index -- as it can grow bigger than `BUFFER_SIZE`.
+    /// If you want to use an index instead, see [Self::published_leaked_internal_index()].\
+    /// IMPORTANT: use this function only when `slot_id` is guaranteed to progress sequentially
+    ///            (this channel requires so) -- otherwise this function may spin indefinitely,
+    ///            with deadlock potential if used in async calls with just 1 thread running.
+    ///            If you cannot guarantee `slot_id` will progress sequentially, use
+    ///            [Self::try_publish_leaked_internal()] instead and implement your own spin loop
+    ///            (probably using `tokio::sync::yield_now().await`)
     #[inline(always)]
     pub fn publish_leaked_internal(&'a self, slot_id: u32) {
+        while !self.try_publish_leaked_internal(slot_id) {
+            relaxed_wait();
+        }
+    }
+
+    /// Equivalent to [Self::publish_leaked_internal()], but without spinning
+    /// (suitable for use by operations that cannot guarantee that `slot_id` will progress sequentially).
+    pub fn try_publish_leaked_internal(&'a self, slot_id: u32) -> bool {
+        match self.tail.compare_exchange_weak(slot_id, slot_id.overflowing_add(1).0, Release, Relaxed) {
+            Ok(_) => true,
+            Err(_reloaded_tail) => {
+                false
+            }
+        }
+    }
+
+    /// Similar to [Self::try_publish_leaked_internal()], but receives an index (that can only be inside `0..BUFFER_SIZE`)
+    /// instead of an id (that may get any value).\
+    /// Returns the available elements for consumption after the operation completes, or `None` if you should retry the operation.
+    #[inline(always)]
+    pub fn try_publish_leaked_internal_index(&'a self, slot_index: u32) -> Option<NonZeroU32> {
+        let mut slot_id = slot_index;
         loop {
-            match self.tail.compare_exchange_weak(slot_id, slot_id + 1, Release, Relaxed) {
-                Ok(_) => break,
-                Err(_reloaded_tail) => {
-                    relaxed_wait()
+            match self.tail.compare_exchange_weak(slot_id, slot_id.overflowing_add(1).0, Release, Relaxed) {
+                Ok(new_tail) => break NonZeroU32::new(u32::max(1, new_tail.overflowing_sub(self.head.load(Relaxed)).0)),
+                Err(reloaded_tail) => {
+                    if reloaded_tail / BUFFER_SIZE as u32 > slot_id / BUFFER_SIZE as u32 {
+                        // the ring buffer cycled over -- adjust `slot_id` accordingly
+                        slot_id = slot_index + ( (reloaded_tail / BUFFER_SIZE as u32) * BUFFER_SIZE as u32 );
+                    } else {
+                        relaxed_wait();
+                        break None
+                    }
                 },
             }
         }
     }
 
-    /// attempt to return the slot at `slot_id` to the pool of available slots -- disrupting the publishing of an event
-    /// that was started with a call to [leak_slot_internal()].\
+    /// Attempt to return the slot under `slot_id` to the pool of available slots -- disrupting the publishing of an event
+    /// that was started with a call to [Self::leak_slot_internal()].\
+    /// Keep in mind that `slot_id` is not an index -- as it can grow bigger than `BUFFER_SIZE`.
+    /// If you want to use an index instead, see [Self::try_unleak_slot_index_internal()].
+    /// IMPORTANT: for this channel, the reserve cancellation (unleaking) must be done in the reversed order.
     #[inline(always)]
     fn try_unleak_slot_internal(&'a self, slot_id: u32) -> bool {
-        match self.enqueuer_tail.compare_exchange_weak(slot_id + 1, slot_id, Relaxed, Relaxed) {
+        match self.enqueuer_tail.compare_exchange_weak(slot_id.overflowing_add(1).0, slot_id, Release, Relaxed) {
             Ok(_) => true,
             Err(_reloaded_enqueuer_tail) => {
-                relaxed_wait();
                 false
+            }
+        }
+    }
+
+    /// Similar to [Self::try_unleak_slot_internal()], but receives an index (that can only be inside `0..BUFFER_SIZE`)
+    /// instead of an id (that may get any value)
+    #[inline(always)]
+    pub fn try_unleak_slot_index_internal(&'a self, slot_index: u32) -> bool {
+        let mut slot_id = slot_index;
+        loop {
+            match self.enqueuer_tail.compare_exchange_weak(slot_id.overflowing_add(1).0, slot_id, Release, Relaxed) {
+                Ok(_) => break true,
+                Err(reloaded_enqueuer_tail) => {
+                    if (reloaded_enqueuer_tail-1) / BUFFER_SIZE as u32 > slot_id / BUFFER_SIZE as u32 {
+                        // the ring buffer cycled over -- adjust `slot_id` accordingly
+                        slot_id = slot_index + ( ( (reloaded_enqueuer_tail-1) / BUFFER_SIZE as u32) * BUFFER_SIZE as u32 );
+                    } else {
+                        break false
+                    }
+                }
             }
         }
     }
@@ -257,7 +307,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
                 break Some( (slot_value, slot_id, len_before) )
             } else {
                 // queue is empty: reestablish the correct `dequeuer_head` (receding it to its original value)
-                match self.dequeuer_head.compare_exchange_weak(slot_id + 1, slot_id, Relaxed, Relaxed) {
+                match self.dequeuer_head.compare_exchange_weak(slot_id.overflowing_add(1).0, slot_id, Relaxed, Relaxed) {
                     Ok(_) => {
                         if !report_empty_fn() {
                             return None;
@@ -278,7 +328,7 @@ AtomicMove<SlotType, BUFFER_SIZE> {
     #[inline(always)]
     pub fn release_leaked_internal(&self, slot_id: u32) {
         loop {
-            match self.head.compare_exchange_weak(slot_id, slot_id + 1, Relaxed, Relaxed) {
+            match self.head.compare_exchange_weak(slot_id, slot_id.overflowing_add(1).0, Relaxed, Relaxed) {
                 Ok(_) => break,
                 Err(_reloaded_head) => {
                     relaxed_wait();
@@ -287,18 +337,23 @@ AtomicMove<SlotType, BUFFER_SIZE> {
         }
     }
 
-    /// returns the id (within the Ring Buffer) that the given `slot` reference occupies
+    /// Returns the index (within the Ring Buffer) that the given `slot` reference occupies
+    /// -- this is the reverse operation of [Self::slot_ref_from_slot_index()]
     #[inline(always)]
-    pub fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
-        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.get() as *const SlotType) } ) as usize) as u32
+    pub fn slot_index_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
+        unsafe {
+            let mutable_buffer = &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>);
+            (slot as *const SlotType).offset_from(mutable_buffer.get_unchecked(0) as *const SlotType) as u32
+        }
     }
 
-    /// returns a reference to the slot pointed to by `slot_id`
+    /// Returns a reference to the slot pointed to by `slot_index`
+    /// -- this is the reverse operation of [Self::slot_index_from_slot_ref()]
     #[inline(always)]
-    fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
+    pub fn slot_ref_from_slot_index(&'a self, slot_index: u32) -> &'a SlotType {
         unsafe {
             let buffer = &*self.buffer.get();
-            buffer.get_unchecked(slot_id as usize % BUFFER_SIZE)
+            buffer.get_unchecked(slot_index as usize % BUFFER_SIZE)
         }
     }
 }
@@ -418,11 +473,30 @@ mod tests {
         test_commons::peak_remaining("Movable API",
                                      |e| queue.publish_movable(e).0.is_some(),
                                      || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
+                                     || unsafe {
+                                         let mut iter = queue.peek_remaining().into_iter();
+                                         ( iter.next().expect("no item @0").iter(),
+                                           iter.next().expect("no item @1").iter() )
+                                     } );
         test_commons::peak_remaining("Zero-Copy Producer/Movable Subscriber API",
                                      |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                      || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
+                                     || unsafe {
+                                         let mut iter = queue.peek_remaining().into_iter();
+                                         ( iter.next().expect("no item @0").iter(),
+                                           iter.next().expect("no item @1").iter() )
+                                     } );
+    }
+
+    #[cfg_attr(not(doc),test)]
+    fn indexes_and_references_conversions() {
+        let queue = AtomicMove::<i32, 1024>::new();
+        let Some((first_item, _, _)) = queue.leak_slot_internal(|| false) else {
+            panic!("Can't determine the reference for the element at #0");
+        };
+        test_commons::indexes_and_references_conversions(first_item,
+                                                         |index| queue.slot_ref_from_slot_index(index),
+                                                         |slot_ref| queue.slot_index_from_slot_ref(slot_ref));
     }
 
 }

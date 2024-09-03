@@ -25,7 +25,7 @@ tokio             = { version = "1", features = ["full", "rt-multi-thread"] }
 futures           = "0.3"     # brings in "Streams" / async iterators
 minstant          = "0.1"     # as fast as possible time measurements on X86_64 using TSC / RDTSC instructions -- avoiding system calls & context switches
 indexmap          = "2"       # hashmaps as fast as vectors to traverse through values (preserves the insertion order in a vector)
-atomic_enum       = "0.2"
+atomic_enum       = "0.3"
 async-trait       = "0.1"     # non-zero-cost async traits
 parking_lot       = "0.12"    # way faster than std mutex (and tokio mutexes as well)
 crossbeam         = "0.8"     # scoped threads
@@ -33,7 +33,7 @@ crossbeam-channel = "0.5"     # the fastest channels available, besides ours (th
 memmap            = "0.7"
 once_cell         = "1.17"    # lazy statics
 owning_ref        = "0.4"     # allows Arcs to be used for internal references
-keen-retry        = "0.4"   # for the retrying mechanism
+keen-retry        = "0.5"   # for the retrying mechanism
 
 
 # doc-dependencies
@@ -42,7 +42,7 @@ ctor          = "0.2"    # setup and teardown for modules
 
 [dev-dependencies]
 ctor          = "0.2"    # setup and teardown for modules
-simple_logger = "4.0"    # a dirty console logger
+simple_logger = "5"      # a dirty console logger
 log           = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
 defaults      = "0.2"    # allows enums variantes requiring parameters to be annotated with #[default] 
 
@@ -60,8 +60,8 @@ minstant       = "0.1"  # (real) time measurements through RDTSC instruction (wi
 
 # command-line parsing
 structopt    = "0.3"                                            # command line parsing
-strum        = { version = "0.25", features = ["derive"] }      # enums serialization/deserialization
-strum_macros = "0.25"
+strum        = { version = "0.26", features = ["derive"] }      # enums serialization/deserialization
+strum_macros = "0.26"
 chrono       = "0"
 
 # console UI

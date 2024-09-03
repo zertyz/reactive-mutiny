@@ -32,7 +32,6 @@ use std::{
 use std::future::Future;
 use std::marker::PhantomData;
 use async_trait::async_trait;
-use keen_retry::RetryConsumerResult;
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -160,12 +159,12 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
-                             Fut: Future<Output=()>>
-                            (&self,
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
                              setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
-        if let Some((mut slot, _slot_id)) = self.channel.leak_slot() {
-            setter(&mut slot).await;
+        if let Some((slot, _slot_id)) = self.channel.leak_slot() {
+            let slot = setter(slot).await;
             let Some(len_after) = self.channel.publish_leaked_ref(slot) else {
                 panic!("reactive-mutiny: uni zero-copy full_sync::send_with_async() BUG! could not publish a previously leaked slot");
             };
@@ -186,15 +185,22 @@ for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn send_reserved(&self, reserved_slot: &mut ItemType) {
-        if self.channel.publish_leaked_ref(reserved_slot).is_none() {
-            panic!("reactive-mutiny: uni zero-copy full_sync::send_reserved() BUG! could not publish a previously leaked slot");
-        }
+    fn try_send_reserved(&self, reserved_slot: &mut ItemType) -> bool {
+        self.channel.publish_leaked_ref(reserved_slot)
+            .map(|len_after| {
+                // wake the streams, if needed
+                let len_after = len_after.get();
+                if len_after <= MAX_STREAMS as u32 {
+                    self.streams_manager.wake_stream(len_after % MAX_STREAMS as u32);
+                }
+                true
+            }).unwrap_or(false)
     }
 
     #[inline(always)]
-    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
-        self.channel.release_leaked_ref(reserved_slot)
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut ItemType) -> bool {
+        self.channel.release_leaked_ref(reserved_slot);
+        true
     }
 }
 

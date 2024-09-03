@@ -27,7 +27,6 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use async_trait::async_trait;
-use keen_retry::RetryConsumerResult;
 
 
 /// ...
@@ -166,9 +165,9 @@ FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
-                             Fut: Future<Output=()>>
-                            (&self,
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
                              setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         if let Some((ogre_arc_item, slot)) = OgreArc::new(&self.allocator) {
             setter(slot).await;
@@ -213,15 +212,17 @@ FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn send_reserved(&self, reserved_slot: &mut ItemType) {
+    fn try_send_reserved(&self, reserved_slot: &mut ItemType) -> bool {
         let slot_id = self.allocator.id_from_ref(reserved_slot);
         let ogre_arc = OgreArc::from_allocated(slot_id, &self.allocator);
         _ = self.send_derived(&ogre_arc);
+        true
     }
 
     #[inline(always)]
-    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
-        self.allocator.dealloc_ref(reserved_slot)
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut ItemType) -> bool {
+        self.allocator.dealloc_ref(reserved_slot);
+        true
     }
 }
 

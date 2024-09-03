@@ -8,6 +8,7 @@ use std::{
     ops::Deref,
     fmt::{Debug, Display, Formatter},
 };
+use std::borrow::Borrow;
 
 
 /// Wrapper type for data that requires a custom Drop to be called (through an [BoundedOgreAllocator]).
@@ -81,6 +82,16 @@ OgreUnique<DataType, OgreAllocatorType> {
 
 }
 
+impl<DataType:          Debug + Send + Sync,
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
+Borrow<DataType> for
+OgreUnique<DataType, OgreAllocatorType> {
+
+    #[inline(always)]
+    fn borrow(&self) -> &DataType {
+        self.data_ref
+    }
+}
 
 impl<DataType:          Debug + Send + Sync + Display,
      OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>

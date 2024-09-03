@@ -50,7 +50,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     }
 
     fn with_initializer<F: Fn() -> SlotType>(slot_initializer: F) -> Self {
-        #[allow(clippy::no_effect)]
+        #[allow(path_statements)]
         Self::BUFFER_SIZE_MUST_BE_A_POWER_OF_2;     // assures no non-power of 2 buffer may be used
         // if !BUFFER_SIZE.is_power_of_two() {
         //     panic!("FullSyncMeta: BUFFER_SIZE must be a power of 2, but {BUFFER_SIZE} was provided.");
@@ -72,7 +72,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>) {
         match self.leak_slot_internal(|| false) {
-            Some( (slot, len_before) ) => {
+            Some( (slot, _slot_id, len_before) ) => {
                 unsafe { ptr::write(slot, item); }
                 self.publish_leaked_internal();
                 (NonZeroU32::new(len_before+1), None)
@@ -91,7 +91,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
               -> Option<SetterFn> {
 
         match self.leak_slot_internal(report_full_fn) {
-            Some( (slot_ref, len_before) ) => {
+            Some( (slot_ref, _slot_id, len_before) ) => {
                 setter_fn(slot_ref);
                 self.publish_leaked_internal();
                 report_len_after_enqueueing_fn(len_before+1);
@@ -189,7 +189,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
     /// This implementation enables other slots to be returned to the pool while there are allocated (but still unpublished) slots around,
     /// allowing the publication & consumption operations not happen in parallel.
     #[inline(always)]
-    pub fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*len_before:*/ u32)> {
+    pub fn leak_slot_internal(&self, report_full_fn: impl Fn() -> bool) -> Option<(&'a mut SlotType, /*slot_id:*/ u32, /*len_before:*/ u32)> {
         let mutable_buffer = unsafe { &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>) };
         let mut len_before;
         loop {
@@ -198,7 +198,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
             let head = *unsafe { &* self.head.get() };
             len_before = tail.overflowing_sub(head).0;
             if len_before < BUFFER_SIZE as u32 {
-                break unsafe { Some( (mutable_buffer.get_unchecked_mut(tail as usize % BUFFER_SIZE), len_before) ) }
+                break unsafe { Some( (mutable_buffer.get_unchecked_mut(tail as usize % BUFFER_SIZE), tail, len_before) ) }
             } else {
                 ogre_sync::unlock(&self.concurrency_guard);
                 let maybe_no_longer_full = report_full_fn();
@@ -262,18 +262,23 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
         *head = head.overflowing_add(1).0;
     }
 
-    /// returns the id (within the Ring Buffer) that the given `slot` reference occupies
+    /// Returns the index (within the Ring Buffer) that the given `slot` reference occupies
+    /// -- this is the reverse operation of [Self::slot_ref_from_slot_index()]
     #[inline(always)]
-    fn slot_id_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
-        (( unsafe { (slot as *const SlotType).offset_from(self.buffer.get() as *const SlotType) } ) as usize) as u32
+    pub fn slot_index_from_slot_ref(&'a self, slot: &'a SlotType) -> u32 {
+        unsafe {
+            let mutable_buffer = &mut * (self.buffer.get() as *mut Box<[SlotType; BUFFER_SIZE]>);
+            (slot as *const SlotType).offset_from(mutable_buffer.get_unchecked(0) as *const SlotType) as u32
+        }
     }
 
-    /// returns a reference to the slot pointed to by `slot_id`
+    /// Returns a reference to the slot pointed to by `slot_index`
+    /// -- this is the reverse operation of [Self::slot_index_from_slot_ref()]
     #[inline(always)]
-    fn _slot_ref_from_slot_id(&'a self, slot_id: u32) -> &'a SlotType {
+    pub fn slot_ref_from_slot_index(&'a self, slot_index: u32) -> &'a SlotType {
         unsafe {
             let buffer = &*self.buffer.get();
-            buffer.get_unchecked(slot_id as usize % BUFFER_SIZE)
+            buffer.get_unchecked(slot_index as usize % BUFFER_SIZE)
         }
     }
 }
@@ -286,6 +291,7 @@ FullSyncMove<SlotType, BUFFER_SIZE> {
 
     fn drop(&mut self) {
         loop {
+            ogre_sync::unlock(&self.concurrency_guard);
             match self.consume_movable() {
                 None => break,
                 Some(item) => drop(item),
@@ -388,11 +394,30 @@ mod tests {
         test_commons::peak_remaining("Movable API",
                                      |e| queue.publish_movable(e).0.is_some(),
                                      || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
+                                     || unsafe {
+                                         let mut iter = queue.peek_remaining().into_iter();
+                                         ( iter.next().expect("no item @0").iter(),
+                                           iter.next().expect("no item @1").iter() )
+                                     } );
         test_commons::peak_remaining("Zero-Copy Producer/Movable Subscriber API",
                                      |e| queue.publish(|slot| *slot = e, || false, |_| {}).is_none(),
                                      || queue.consume_movable(),
-                                     || unsafe { queue.peek_remaining() } );
+                                     || unsafe {
+                                         let mut iter = queue.peek_remaining().into_iter();
+                                         ( iter.next().expect("no item @0").iter(),
+                                           iter.next().expect("no item @1").iter() )
+                                     } );
+    }
+
+    #[cfg_attr(not(doc),test)]
+    fn indexes_and_references_conversions() {
+        let queue = FullSyncMove::<i32, 1024>::new();
+        let Some((first_item, _, _)) = queue.leak_slot_internal(|| false) else {
+            panic!("Can't determine the reference for the element at #0");
+        };
+        test_commons::indexes_and_references_conversions(first_item,
+                                                         |index| queue.slot_ref_from_slot_index(index),
+                                                         |slot_ref| queue.slot_index_from_slot_ref(slot_ref));
     }
 
 }

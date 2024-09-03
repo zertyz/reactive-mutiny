@@ -21,7 +21,6 @@ use std::{
 use std::future::Future;
 use std::marker::PhantomData;
 use async_trait::async_trait;
-use keen_retry::RetryConsumerResult;
 use log::warn;
 
 
@@ -155,9 +154,9 @@ FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
-                             Fut: Future<Output=()>>
-                            (&self,
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
                              setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         let mut item = MaybeUninit::uninit();
         let item_ref = unsafe { &mut *item.as_mut_ptr() };
@@ -198,20 +197,17 @@ std::thread::sleep(Duration::from_millis(500));
 
     #[inline(always)]
     fn reserve_slot(&self) -> Option<&'a mut ItemType> {
-        panic!("This doesn't, currently, make sense for this implementation")
-        // Some(&mut Arc::new(ItemType::default()))
+        panic!("If we choose to go on with this Arc channel, this must be implemented")
     }
 
     #[inline(always)]
-    fn send_reserved(&self, reserved_slot: &mut ItemType) {
-        panic!("This doesn't, currently, make sense for this implementation")
-        // _ = self.send_derived(reserved_slot);
+    fn try_send_reserved(&self, _reserved_slot: &mut ItemType) -> bool {
+        panic!("If we choose to go on with this Arc channel, this must be implemented")
     }
 
     #[inline(always)]
-    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
-        panic!("This doesn't, currently, make sense for this implementation")
-        // noop?
+    fn try_cancel_slot_reserve(&self, _reserved_slot: &mut ItemType) -> bool {
+        panic!("If we choose to go on with this Arc channel, this must be implemented")
     }
 }
 

@@ -135,9 +135,9 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&mut ItemType) -> Fut,
-                             Fut: Future<Output=()>>
-                            (&self,
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
                              setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
         if self.tx.is_full() {
             return keen_retry::RetryResult::Transient { input: setter, error: () }
@@ -155,17 +155,17 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     #[inline(always)]
     fn reserve_slot(&self) -> Option<&'a mut ItemType> {
-        unimplemented!("`reserve_slot()` semantics is unavailable for the Crossbeam channel. Use either the Fullsync or Atomic channels")
+        unimplemented!("`reserve_slot()` semantics is unavailable for the Crossbeam channel at this time. Use either the Fullsync (zero-copy) or Atomic (zero-copy & movable) channels")
     }
 
     #[inline(always)]
-    fn send_reserved(&self, reserved_slot: &mut ItemType) {
-        unimplemented!("`reserve_slot()` semantics is unavailable for the Crossbeam channel. Use either the Fullsync or Atomic channels")
+    fn try_send_reserved(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_send_reserved()` semantics is unavailable for the Crossbeam channel at this time. Use either the Fullsync (zero-copy) or Atomic (zero-copy & movable) channels")
     }
 
     #[inline(always)]
-    fn cancel_slot_reserve(&self, reserved_slot: &mut ItemType) {
-        unimplemented!("`reserve_slot()` semantics is unavailable for the Crossbeam channel. Use either the Fullsync or Atomic channels")
+    fn try_cancel_slot_reserve(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_cancel_slot_reserve()` semantics are unavailable for the Crossbeam channel at this time. Use either the Fullsync (zero-copy) or Atomic (zero-copy & movable) channels")
     }
 }
 

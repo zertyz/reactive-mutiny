@@ -708,11 +708,14 @@ pub fn measure_syncing_independency(produce: impl Fn(u32,        &dyn Fn()) -> b
 
 }
 
-/// simple sanity checks for `peak_remaining()` implementations
-pub fn peak_remaining<'a>(name:    &str,
-                          produce: impl Fn(u32) -> bool        + Sync,
-                          consume: impl Fn()    -> Option<u32> + Sync,
-                          peak:    impl Fn()    -> [&'a [u32];2]) {
+/// Simple sanity checks for `peak_remaining()` implementations.\
+/// IMPORTANT: the underlying container size must be 16
+pub fn peak_remaining<'a, Iter1: Iterator<Item=&'a u32>,
+                          Iter2: Iterator<Item=&'a u32> >
+                     (name:    &str,
+                      produce: impl Fn(u32) -> bool        + Sync,
+                      consume: impl Fn()    -> Option<u32> + Sync,
+                      peak:    impl Fn()    -> (Iter1, Iter2)) {
 
     // tests peeking [&[0..n], &[]]
     for i in 1..=16 {
@@ -720,7 +723,8 @@ pub fn peak_remaining<'a>(name:    &str,
     }
     let expected_sum = (1+16)*(16/2);
     let mut observed_sum = 0;
-    for item in peak().iter().flat_map(|&slice| slice) {
+    let (peak_iter1, peak_iter2) = peak();
+    for item in peak_iter1.chain(peak_iter2) {
         observed_sum += item;
     }
     assert_eq!(observed_sum, expected_sum, "{name}: peeking elements from [&[0..n], &[]] didn't work");
@@ -734,7 +738,8 @@ pub fn peak_remaining<'a>(name:    &str,
     }
     let expected_sum = (9+9+16-1)*(16/2);
     let mut observed_sum = 0;
-    for item in peak().iter().flat_map(|&slice| slice) {
+    let (peak_iter1, peak_iter2) = peak();
+    for item in peak_iter1.chain(peak_iter2) {
         observed_sum += item;
     }
     assert_eq!(observed_sum, expected_sum, "{name}: peeking elements from [&[8..n], &[0..8]] didn't work");
@@ -744,4 +749,24 @@ pub fn peak_remaining<'a>(name:    &str,
         assert_eq!(consume(), Some(i), "{name}: Dequeued element is wrong. Container gone bonkers?")
     }
 
+}
+
+/// tests conversions back and forth from arrays indexes and their pointers
+pub fn indexes_and_references_conversions<'a, SlotType: 'a>(first_item: &'a SlotType,
+                                                            idx_to_ref: impl Fn(u32) -> &'a SlotType,
+                                                            ref_to_idx: impl Fn(&'a SlotType) -> u32) {
+    // index #0 checks
+    let expected_index = 0;
+    let observed_ref = idx_to_ref(expected_index);
+    assert_eq!(format!("{observed_ref:p}"), format!("{first_item:p}"), "The inferred reference is not the same as the provided `first_item`");
+    let observed_index = ref_to_idx(observed_ref);
+    assert_eq!(observed_index, expected_index, "Index to Ref (and vice-versa) conversions are wrong -- even for index #0");
+    
+    // index #n checks
+    let expected_index = 97;
+    let observed_ref = idx_to_ref(expected_index);
+    let observed_index = ref_to_idx(observed_ref);
+    assert_eq!(observed_index, expected_index, "Index to Ref (and vice-versa) conversions are wrong -- for #n checks. Is the buffer big enough?");
+    
+    
 }
