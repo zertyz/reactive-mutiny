@@ -87,6 +87,7 @@ impl<'a, SlotType: 'a + Debug> MMapMeta<'a, SlotType> {
     /// Returns two subscribers:
     ///   - one for the past events (that, once exhausted, won't see any of the forthcoming events)
     ///   - another for the forthcoming events.
+    /// 
     /// The split is guaranteed not to miss any events: no events will be lost between the last of the "past" and
     /// the first of the "forthcoming" events
     pub fn subscribe_to_separated_old_and_new_events(self: &Arc<Self>) -> (MMapMetaFixedSubscriber<'a, SlotType>, MMapMetaDynamicSubscriber<'a, SlotType>) {
@@ -124,8 +125,8 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
     /// Instantiates a new **mmap based** *meta log_topic* using the given file as the backing storage -- which may grow bigger than RAM and will have all its contents erased before starting.
     ///   - `mmap_file_path` will have all its space sparsely pre-allocated -- so it should be used on ext4, btrfs, etc.
     ///   - `max_slots` should be way-over-the-maximum-number-of-elements expected to be produced throughout the life of this object (as log topics allows the full replay of events, it only grows and slots are never reused).
+    /// 
     /// A reasonable number would be 1T (1<<40) number of elements, which (if ever used) is likely to exceed the storage of most VPSes.\
-    ///
     /// Performance & operational considerations:
     ///   1. If BTRFS is in use, set the mmapped files to not be compressed and to have Copy-On-Write disabled: `truncate -s 0 /DIR/*.mmap; chattr +Cm /DIR/*.mmap`. Check with `lsattr /DIR/*.mmap`
     ///   2. Having a high swappiness may cause unwanted swaps in high usage scenarios. Consider decreasing it to `echo 1 | sudo tee /proc/sys/vm/swappiness`
@@ -137,6 +138,7 @@ impl<'a, SlotType: 'a + Debug> MetaTopic<'a, SlotType> for MMapMeta<'a, SlotType
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&mmap_file_path)
             .map_err(|err| format!("Could not open file '{mmap_file_path}' (that would be used to mmap a `log_topic` buffer): {:?}", err))?;
         let mmap_file_len = std::mem::size_of::<MMapContents<SlotType>>() as u64 + (max_slots-1) * std::mem::size_of::<SlotType>() as u64;  // `MMapContents<SlotType>` already contains 1 slot

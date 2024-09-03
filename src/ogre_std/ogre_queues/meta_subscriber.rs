@@ -11,10 +11,12 @@ pub trait MetaSubscriber<'a, SlotType: 'a> {
     ///   - If the queue is found to be empty, `report_empty_fn()` is called. Specializations of this `meta-subscriber` might use it to build a blocking queue, for instance;
     ///   - `getter_fn(&slot)` will be called to inform what is the dequeued element;
     ///   - `report_len_after_dequeueing_fn(len)` might be used by specializations of this `meta-subscriber` to, for instance, set the hardware's clock down.
+    /// 
     /// Caveats:
     ///   1) The caller must ensure the `getter_fn()` operation returns as soon as possible, or else the whole queue is likely to hang. If so, one sould consider to pass in a `getter_fn()`
     ///      that would clone/copy the value and release the queue as soon as possible.
     ///   2) Note the `getter_fn()` is not `FnOnce()`. Some implementors might require calling this function more than once, on contention scenarios.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn consume<GetterReturnType: 'a,
                GetterFn:                   Fn(&SlotType) -> GetterReturnType,

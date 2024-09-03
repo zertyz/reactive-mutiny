@@ -22,6 +22,7 @@ use tokio::sync::RwLock;
 ///   - produce events
 ///   - spawn new `Stream`s & executors
 ///   - close `Stream`s (and executors)
+/// 
 /// Example:
 /// ```nocompile
 /// {reactive_mutiny::Instruments::MetricsWithoutLogs.into()}
@@ -67,6 +68,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     ///     the final `Stream`s may produce a combination of fallible/non-fallible &
     ///     futures/non-futures events;
     ///   - producing events that are sent to those `Stream`s.
+    /// 
     /// `multi_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
     /// argument passed to the [Multi] struct.
     pub fn new<IntoString: Into<String>>(multi_name: IntoString) -> Self {
@@ -141,6 +143,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// For channels that allow it (like [channels::reference::mmap_log::MmapLog]), spawns two listeners for events sent to this `Multi`:
     ///   1) One for past events -- to be processed by the stream returned by `oldies_pipeline_builder()`;
     ///   2) Another one for subsequent events -- to be processed by the stream returned by `newies_pipeline_builder()`.
+    /// 
     /// By using this method, it is assumed that both pipeline builders returns `Future<Result>` events. If this is not so, see one of the sibling methods.\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
@@ -268,6 +271,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// For channels that allow it (like [channels::reference::mmap_log::MmapLog]), spawns two listeners for events sent to this `Multi`:
     ///   1) One for past events -- to be processed by the stream returned by `oldies_pipeline_builder()`;
     ///   2) Another one for subsequent events -- to be processed by the stream returned by `newies_pipeline_builder()`.
+    /// 
     /// By using this method, it is assumed that both pipeline builders returns `Future` events. If this is not so, see one of the sibling methods.\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
@@ -382,6 +386,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// For channels that allow it (like [channels::reference::mmap_log::MmapLog]), spawns two listeners for events sent to this `Multi`:
     ///   1) One for past events -- to be processed by the stream returned by `oldies_pipeline_builder()`;
     ///   2) Another one for subsequent events -- to be processed by the stream returned by `newies_pipeline_builder()`.
+    /// 
     /// By using this method, it is assumed that both pipeline builders returns Fallible events. If this is not so, see one of the sibling methods.\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
@@ -500,6 +505,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     /// For channels that allow it (like [channels::reference::mmap_log::MmapLog]), spawns two listeners for events sent to this `Multi`:
     ///   1) One for past events -- to be processed by the stream returned by `oldies_pipeline_builder()`;
     ///   2) Another one for subsequent events -- to be processed by the stream returned by `newies_pipeline_builder()`.
+    /// 
     /// By using this method, it is assumed that both pipeline builders returns non-Futures & non-Fallible events. If this is not so, see [spawn_oldies_executor].\
     /// The stream splitting is guaranteed not to drop any events and `sequential_transition` may be used to indicate if old events should be processed first or if both old and new events
     /// may be processed simultaneously (in an inevitable out-of-order fashion).
@@ -601,7 +607,8 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
     ///   2) wait for all pending elements to be processed
     ///   3) remove the queue/channel and wake the Stream to see that it has ended
     ///   4) waits for the executor to inform it ceased its execution
-    ///   5) return, dropping all resources\
+    ///   5) return, dropping all resources.
+    /// 
     /// Note it might make sense to spawn this operation by a `Tokio task`, for it may block indefinitely if the Stream has no timeout.\
     /// Also note that timing out this operation is not advisable, for resources won't be freed until it reaches the last step.\
     /// Returns false if there was no executor associated with `pipeline_name`.
@@ -614,7 +621,7 @@ Multi<ItemType, MultiChannelType, INSTRUMENTS, DerivedItemType> {
         let executor_name = format!("{}: {}", self.multi_name, pipeline_name.into());
         // remove the pipeline from the active list
         let mut executor_infos = self.executor_infos.write().await;
-        let executor_info = match executor_infos.remove(&executor_name) {
+        let executor_info = match executor_infos.swap_remove(&executor_name) {
             Some(executor) => executor,
             None => return false,
         };

@@ -12,7 +12,7 @@ use std::{
     marker::PhantomData,
     ptr::NonNull,
 };
-
+use std::borrow::Borrow;
 
 /// Wrapper type for data providing an atomic reference counter for dropping control, similar to `Arc`,
 /// but allowing a custom allocator to be used -- [BoundedOgreAllocator].
@@ -173,6 +173,30 @@ OgreArc<DataType, OgreAllocatorType> {
     }
 }
 
+impl<DataType:          Debug + Send + Sync,
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
+AsRef<DataType> for
+OgreArc<DataType, OgreAllocatorType> {
+
+    #[inline(always)]
+    fn as_ref(&self) -> &DataType {
+        let inner = unsafe { self.inner.as_ref() };
+        inner.allocator.ref_from_id(inner.data_id)
+    }
+
+}
+
+impl<DataType:          Debug + Send + Sync,
+     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>
+Borrow<DataType> for
+OgreArc<DataType, OgreAllocatorType> {
+
+    #[inline(always)]
+    fn borrow(&self) -> &DataType {
+        let inner = unsafe { self.inner.as_ref() };
+        inner.allocator.ref_from_id(inner.data_id)
+    }
+}
 
 impl<DataType:         Debug + Send + Sync,
     OgreAllocatorType: BoundedOgreAllocator<DataType> + Send + Sync>

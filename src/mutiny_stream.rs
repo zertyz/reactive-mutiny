@@ -18,6 +18,7 @@ use futures::stream::Stream;
 ///   - passing through this Stream implementation,
 ///   - then through the user provided `pipeline_builder()`
 ///   - and, finally, to the `StreamExecutor`.
+/// 
 /// ... allowing all of them to behave as a single function, that gets optimized together.
 pub struct MutinyStream<'a, ItemType:            Debug + Send + Sync + 'a,
                             ChannelConsumerType: ChannelConsumer<'a, DerivedItemType> + ?Sized,

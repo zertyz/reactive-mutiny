@@ -25,6 +25,7 @@ use std::{
     task::Waker,
     sync::Arc,
 };
+use std::future::Future;
 use std::marker::PhantomData;
 use crate::streams_manager::StreamsManagerBase;
 use async_trait::async_trait;
@@ -146,6 +147,38 @@ for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             None => keen_retry::RetryResult::Ok { reported_input: (), output: () },
             Some(setter) => keen_retry::RetryResult::Transient { input: setter, error: () }
         }
+    }
+
+    #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((slot, _slot_id, len_before)) = self.container.leak_slot_internal(|| false) {
+            setter(slot).await;
+            self.container.publish_leaked_internal();
+            if len_before < MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_before);
+            }
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&self) -> Option<&'a mut ItemType> {
+        unimplemented!("`reserve_slot()` is not yet implemented for FullSync (movable). It is currently available in Atomic (movable) and zero-copy for both FullSync and Atomic channels.")
+    }
+
+    #[inline(always)]
+    fn try_send_reserved(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_send_reserved()` is not yet implemented for FullSync (movable). It is currently available in Atomic (movable) and zero-copy for both FullSync and Atomic channels.")
+    }
+
+    #[inline(always)]
+    fn try_cancel_slot_reserve(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_cancel_slot_reserve()` is not yet implemented for FullSync (movable). It is currently available in Atomic (movable) and zero-copy for both FullSync and Atomic channels.")
     }
 }
 

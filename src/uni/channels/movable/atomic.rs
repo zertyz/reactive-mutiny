@@ -23,6 +23,7 @@ use std::{
     task::Waker,
     sync::Arc,
 };
+use std::future::Future;
 use std::marker::PhantomData;
 use async_trait::async_trait;
 
@@ -35,8 +36,8 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug + Default,
     /// common code for dealing with streams
     streams_manager: StreamsManagerBase<MAX_STREAMS>,
     /// backing storage for events -- AKA, channels
-    channel:       AtomicMove<ItemType, BUFFER_SIZE>,
-    _phanrom: PhantomData<&'a ItemType>,
+    channel:         AtomicMove<ItemType, BUFFER_SIZE>,
+    _phantom:        PhantomData<&'a ItemType>,
 
 }
 
@@ -51,7 +52,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
         Arc::new(Self {
             streams_manager: StreamsManagerBase::new(name),
             channel:         AtomicMove::<ItemType, BUFFER_SIZE>::new(),
-            _phanrom: PhantomData,
+            _phantom: PhantomData,
         })
     }
 
@@ -151,6 +152,50 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             Some(setter) => keen_retry::RetryResult::Transient { input: setter, error: () }
         }
     }
+
+    #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if let Some((slot, slot_id, len_before)) = self.channel.leak_slot_internal(|| false) {
+            setter(slot).await;
+            self.channel.publish_leaked_internal(slot_id);
+            if len_before < MAX_STREAMS as u32 {
+                self.streams_manager.wake_stream(len_before);
+            }
+            keen_retry::RetryResult::Ok { reported_input: (), output: () }
+        } else {
+            keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+        self.channel.leak_slot_internal(|| false)
+            .map(|(slot_ref, _slot_id, _len_before)| slot_ref)
+    }
+
+    #[inline(always)]
+    fn try_send_reserved(&self, reserved_slot: &mut ItemType) -> bool {
+        let slot_index = self.channel.slot_index_from_slot_ref(reserved_slot);
+        self.channel.try_publish_leaked_internal_index(slot_index)
+            .map(|len_after| {
+                // wake the streams, if needed
+                let len_after = len_after.get();
+                if len_after <= MAX_STREAMS as u32 {
+                    self.streams_manager.wake_stream(len_after % MAX_STREAMS as u32);
+                }
+                true
+            }).unwrap_or(false)
+    }
+
+    #[inline(always)]
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut ItemType) -> bool {
+        let slot_index = self.channel.slot_index_from_slot_ref(reserved_slot);
+        self.channel.try_unleak_slot_index_internal(slot_index)
+    }
+
 
 }
 

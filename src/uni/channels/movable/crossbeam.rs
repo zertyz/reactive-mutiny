@@ -9,13 +9,8 @@ use crate::{
     },
     mutiny_stream::MutinyStream,
 };
-use std::{
-    fmt::Debug,
-    sync::Arc,
-    time::Duration,
-    mem::MaybeUninit,
-    task::Waker,
-};
+use std::{fmt::Debug, sync::Arc, time::Duration, mem::MaybeUninit, task::Waker, future};
+use std::future::Future;
 use std::marker::PhantomData;
 use crossbeam_channel::{Sender, Receiver, TryRecvError, TrySendError};
 use async_trait::async_trait;
@@ -137,6 +132,40 @@ for Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
             .retry_with(|item| self.send(item))
             .spinning_forever();
         keen_retry::RetryResult::Ok { reported_input: (), output: () }
+    }
+
+    #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        if self.tx.is_full() {
+            return keen_retry::RetryResult::Transient { input: setter, error: () }
+        }
+        let mut item = MaybeUninit::uninit();
+        let item_ref = unsafe { &mut *item.as_mut_ptr() };
+        setter(item_ref).await;
+        let item = unsafe { item.assume_init() };
+        self.send(item)
+            .retry_with_async(|item| future::ready(self.send(item)))
+            .yielding_forever()
+            .await;
+        keen_retry::RetryResult::Ok { reported_input: (), output: () }
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&self) -> Option<&'a mut ItemType> {
+        unimplemented!("`reserve_slot()` semantics is unavailable for the Crossbeam channel at this time. Use either the Fullsync (zero-copy) or Atomic (zero-copy & movable) channels")
+    }
+
+    #[inline(always)]
+    fn try_send_reserved(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_send_reserved()` semantics is unavailable for the Crossbeam channel at this time. Use either the Fullsync (zero-copy) or Atomic (zero-copy & movable) channels")
+    }
+
+    #[inline(always)]
+    fn try_cancel_slot_reserve(&self, _reserved_slot: &mut ItemType) -> bool {
+        unimplemented!("`reserve_slot()` / `try_cancel_slot_reserve()` semantics are unavailable for the Crossbeam channel at this time. Use either the Fullsync (zero-copy) or Atomic (zero-copy & movable) channels")
     }
 }
 

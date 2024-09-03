@@ -28,13 +28,7 @@ mod tests {
             ChannelUniZeroCopyFullSync,
         },
     };
-    use std::{
-        fmt::Debug,
-        future::Future,
-        sync::Arc,
-        time::Duration,
-        io::Write,
-    };
+    use std::{fmt::Debug, future::Future, sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}}, time::Duration, io::Write};
     use futures::{stream, StreamExt};
     use minstant::Instant;
 
@@ -214,6 +208,214 @@ mod tests {
     parallel_streams!(zero_copy_full_sync_parallel_streams, ChannelUniZeroCopyFullSync<u32, 1024, PARALLEL_STREAMS>);
 
 
+    // *_async_sending for all known Uni Channels
+    /////////////////////////////////////////////
+
+    macro_rules! async_sending {
+        ($fn_name: tt, $uni_channel_type: ty) => {
+            /// guarantees implementors can properly send messages with an async closure:
+            /// create `BUFFER_SIZE` insertion tasks, all of them awaiting on a single mutex latch.
+            /// at the end, assert on the sum of the received items.
+            #[cfg_attr(not(doc),tokio::test)]
+            async fn $fn_name() {
+
+                let channel = Arc::new(<$uni_channel_type>::new("async sending"));
+
+                let series_size = channel.buffer_size();
+                let expected_sum = (1 + series_size) * (series_size / 2);
+                let observed_sum = Arc::new(AtomicU32::new(0));
+
+
+                // start the receiver task
+                let (mut stream, _stream_id) = channel.create_stream();
+                let cloned_observed_sum = observed_sum.clone();
+                let receiver_task = tokio::spawn(async move {
+                    while let Some(received_number) = exec_future(stream.next(), "receiving an item produced by `send_with_async()`", 1.0, false).await {
+                        use std::borrow::Borrow;    // allows working with either `u32` and `OgreUnique`
+                        cloned_observed_sum.fetch_add(*received_number.borrow(), Relaxed);
+                    }
+                });
+
+                // start concurrent async tasks for all sends, which will block on `latch`
+                let latch = Arc::new(tokio::sync::RwLock::new(()));
+                let cloned_latch = latch.clone();
+                let lock = cloned_latch.write().await;
+                for i in 0..series_size {
+                    let latch = Arc::clone(&latch);
+                    let channel = Arc::clone(&channel);
+                    tokio::spawn(async move {
+                        channel.send_with_async(move |slot| {
+                            async move {
+                                _ = latch.read().await;
+                                *slot = i+1;
+                                slot
+                            }
+                        }).await.expect_ok("couldn't send");
+                    });
+                }
+                // special task to close the channel -- after giving some time for all elements to be sent
+                tokio::spawn(async move {
+                    _ = latch.read().await;
+                    let timeout = Duration::from_millis(900);
+                    tokio::time::sleep(timeout).await;
+                    channel.gracefully_end_all_streams(timeout).await;
+                });
+
+                assert_eq!(observed_sum.load(Relaxed), 0, "Sanity check failed: no items should have been received until the latch is released");
+
+                // release the lock and wait for the receiver to complete
+                drop(lock);
+                // wait for the receiver to complete
+                receiver_task.await.expect("Error waiting for the receiver task to finish");
+
+                assert_eq!(observed_sum.load(Relaxed), expected_sum, "Async sending is not working");
+            }
+        }
+    }
+    async_sending!(movable_atomic_async_sending,      movable::atomic::Atomic<u32, 1024, 1>);
+    async_sending!(movable_crossbeam_async_sending,   movable::crossbeam::Crossbeam<u32, 1024, 1>);
+    async_sending!(movable_full_sync_async_sending,   movable::full_sync::FullSync<u32, 1024, 1>);
+    async_sending!(zero_copy_atomic_async_sending,    ChannelUniZeroCopyAtomic<u32, 1024, 1>);
+    async_sending!(zero_copy_full_sync_async_sending, ChannelUniZeroCopyFullSync<u32, 1024, 1>);
+
+
+    // *_allocation_semantics_alloc_and_send for all known Uni Channels
+    ///////////////////////////////////////////////////////////////////
+
+    macro_rules! allocation_semantics_alloc_and_send {
+        ($fn_name: tt, $uni_channel_type: ty) => {
+            /// Pre-allocates `BUFFER_SIZE` entries, then fill in their values, then send them all.
+            /// Do this twice, so we are sure every slot was correctly freed up.
+            /// Assert on the expected sum on both times.
+            #[cfg_attr(not(doc),tokio::test)]
+            async fn $fn_name() {
+
+                let channel = Arc::new(<$uni_channel_type>::new("allocation_semantics_alloc_and_send"));
+
+                let series_size = channel.buffer_size();
+                let expected_sum = (1 + series_size) * (series_size / 2);
+                let observed_sum = Arc::new(AtomicU32::new(0));
+
+                // start the receiver task
+                let (mut stream, _stream_id) = channel.create_stream();
+                let cloned_observed_sum = observed_sum.clone();
+                tokio::spawn(async move {
+                    while let Some(received_number) = exec_future(stream.next(), &format!("receiving an item produced by `.reserve_slot()` / `.send_reserved()`"), 1.0, false).await {
+                        use std::borrow::Borrow;    // allows working with either `u32` and `OgreUnique`
+                        cloned_observed_sum.fetch_add(*received_number.borrow(), Relaxed);
+                    }
+                });
+
+                let perform_pass = |pass_n| {
+                    // reserve all slots
+                    let reserved_slots: Vec<&mut u32> = (0..channel.buffer_size())
+                        .map(|i| channel.reserve_slot().unwrap_or_else(|| panic!("We ran out of slots at #{i}, pass {pass_n}")))
+                        .collect();
+
+                    // publish
+                    for (i, slot) in reserved_slots.into_iter().enumerate() {
+                        *slot = (i+1) as u32;
+                        assert!(channel.try_send_reserved(slot), "couldn't send a reserved slot on the first try -- we should, as there is no concurrency in place");
+                    }
+                };
+                
+                let timeout = Duration::from_millis(10);
+
+                // 1st pass
+                perform_pass(1);
+                tokio::time::sleep(timeout).await;
+                assert_eq!(observed_sum.load(Relaxed), expected_sum, "1st pass didn't produce the expected sum of items -- meaning not all items were produced/received");
+
+                // 2nd pass
+                perform_pass(2);
+                tokio::time::sleep(timeout).await;
+                assert_eq!(observed_sum.load(Relaxed), 2*expected_sum, "2nd pass (+ 1st pass) didn't produce the expected sum of items -- meaning, on the 2nd pass, not all items were produced/received");
+            }
+        }
+    }
+    allocation_semantics_alloc_and_send!(movable_atomic_allocation_semantics_alloc_and_send,      movable::atomic::Atomic<u32, 1024, 1>);
+    //allocation_semantics_alloc_and_send!(movable_crossbeam_allocation_semantics_alloc_and_send,   movable::crossbeam::Crossbeam<u32, 1024, 1>);
+    //allocation_semantics_alloc_and_send!(movable_full_sync_allocation_semantics_alloc_and_send,   movable::full_sync::FullSync<u32, 1024, 1>);
+    allocation_semantics_alloc_and_send!(zero_copy_atomic_allocation_semantics_alloc_and_send,    ChannelUniZeroCopyAtomic<u32, 1024, 1>);
+    allocation_semantics_alloc_and_send!(zero_copy_full_sync_allocation_semantics_alloc_and_send, ChannelUniZeroCopyFullSync<u32, 1024, 1>);
+
+
+    // *_allocation_semantics_alloc_and_give_up for all known Uni Channels
+    //////////////////////////////////////////////////////////////////////
+
+    macro_rules! allocation_semantics_alloc_and_give_up {
+        ($fn_name: tt, $uni_channel_type: ty) => {
+            /// Tests that our reserve cancellation semantics work, not leaving any leaked elements behind.
+            /// For each produced element, pre-allocates n entries, publishing just one -- cancelling the others:
+            ///   1. On the 1st pass, just  perform 1 extra allocation (and 1 cancellation) for each produced element -- for `BUFFER_SIZE` + 2 times
+            ///   2. On the 2nd pass, pre-allocates all the `BUFFER_SIZE` elements, producing just 1 and cancelling the others -- repeating this for `BUFFER_SIZE` + 2 times.
+            #[cfg_attr(not(doc),tokio::test)]
+            async fn $fn_name() {
+
+                let channel = Arc::new(<$uni_channel_type>::new("allocation_semantics_alloc_and_give_up"));
+
+                let series_size = channel.buffer_size() + 2;
+                let expected_sum = (1 + series_size) * (series_size / 2);
+                let observed_sum = Arc::new(AtomicU32::new(0));
+
+                // start the receiver task
+                let (mut stream, _stream_id) = channel.create_stream();
+                let cloned_observed_sum = observed_sum.clone();
+                tokio::spawn(async move {
+                    while let Some(received_number) = exec_future(stream.next(), &format!("receiving an item produced by `.reserve_slot()` / `.send_reserved()`"), 1.0, false).await {
+                        use std::borrow::Borrow;    // allows working with either `u32` and `OgreUnique`
+                        cloned_observed_sum.fetch_add(*received_number.borrow(), Relaxed);
+                    }
+                });
+
+                let publish = |pass, n, val| {
+                    debug_assert!(n >= 2, "`n` should be, at least, 2");
+                    // reserve `n` slots
+                    let mut reserved_slots: Vec<&mut u32> = (0..n)
+                        .map(|i| channel.reserve_slot().unwrap_or_else(|| panic!("We ran out of slots at #{val} (i={i}), pass {pass}, pending_items={}", channel.pending_items_count())))
+                        .collect();
+
+                    // populate & publish the first reserved slot
+                    let slot = reserved_slots.remove(0);
+                    *slot = val;
+                    assert!(channel.try_send_reserved(slot), "couldn't send a reserved slot on the first try -- we should, as there is no concurrency in place");
+
+                    // cancel all the remaining `n-1` reservations -- in the reversed order (the best case for all implementations)
+                    for slot in reserved_slots.into_iter().rev() {
+                        assert!(channel.try_cancel_slot_reserve(slot), "couldn't cancel a slot reservation on the first try -- we should, as there is no concurrency in place & we are cancelling reservations in the reversed order");
+                    }
+                };
+
+
+                let timeout = Duration::from_millis(10);
+
+                // 1st pass -- publish each element always reserving 1 extra slot -- which gets cancelled after each publishing
+                for i in 0..series_size {
+                    publish(1, 2, i+1);
+                    if i >= channel.buffer_size()-2 {
+                        channel.flush(Duration::from_millis(1)).await;
+                    }
+                }
+                assert_eq!(channel.flush(timeout).await, 0, "Couldn't flush pending items withing {timeout:?} @ pass #1");
+                assert_eq!(observed_sum.load(Relaxed), expected_sum, "1st pass didn't produce the expected sum of items -- meaning not all items were produced/received");
+
+                // 2nd pass -- publish each element always reserving all slots -- cancelling the extra reservations after each publishing
+                for i in 0..series_size {
+                    publish(2, channel.buffer_size(), i+1);
+                    channel.flush(Duration::from_millis(1)).await;
+                }
+                assert_eq!(channel.flush(timeout).await, 0, "Couldn't flush pending items withing {timeout:?} @ pass #2");
+                assert_eq!(observed_sum.load(Relaxed), 2*expected_sum, "2nd pass (+ 1st pass) didn't produce the expected sum of items -- meaning, on the 2nd pass, not all items were produced/received");
+            }
+        }
+    }
+    allocation_semantics_alloc_and_give_up!(movable_atomic_allocation_semantics_alloc_and_give_up,      movable::atomic::Atomic<u32, 1024, 1>);
+    //allocation_semantics_alloc_and_give_up!(movable_crossbeam_allocation_semantics_alloc_and_give_up,   movable::crossbeam::Crossbeam<u32, 1024, 1>);
+    //allocation_semantics_alloc_and_give_up!(movable_full_sync_allocation_semantics_alloc_and_give_up,   movable::full_sync::FullSync<u32, 1024, 1>);
+    allocation_semantics_alloc_and_give_up!(zero_copy_atomic_allocation_semantics_alloc_and_give_up,    ChannelUniZeroCopyAtomic<u32, 1024, 1>);
+    allocation_semantics_alloc_and_give_up!(zero_copy_full_sync_allocation_semantics_alloc_and_give_up, ChannelUniZeroCopyFullSync<u32, 1024, 1>);
+
+
     /// assures performance won't be degraded when we make changes
     #[cfg_attr(not(doc),tokio::test(flavor="multi_thread", worker_threads=2))]
     #[ignore]   // must run in a single thread for accurate measurements
@@ -367,7 +569,7 @@ if counter == count {
 
     }
 
-    /// executes the given `fut`ure, tracking timeouts
+    /// resolves/executes the given `fut`ure, enforcing a timeout
     async fn exec_future<Output: Debug,
                          FutureType: Future<Output=Output>,
                          IntoString: Into<String>>

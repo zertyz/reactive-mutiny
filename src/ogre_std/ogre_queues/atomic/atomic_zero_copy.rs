@@ -187,6 +187,104 @@ AtomicZeroCopy<SlotType, OgreAllocatorType, BUFFER_SIZE> {
 mod tests {
     //! Unit tests for [atomic_zero_copy](super) module
 
-    //use super::*;
+    use super::*;
+    use crate::ogre_std::ogre_alloc::ogre_array_pool_allocator::OgreArrayPoolAllocator;
+    use crate::ogre_std::test_commons;
+    use crate::ogre_std::test_commons::{Blocking, ContainerKind};
+
+    type QueueType<SlotType, const SIZE: usize = 1024> = AtomicZeroCopy::<SlotType, OgreArrayPoolAllocator<SlotType, AtomicMove<u32, SIZE>, SIZE>, SIZE>;
+
+    #[cfg_attr(not(doc),test)]
+    fn basic_queue_use_cases() {
+        let queue = QueueType::<i32>::new();
+        test_commons::basic_container_use_cases("Zero-Copy API",
+                                                ContainerKind::Queue, Blocking::NonBlocking, queue.max_size(),
+                                                |e| queue.publish_movable(e).0.is_some(),
+                                                || queue.consume_leaking().map(|(slot, id)| {
+                                                    let val = *slot;
+                                                    queue.release_leaked_id(id);
+                                                    val
+                                                }),
+                                                || queue.available_elements_count());
+    }
+
+    #[cfg_attr(not(doc),test)]
+    #[ignore]   // flaky if ran in multi-thread?
+    fn single_producer_multiple_consumers() {
+        let queue = QueueType::<u32>::new();
+        test_commons::container_single_producer_multiple_consumers("Zero-Copy API",
+                                                                   |e| queue.publish_movable(e).0.is_some(),
+                                                                   || queue.consume_leaking().map(|(slot, id)| {
+                                                                       let val = *slot;
+                                                                       queue.release_leaked_id(id);
+                                                                       val
+                                                                   }));
+    }
+
+    #[cfg_attr(not(doc),test)]
+    #[ignore]   // flaky if ran in multi-thread?
+    fn multiple_producers_single_consumer() {
+        let queue = QueueType::<u32>::new();
+        test_commons::container_multiple_producers_single_consumer("Zero-Copy API",
+                                                                   |e| queue.publish_movable(e).0.is_some(),
+                                                                   || queue.consume_leaking().map(|(slot, id)| {
+                                                                       let val = *slot;
+                                                                       queue.release_leaked_id(id);
+                                                                       val
+                                                                   }));
+    }
+
+    #[cfg_attr(not(doc),test)]
+    #[ignore]   // flaky if ran in multi-thread?
+    pub fn multiple_producers_and_consumers_all_in_and_out() {
+        let queue = QueueType::<u32>::new();
+        test_commons::container_multiple_producers_and_consumers_all_in_and_out("Zero-Copy API",
+                                                                                Blocking::NonBlocking,
+                                                                                queue.max_size(),
+                                                                                |e| queue.publish_movable(e).0.is_some(),
+                                                                                || queue.consume_leaking().map(|(slot, id)| {
+                                                                                    let val = *slot;
+                                                                                    queue.release_leaked_id(id);
+                                                                                    val
+                                                                                }));
+    }
+
+    #[cfg_attr(not(doc),test)]
+    #[ignore]   // flaky if ran in multi-thread?
+    pub fn multiple_producers_and_consumers_single_in_and_out() {
+        let queue = QueueType::<u32>::new();
+        test_commons::container_multiple_producers_and_consumers_single_in_and_out("Zero-Copy API",
+                                                                                   |e| queue.publish_movable(e).0.is_some(),
+                                                                                   || queue.consume_leaking().map(|(slot, id)| {
+                                                                                       let val = *slot;
+                                                                                       queue.release_leaked_id(id);
+                                                                                       val
+                                                                                   }));
+    }
+
+    #[cfg_attr(not(doc),test)]
+    pub fn peek_test() {
+        let queue = QueueType::<u32, 16>::new();
+        test_commons::peak_remaining("Zero-Copy API",
+                                     |e| queue.publish_movable(e).0.is_some(),
+                                     || queue.consume_leaking().map(|(slot, id)| {
+                                         let val = *slot;
+                                         queue.release_leaked_id(id);
+                                         val
+                                     }),
+                                     || unsafe { ( queue.peek_remaining().into_iter(), [].into_iter() ) } );
+    }
+
+
+    #[cfg_attr(not(doc),test)]
+    fn indexes_and_references_conversions() {
+        let queue = QueueType::<u32>::new();
+        let Some((first_item, _slot_id)) = queue.leak_slot() else {
+            panic!("Can't determine the reference for the element at #0");
+        };
+        test_commons::indexes_and_references_conversions(first_item,
+                                                         |index| queue.allocator.ref_from_id(index),
+                                                         |slot_ref: &u32| queue.allocator.id_from_ref(slot_ref));
+    }
 
 }

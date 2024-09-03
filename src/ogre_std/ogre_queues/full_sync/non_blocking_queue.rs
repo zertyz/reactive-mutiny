@@ -207,6 +207,10 @@ mod tests {
         test_commons::peak_remaining(queue.queue_name(),
                                      |e| queue.enqueue(e).is_none(),
                                      || queue.dequeue(),
-                                     || unsafe { queue.peek_remaining() } );
+                                     || unsafe {
+                                         let mut iter = queue.peek_remaining().into_iter();
+                                         ( iter.next().expect("no item @0").into_iter(),
+                                           iter.next().expect("no item @1").into_iter() )
+                                     } );
     }
 }

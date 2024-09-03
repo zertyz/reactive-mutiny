@@ -7,6 +7,7 @@ use std::{
     task::Waker,
     fmt::Debug,
 };
+use std::future::Future;
 use std::sync::Arc;
 use async_trait::async_trait;
 
@@ -94,6 +95,7 @@ pub trait ChannelMulti<'a, ItemType:        Debug + Send + Sync,
     /// Implemented only for a few [Multi] channels, returns two `Stream`s (and their `stream_id`s):
     ///   - one for the past events (that, once exhausted, won't see any of the forthcoming events)
     ///   - another for the forthcoming events.
+    /// 
     /// The split is guaranteed not to miss any events: no events will be lost between the last of the "past" and
     /// the first of the "forthcoming" events.\
     /// It is up to each implementor to define how back in the past those events may go, but it is known that `mmap log`
@@ -117,11 +119,11 @@ pub trait ChannelMulti<'a, ItemType:        Debug + Send + Sync,
 }
 
 /// Defines how to send events (to a [Uni] or [Multi]).
-pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
+pub trait ChannelProducer<'a, ItemType:        'a + Debug + Send + Sync,
                               DerivedItemType: 'a + Debug> {
 
     /// Similar to [Self::send_with()], but for sending the already-built `item`.\
-    /// See there for how to deal with the returned type.
+    /// See there for how to deal with the returned type.\
     /// IMPLEMENTORS: #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
     fn send(&self, item: ItemType) -> keen_retry::RetryConsumerResult<(), ItemType, ()>;
@@ -137,10 +139,37 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     ///         .into()?;
     /// ```
     /// NOTE: this type may allow the compiler some extra optimization steps when compared to [Self::send()]. When tuning for performance,
-    /// it is advisable to try this method
+    /// it is advisable to try this method.\
     /// IMPLEMENTORS: #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), F>`"]
-    fn send_with<F: FnOnce(&mut ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
+    fn send_with<F: FnOnce(&mut ItemType)>
+                (&self,
+                 setter: F)
+                -> keen_retry::RetryConsumerResult<(), F, ()>;
+    
+    /// Similar to [Self::send_with(), but accepts an async `setter`.
+    /// This method is useful for sending operations that depend on data acquired by async blocks, allowing
+    /// select loops (like the following) to be built:
+    /// ```nocompile
+    ///     tokio::select! {
+    ///         _ => async {
+    ///             channel_producer.send_with_async(|slot| async {
+    ///                 let data = data_source.read().await;
+    ///                 fill_slot(data, &mut slot);
+    ///                 slot
+    ///             }).await
+    ///         },
+    ///        (...other select arms that may execute concurrently with the above arm...)
+    ///     }
+    /// ```
+    /// IMPLEMENTORS: #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
+    
+    // TODO: 2024-03-04: this is to be filled in by **(f21)**. Possibly an extra dependency on the allocator will be needed for the `BoundedOgreAllocator::OwnedSlotType`
+    // fn send_with_external_alloc();
 
     /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
     /// -- for instance: if the Stream consumes `Arc<String>` (the derived item type) and the channel is for `Strings`, With this method one may send an `Arc` directly.\
@@ -151,6 +180,32 @@ pub trait ChannelProducer<'a, ItemType:         Debug + Send + Sync,
     fn send_derived(&self, _derived_item: &DerivedItemType) -> bool {
         todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose `Stream` items will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
     }
+    
+    /// Proxy to [crate::prelude::advanced::BoundedOgreAllocator::alloc_ref()] from the underlying allocator,
+    /// allowing caller to fill in the data as they wish -- in a non-blocking prone API.\
+    /// See also [Self::send_reserved()] and [Self::cancel_slot_reserve()].
+    fn reserve_slot(&'a self) -> Option<&'a mut ItemType>;
+
+    /// Attempts to send an item previously reserved by [Self::reserve_slot()].
+    /// Failure to do so (when `false` is returned) might be part of the normal channel operation,
+    /// so retrying is advised.
+    /// More: some channel implementations are optimized (or even only accept) sending the slots
+    ///       in the same order they were reserved.
+    #[must_use = "You need the returned value to retry the operation until it succeeds, implementing a suitable spin loop logic (like tokio's yield_now())"]
+    fn try_send_reserved(&self, reserved_slot: &mut ItemType) -> bool;
+    
+    /// Attempts to give up sending an item previously reserved by [Self::reserve_slot()], freeing it / setting its resources for reuse.
+    /// Two important things to note:
+    ///   1. Failure (when `false` is returned) might be part of the normal channel operation,
+    ///      so retrying is advised;
+    ///   2. Some channel implementations are optimized (or even only accept) cancelling the slots
+    ///      in the same order they were reserved;
+    ///   3. These, more restricted & more optimized channels, might not allow publishing any reserved
+    ///      slots if there are cancelled slots in-between -- in which case, publishing will only be done
+    ///      when the missing slots are, eventually, published. So, be careful when using the cancellation
+    ///      semantics: ideally, it should only be allowed for the last slot and when no sending occurs in-between.
+    #[must_use = "You need the returned value to retry the operation until it succeeds, implementing a suitable spin loop logic (like tokio's yield_now())"]
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut ItemType) -> bool;
 
 }
 

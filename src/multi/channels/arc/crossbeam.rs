@@ -12,6 +12,7 @@ use std::{
     mem::MaybeUninit,
     task::Waker,
 };
+use std::future::Future;
 use std::marker::PhantomData;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
 use async_trait::async_trait;
@@ -142,6 +143,20 @@ Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
+    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                             Fut: Future<Output=&'a mut ItemType>>
+                            (&'a self,
+                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()> {
+        let mut item = MaybeUninit::uninit();
+        let item_ref = unsafe { &mut *item.as_mut_ptr() };
+        setter(item_ref).await;
+        let item = unsafe { item.assume_init() };
+        let arc_item = Arc::new(item);
+        _ = self.send_derived(&arc_item);
+        keen_retry::RetryResult::Ok { reported_input: (), output: () }
+    }
+
+    #[inline(always)]
     fn send_derived(&self, arc_item: &Arc<ItemType>) -> bool {
         for stream_id in self.streams_manager.used_streams() {
             if *stream_id == u32::MAX {
@@ -163,6 +178,21 @@ std::thread::sleep(Duration::from_millis(500));
             }
         }
         true
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&self) -> Option<&'a mut ItemType> {
+        panic!("If we choose to go on with this Arc channel, this must be implemented")
+    }
+
+    #[inline(always)]
+    fn try_send_reserved(&self, _reserved_slot: &mut ItemType) -> bool {
+        panic!("If we choose to go on with this Arc channel, this must be implemented")
+    }
+
+    #[inline(always)]
+    fn try_cancel_slot_reserve(&self, _reserved_slot: &mut ItemType) -> bool {
+        panic!("If we choose to go on with this Arc channel, this must be implemented")
     }
 }
 

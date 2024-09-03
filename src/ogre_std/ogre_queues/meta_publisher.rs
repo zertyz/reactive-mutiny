@@ -18,6 +18,7 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     ///          elements present just after publishing `item` is returned -- which would be, at a minimum, 1
     ///   - 2nd: If the 1st returned value is `None`, this value will be `Some`, giving back to the caller the
     ///          `setter()` function (FnOnce) for a possible zero-copy reattempt.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn publish<F: FnOnce(&mut SlotType)>
               (&self, setter: F) -> (Option<NonZeroU32>, Option<F>);
@@ -30,12 +31,14 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     ///          elements present just after publishing `item` is returned -- which would be, at a minimum, 1
     ///   - 2nd: If the 1st returned value is `None`, this value will be `Some`, giving back to the caller the
     ///          `item` for a possible reattempt without incurring in further copying.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>);
 
     /// Advanced method to publish an element: allocates a slot from the pool, returning a reference to it.\
     /// Once called, either [publish_leaked()] or [unleak_slot()] should also be, eventually, called
     /// --  or else the slot will never be returned to the pool for reuse.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn leak_slot(&self) -> Option<(/*ref:*/ &mut SlotType, /*id: */u32)>;
 
@@ -45,31 +48,37 @@ pub trait MetaPublisher<'a, SlotType: 'a> {
     /// elements present just after publishing `item` is returned -- which would be, at a minimum, 1.\
     /// NOTE: unless you're using a shared allocator or an allocator with less slots than this container,
     /// `None` won't ever be returned here.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn publish_leaked_ref(&'a self, slot: &'a SlotType) -> Option<NonZeroU32>;
 
     /// The same as [publish_leaked_ref()], but slightly more efficient
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn publish_leaked_id(&'a self, slot_id: u32) -> Option<NonZeroU32>;
 
     /// Advanced method to return a slot (obtained by [allocate_slot()]) to the pool, so it may be reused,
     /// in case the publishing of the item should be aborted.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn unleak_slot_ref(&'a self, slot: &'a mut SlotType);
 
     /// The same as [unleak_slot_ref()], but slightly more efficient
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn unleak_slot_id(&'a self, slot_id: u32);
 
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
     /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn available_elements_count(&self) -> usize;
 
     /// Returns the maximum number of elements this `meta_publisher` can hold -- \
-    /// 0, if the implementor offers an unbounded container,\
-    /// > 0, if the implementer uses a ring-buffer of that size.
+    ///   * `=0`, if the implementor offers an unbounded container,\
+    ///   * `>0`, if the implementer uses a ring-buffer of that size.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn max_size(&self) -> usize;
 
@@ -89,6 +98,7 @@ pub trait MovePublisher<SlotType> {
     ///          elements present just after publishing `item` is returned -- which would be, at a minimum, 1
     ///   - 2nd: If the 1st returned value is `None`, this value will be `Some`, giving back to the caller the
     ///          `item` for a possible reattempt without incurring in further copying.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn publish_movable(&self, item: SlotType) -> (Option<NonZeroU32>, Option<SlotType>);
 
@@ -99,15 +109,18 @@ pub trait MovePublisher<SlotType> {
     ///     The returned boolean indicates if the publisher should try securing a slot again -- `false` meaning "don't retry: nothing could be done to free one up";
     ///   - `report_len_after_enqueueing_fn(len)` is called after the enqueueing is done and receives the number of not-yet-collected elements present -- a similar info as [available_elements()].
     ///     Specializers might use this to awake a number of consumers.
+    /// 
     /// Returns:
     ///   - `None` if the enqueueing was done;
     ///   - `Some(setter_fn)` otherwise -- possibly due to a bounded queue being full -- giving the caller the opportunity of retrying (maybe after spin-looping a bit).
     ///     Keep in mind that blocking-queues are likely never to return false (unless some sort of enqueueing timeout happens).
+    /// 
     /// Caveats:
     ///   1) Slots are reused, so the `setter_fn()` must care to set all fields. No `default()` or any kind of zeroing will be applied to them prior to that function call.
-    ///      As a down side, the `new T { fields }` cannot be used here. If that is needed, please use [publish_movable()]
+    ///      As a downside, the `new T { fields }` cannot be used here. If that is needed, please use [publish_movable()]
     ///   2) `setter_fn()` should complete instantly, or else the whole queue is likely to hang. If building a `SlotType` is lengthy, one might consider creating it before
     ///      calling this method and using the `setter_fn()` to simply clone/copy the value.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn publish<SetterFn:                   FnOnce(&mut SlotType),
                ReportFullFn:               Fn() -> bool,
@@ -122,12 +135,14 @@ pub trait MovePublisher<SlotType> {
     /// Possibly returns the number of published (but not-yet-collected) elements by this `meta_publisher`, at the moment of the call -- not synchronized.\
     /// Some implementations do "collect" enqueued elements once they are dequeued (for instance, a `ring-buffer` queue), while others (like an unbounded `meta_topic`)
     /// never collect them -- in practice, allowing new subscribers to access all elements ever produced.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn available_elements_count(&self) -> usize;
 
-    /// Returns the maximum number of elements this `meta_publisher` can hold -- \
-    /// 0, if the implementor offers an unbounded container,\
-    /// > 0, if the implementer uses a ring-buffer of that size.
+    /// Returns the maximum number of elements this `meta_publisher` can hold: \
+    ///   * `=0` if the implementor offers an unbounded container,
+    ///   * `>0`, if the implementer uses a ring-buffer of that size.
+    /// 
     /// IMPLEMENTORS: #[inline(always)]
     fn max_size(&self) -> usize;
 
