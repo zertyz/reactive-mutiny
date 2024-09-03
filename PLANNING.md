@@ -17,15 +17,6 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 
 # Being-Done
 
-**(f20)** 2024-03-02: Expose `BoundedOgreAllocator` functionalities to the `ChannelProducer`:
-Some users of our trait -- specially `reactive-messaging` -- work in close relation with `ChannelProducer`s.
-To allow them to have a simpler type system, we should add more items to our trait to intermediate the talk with the
-underlying allocator:
-  1) Allocate a slot
-  2) Free an allocated slot
-  3) Upgrade the medium version, as this API change introduces backwards incompatibilities
-  4) Bonus: The above lets us easily add a `.send_with_async(async_producer_closure)` method. Lets do it! 
-
 **(f21)** 2024-03-02: Possibly introduce the `OgreBoundedBoxAllocator` to enable advanced usage in `reactive-messaging`:
 This will enable `reactive-messaging` to receive variable sized binary messages.
 This should be better explored, as it seems there are options. Use cases tests should be added for sending
@@ -102,6 +93,15 @@ they support & that a final pass was made to make all of them use similar patter
 
 
 # Done
+
+**(f20)** 2024-03-02: Expose `BoundedOgreAllocator` functionalities to the `ChannelProducer`:
+Some users of our trait -- specially `reactive-messaging` -- work in close relation with `ChannelProducer`s.
+To allow them to have a simpler type system, we should add more items to our trait to intermediate the talk with the
+underlying allocator:
+  1) Allocate a slot
+  2) Free an allocated slot
+  3) Upgrade the medium version, as this API change introduces backwards incompatibilities
+  4) Bonus: The above lets us easily add a `.send_with_async(async_producer_closure)` method. Lets do it!
 
 **(r19)** 2024-03-02: Flexibilize our `OgreAllocator`:
 Currently, our `OgreAllocator` is better described as a `BoundedOgreAllocator` -- due to the fact that allocated slots have an `id`.
