@@ -15,7 +15,6 @@ use std::{
 use std::future::Future;
 use std::marker::PhantomData;
 use crossbeam_channel::{Sender, Receiver, TryRecvError};
-use async_trait::async_trait;
 use log::warn;
 
 
@@ -32,11 +31,10 @@ pub struct Crossbeam<'a, ItemType:          Send + Sync + Debug,
 }
 
 
-#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, Arc<ItemType>> for
+ChannelCommon<ItemType, Arc<ItemType>> for
 Crossbeam<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {

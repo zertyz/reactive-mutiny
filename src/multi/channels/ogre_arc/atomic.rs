@@ -26,7 +26,6 @@ use std::{
 use std::future::Future;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use async_trait::async_trait;
 
 
 /// This channel uses the queue [AtomicMove] (the lowest latency among all in 'benches/'), which allows zero-copy both when enqueueing / dequeueing and
@@ -52,12 +51,11 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug,
 }
 
 
-#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'a + Sync + Send,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, OgreArc<ItemType, OgreAllocatorType>> for
+ChannelCommon<ItemType, OgreArc<ItemType, OgreAllocatorType>> for
 Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {

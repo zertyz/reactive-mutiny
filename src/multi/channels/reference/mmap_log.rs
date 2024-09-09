@@ -19,7 +19,6 @@ use std::{
     task::Waker,
 };
 use std::future::Future;
-use async_trait::async_trait;
 
 
 const BUFFER_SIZE: usize = 1<<38;
@@ -53,10 +52,9 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
     }
 }
 
-#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + 'a,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, &'static ItemType> for
+ChannelCommon<ItemType, &'static ItemType> for
 MmapLog<'a, ItemType, MAX_STREAMS> {
 
     /// IMPLEMENTATION NOTE: use Self::from_file() instead for better control over the mmap file name and error handling

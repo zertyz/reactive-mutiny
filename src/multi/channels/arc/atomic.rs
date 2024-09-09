@@ -20,7 +20,6 @@ use std::{
 };
 use std::future::Future;
 use std::marker::PhantomData;
-use async_trait::async_trait;
 use log::warn;
 
 
@@ -44,11 +43,10 @@ pub struct Atomic<'a, ItemType:          Send + Sync + Debug + Default,
 }
 
 
-#[async_trait]      // all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
 impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, Arc<ItemType>> for
+ChannelCommon<ItemType, Arc<ItemType>> for
 Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {

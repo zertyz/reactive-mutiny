@@ -10,7 +10,6 @@ use super::super::{
 use std::{fmt::Debug, time::Duration, sync::{Arc, atomic::{AtomicU32, Ordering::Relaxed}}};
 use std::future::Future;
 use std::marker::PhantomData;
-use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::Stream;
 use tokio::sync::Mutex;
@@ -28,7 +27,6 @@ pub struct Uni<ItemType:          Send + Sync + Debug + 'static,
         _phantom:                 PhantomData<(&'static ItemType, &'static DerivedItemType)>,
 }
 
-#[async_trait]
 impl<ItemType:          Send + Sync + Debug + 'static,
      UniChannelType:    FullDuplexUniChannel<ItemType=ItemType, DerivedItemType=DerivedItemType> + Send + Sync + 'static,
      const INSTRUMENTS: usize,
@@ -289,7 +287,6 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
 ///     let the_uni = Uni<Lots,And,Lots<Of,Generic,Arguments>>::new();
 ///     let my_struct = MyGenericStruct { the_uni };
 ///     // see more at `tests/use_cases.rs`
-#[async_trait]
 pub trait GenericUni {
     /// The instruments this Uni will collect/report
     const INSTRUMENTS: usize;
@@ -333,7 +330,7 @@ pub trait GenericUni {
     
     /// Waits (up to `duration`) until [Self::pending_items_count()] is zero -- possibly waking some tasks awaiting on the active `Stream`s.\
     /// Returns the pending items -- which will be non-zero if `timeout` expired.
-    async fn flush(&self, timeout: Duration) -> u32;
+    fn flush(&self, timeout: Duration) -> impl Future<Output=u32>;
 
     /// Closes this Uni, in isolation -- flushing pending events, closing the producers,
     /// waiting for all events to be fully processed and calling the "on close" callback.\
@@ -341,7 +338,7 @@ pub trait GenericUni {
     /// If this Uni share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
     #[must_use = "Returns true if the Uni could be closed within the given time"]
-    async fn close(&self, timeout: Duration) -> bool;
+    fn close(&self, timeout: Duration) -> impl Future<Output=bool>;
     
     /// Spawns an optimized executor for the `Stream` returned by `pipeline_builder()`, provided it produces elements which are `Future` & fallible
     /// (Actually, as many consumers as `MAX_STREAMS` will be spawned).\

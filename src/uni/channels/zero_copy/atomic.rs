@@ -31,7 +31,6 @@ use std::{
     marker::PhantomData,
 };
 use std::future::Future;
-use async_trait::async_trait;
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -49,12 +48,11 @@ pub struct Atomic<'a, ItemType:          Debug + Send + Sync,
 }
 
 
-#[async_trait]
 impl<'a, ItemType:          Debug + Send + Sync,
          OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
+ChannelCommon<ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self> {

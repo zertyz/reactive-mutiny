@@ -31,7 +31,6 @@ use std::{
 };
 use std::future::Future;
 use std::marker::PhantomData;
-use async_trait::async_trait;
 
 
 /// This channel uses the [AtomicZeroCopy] queue and the wrapping type [OgreUnique] to allow a complete zero-copy
@@ -50,12 +49,11 @@ pub struct FullSync<'a, ItemType:          Debug + Send + Sync,
 }
 
 
-#[async_trait]
 impl<'a, ItemType:          Debug + Send + Sync,
          OgreAllocatorType: BoundedOgreAllocator<ItemType> + 'a + Send + Sync,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, OgreUnique<ItemType, OgreAllocatorType>>
+ChannelCommon<ItemType, OgreUnique<ItemType, OgreAllocatorType>>
 for FullSync<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {

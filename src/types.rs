@@ -9,15 +9,13 @@ use std::{
 };
 use std::future::Future;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 
 /// Defines common abstractions on how [Uni]s receives produced events and delivers them to `Stream`s.\
 /// Implementors should also implement one of [ChannelProducer] or [UniZeroCopyChannel].
 /// NOTE: all async functions are out of the hot path, so the `async_trait` won't impose performance penalties
-#[async_trait]
-pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
-                            DerivedItemType: Debug> {
+pub trait ChannelCommon<ItemType:        Debug + Send + Sync,
+                        DerivedItemType: Debug> {
 
     /// Creates a new instance of this channel, to be referred to (in logs) as `name`
     fn new<IntoString: Into<String>>(name: IntoString) -> Arc<Self>;
@@ -25,7 +23,7 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
     #[must_use = "Returns 0 if all elements could be flushed within the given `timeout` or the number of elements yet flushing"]
-    async fn flush(&self, timeout: Duration) -> u32;
+    fn flush(&self, timeout: Duration) -> impl Future<Output=u32>;
 
     /// Tells weather this channel is still enabled to process elements
     /// (true before calling the "end stream" / "cancel stream" functions)
@@ -35,13 +33,13 @@ pub trait ChannelCommon<'a, ItemType:        Debug + Send + Sync,
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
     #[must_use = "Returns true if the Channel could be closed within the given time"]
-    async fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> bool;
+    fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> impl Future<Output=bool>;
 
     /// Flushes & signals that all streams should cease their activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
     #[must_use = "Returns 0 if all elements could be flushed within the given `timeout` or the number of elements that got unsent after the channel closing"]
-    async fn gracefully_end_all_streams(&self, timeout: Duration) -> u32;
+    fn gracefully_end_all_streams(&self, timeout: Duration) -> impl Future<Output=u32>;
 
     /// Sends a signal to all streams, urging them to cease their operations.\
     /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
@@ -238,7 +236,7 @@ pub trait ChannelConsumer<'a, DerivedItemType: 'a + Debug> {
 ///     let my_struct = MyGenericStruct { the_channel };
 ///     // see more at `tests/use_cases.rs`
 pub trait FullDuplexUniChannel:
-              ChannelCommon<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelCommon<Self::ItemType, Self::DerivedItemType> +
               ChannelUni<'static, Self::ItemType, Self::DerivedItemType> +
               ChannelProducer<'static, Self::ItemType, Self::DerivedItemType> +
               ChannelConsumer<'static, Self::DerivedItemType> {
@@ -260,7 +258,7 @@ pub trait FullDuplexUniChannel:
 ///     let my_struct = MyGenericStruct { the_channel };
 ///     // see more at `tests/use_cases.rs`
 pub trait FullDuplexMultiChannel:
-              ChannelCommon<'static, Self::ItemType, Self::DerivedItemType> +
+              ChannelCommon<Self::ItemType, Self::DerivedItemType> +
               ChannelMulti<'static, Self::ItemType, Self::DerivedItemType> +
               ChannelProducer<'static, Self::ItemType, Self::DerivedItemType> +
               ChannelConsumer<'static, Self::DerivedItemType> {

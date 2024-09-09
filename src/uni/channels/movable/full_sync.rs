@@ -28,7 +28,6 @@ use std::{
 use std::future::Future;
 use std::marker::PhantomData;
 use crate::streams_manager::StreamsManagerBase;
-use async_trait::async_trait;
 
 
 /// This channel uses the fastest of the queues [FullSyncMove], which are the fastest for general purpose use and for most hardware but requires that elements are copied, due to the full sync characteristics
@@ -50,11 +49,10 @@ pub struct FullSync<'a, ItemType:          Send + Sync + Debug + Default,
 
 }
 
-#[async_trait]
 impl<'a, ItemType:          Send + Sync + Debug + Default + 'a,
          const BUFFER_SIZE: usize,
          const MAX_STREAMS: usize>
-ChannelCommon<'a, ItemType, ItemType>
+ChannelCommon<ItemType, ItemType>
 for FullSync<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
 
     fn new<IntoString: Into<String>>(streams_manager_name: IntoString) -> Arc<Self> {
