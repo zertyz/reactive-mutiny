@@ -33,6 +33,7 @@ use memmap::{
 /// NOTE 2: this container was not designed to survive app crashes nor to provide inter-process communications: it, currently, only allows the application to store a greater-than-RAM number of events in a zero-cost-abstraction manner,
 ///         with none to minimal performance hit. Upgrading it seems to be a no-brainer, though, if these ever prove to be useful features.
 #[derive(Debug)]
+#[allow(dead_code)]     // needed as some fields are never read (like `mmap_file` & `mmap_file_path` && `mmap_handle`)
 pub struct MMapMeta<'a, SlotType: 'a> {
 
     mmap_file_path: String,
@@ -519,5 +520,6 @@ mod tests {
         drop(consumer);
         //assert_eq!(observed_element, &EXPECTED_ELEMENT, "Dequeued element doesn't match");
     }
+
 
 }

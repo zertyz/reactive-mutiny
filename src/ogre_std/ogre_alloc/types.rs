@@ -45,10 +45,10 @@ pub trait BoundedOgreAllocator<SlotType: Debug>
 
     /// Same as [Self::alloc_with()], but accepts an `async` closure.
     /// IMPLEMENTORS: #[inline(always)]
-    async fn alloc_with_async<'r, Fut: Future<Output=(/*ref:*/ &'r mut SlotType, /*slot_id:*/ u32)>>
+    fn alloc_with_async<'r, Fut: Future<Output=(/*ref:*/ &'r mut SlotType, /*slot_id:*/ u32)>>
                              (&'r self,
                               setter: impl FnOnce(/*ref:*/ &'r mut SlotType, /*slot_id:*/ u32) -> Fut)
-                             -> Option<(/*ref:*/ &'r mut SlotType, /*slot_id:*/ u32)>
+                             -> impl Future<Output=Option<(/*ref:*/ &'r mut SlotType, /*slot_id:*/ u32)>>
                              where SlotType: 'r;
     
     /// Registers an externally allocated entry.\

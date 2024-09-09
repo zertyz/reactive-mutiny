@@ -32,8 +32,10 @@ async fn elaborated_generics_on_call_chains() {
     type Uni<ItemType> = UniZeroCopyAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
     // type Uni<ItemType> = UniMoveAtomic<ItemType, BUFFER_SIZE, 1, INSTRUMENTS>;
 
+    #[allow(dead_code)]
     trait CustomTrait<T> { fn get_data(self) -> T; }
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct CustomType<T: Debug> {data: T}
     impl<T: Debug> CustomTrait<CustomType<T>> for CustomType<T> { fn get_data(self) -> CustomType<T> { CustomType {data: self.data} } }
     async fn with_generics<RemoteMessages: CustomTrait<RemoteMessages> + Send + Sync + Debug>

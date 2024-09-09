@@ -84,17 +84,17 @@ impl AtomicIncrementalAverage64 {
     /// this should be used before the counter is about to turn over
     /// (even if the turn over increment doesn't panic, it would ruin the incremental averages calculations,
     /// so this method should be called even for Release compilation)
-    fn reset(&self, weight: u32) {
+    fn _reset(&self, weight: u32) {
         self.atomic_compute(Relaxed, Relaxed, |_counter, average| (weight, average) );
     }
 
     /// accessor for the split variant
-    fn split(&self) -> &IncrementalAveragePair32 {
+    fn _split(&self) -> &IncrementalAveragePair32 {
         unsafe { &self.split }
     }
 
     /// accessor for the joined variant
-    fn atomic(&self) -> &AtomicU64 {
+    fn _atomic(&self) -> &AtomicU64 {
         unsafe { &self.joined }
     }
 

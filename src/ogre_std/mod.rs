@@ -5,8 +5,9 @@ pub mod ogre_queues;
 pub mod ogre_stacks;
 pub mod ogre_sync;
 
-mod benchmarks;
 mod instruments;
 
+#[cfg(any(test,doc))]
+mod benchmarks;
 #[cfg(any(test,doc))]
 mod test_commons;

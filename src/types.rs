@@ -163,10 +163,10 @@ pub trait ChannelProducer<'a, ItemType:        'a + Debug + Send + Sync,
     ///     }
     /// ```
     /// IMPLEMENTORS: #[inline(always)]
-    async fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
-                             Fut: Future<Output=&'a mut ItemType>>
-                            (&'a self,
-                             setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
+    fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
+                       Fut: Future<Output=&'a mut ItemType>>
+                      (&'a self,
+                       setter: F) -> impl Future<Output=keen_retry::RetryConsumerResult<(), F, ()>>;
     
     // TODO: 2024-03-04: this is to be filled in by **(f21)**. Possibly an extra dependency on the allocator will be needed for the `BoundedOgreAllocator::OwnedSlotType`
     // fn send_with_external_alloc();

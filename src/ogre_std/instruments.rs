@@ -53,6 +53,7 @@ impl Instruments {
     /// designed to be used by clients of the implementor structs, returns the number to be used as a
     /// const generic numeric value (when instantiating the implementor struct) that corresponds
     /// to the given enum variant
+    #[allow(dead_code)]
     pub const fn into(self) -> usize {
         match self {
             Self::Uninstrumented             => 0,

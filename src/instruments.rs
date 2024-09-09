@@ -48,7 +48,7 @@ impl Instruments {
     ///     `counters := {[time] = count, ...}`\
     /// where *time* increase with the power of 2 and counts all requests whose times are between the previous *time* and the current one.\
     /// provides: `futures_times` && `duration_times`
-    const PERCENTILES:         usize = 16;
+    const _PERCENTILES:         usize = 16;
     /// outputs `INFO` on stream's execution start & finish
     const LOG:                 usize = 32;
     /// if [Instruments::LOG] is enabled, periodically outputs information about all enabled metrics & profiling data collected
