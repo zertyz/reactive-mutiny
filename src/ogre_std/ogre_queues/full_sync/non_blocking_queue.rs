@@ -209,8 +209,8 @@ mod tests {
                                      || queue.dequeue(),
                                      || unsafe {
                                          let mut iter = queue.peek_remaining().into_iter();
-                                         ( iter.next().expect("no item @0").into_iter(),
-                                           iter.next().expect("no item @1").into_iter() )
+                                         ( iter.next().expect("no item @0").iter(),
+                                           iter.next().expect("no item @1").iter() )
                                      } );
     }
 }

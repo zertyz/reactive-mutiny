@@ -23,7 +23,7 @@ pub trait ChannelCommon<ItemType:        Debug + Send + Sync,
     /// Waits until all pending items are taken from this channel, up until `timeout` elapses.\
     /// Returns the number of still unconsumed items -- which is 0 if it was not interrupted by the timeout
     #[must_use = "Returns 0 if all elements could be flushed within the given `timeout` or the number of elements yet flushing"]
-    fn flush(&self, timeout: Duration) -> impl Future<Output=u32>;
+    fn flush(&self, timeout: Duration) -> impl Future<Output=u32> + Send;
 
     /// Tells weather this channel is still enabled to process elements
     /// (true before calling the "end stream" / "cancel stream" functions)
@@ -33,13 +33,13 @@ pub trait ChannelCommon<ItemType:        Debug + Send + Sync,
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns `true` if the stream ended within the given `timeout` or `false` if it is still processing elements.
     #[must_use = "Returns true if the Channel could be closed within the given time"]
-    fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> impl Future<Output=bool>;
+    fn gracefully_end_stream(&self, stream_id: u32, timeout: Duration) -> impl Future<Output=bool> + Send;
 
     /// Flushes & signals that all streams should cease their activities when there are no more elements left
     /// to process, waiting for the operation to complete for up to `timeout`.\
     /// Returns the number of un-ended streams -- which is 0 if it was not interrupted by the timeout
     #[must_use = "Returns 0 if all elements could be flushed within the given `timeout` or the number of elements that got unsent after the channel closing"]
-    fn gracefully_end_all_streams(&self, timeout: Duration) -> impl Future<Output=u32>;
+    fn gracefully_end_all_streams(&self, timeout: Duration) -> impl Future<Output=u32> + Send;
 
     /// Sends a signal to all streams, urging them to cease their operations.\
     /// In opposition to [end_all_streams()], this method does not wait for any confirmation,
@@ -161,10 +161,10 @@ pub trait ChannelProducer<'a, ItemType:        'a + Debug + Send + Sync,
     ///     }
     /// ```
     /// IMPLEMENTORS: #[inline(always)]
-    fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut,
-                       Fut: Future<Output=&'a mut ItemType>>
+    fn send_with_async<F:   FnOnce(&'a mut ItemType) -> Fut + Send,
+                       Fut: Future<Output=&'a mut ItemType> + Send>
                       (&'a self,
-                       setter: F) -> impl Future<Output=keen_retry::RetryConsumerResult<(), F, ()>>;
+                       setter: F) -> impl Future<Output=keen_retry::RetryConsumerResult<(), F, ()>> + Send;
     
     // TODO: 2024-03-04: this is to be filled in by **(f21)**. Possibly an extra dependency on the allocator will be needed for the `BoundedOgreAllocator::OwnedSlotType`
     // fn send_with_external_alloc();

@@ -177,7 +177,7 @@ impl<'a, SlotType:          'a + Debug + Default,
 FullSyncMove<SlotType, BUFFER_SIZE> {
 
     /// The ring buffer is required to be a power of 2, so `head` and `tail` may wrap over flawlessly
-    const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = 0 / if BUFFER_SIZE.is_power_of_two() {1} else {0};
+    const BUFFER_SIZE_MUST_BE_A_POWER_OF_2: usize = usize::MAX / if BUFFER_SIZE.is_power_of_two() {1} else {0};
 
 
     /// gets hold of one of the slots available in the pool, LEAVING THE LOCK IN THE ACQUIRED STATE IN CASE IT SUCCEEDS,\

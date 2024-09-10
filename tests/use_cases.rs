@@ -380,7 +380,7 @@ fn generics() {
     impl<UniType: GenericUni> GenericUniUser<UniType> {
         // type TheUniType = Uni<UniType::ItemType, UniType::UniChannelType, { UniType::INSTRUMENTS }, UniType::DerivedItemType>;   // NOT YET ALLOWED :( when it is, `UNI_INSTRUMENTS` may be dropped
         /// Demonstrates the caller is able to see `UniType` as a `Uni`
-        fn as_uni(self) -> UniType {
+        fn to_uni(self) -> UniType {
             self.the_uni
         }
         /// Demonstrates we can access the type
@@ -393,7 +393,7 @@ fn generics() {
         }
     }
     type MyUniType = UniMoveAtomic::<u32, 1024>;
-    let the_uni = GenericUniUser {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.as_uni();
+    let the_uni = GenericUniUser {the_uni: MyUniType::new("The Uni"), _phantom: PhantomData}.to_uni();
     let _future = the_uni.close(Duration::ZERO);
     let the_uni = GenericUniUser::<MyUniType>::new_uni();
     let _future = the_uni.close(Duration::ZERO);
@@ -408,7 +408,7 @@ fn generics() {
     impl<const MULTI_INSTRUMENTS: usize, MultiType: GenericMulti<MULTI_INSTRUMENTS> + 'static> GenericMultiUser<MULTI_INSTRUMENTS, MultiType> {
         // type TheMultiType = Multi<MultiType::ItemType, MultiType::MultiChannelType, { MultiType::INSTRUMENTS }, MultiType::DerivedItemType>;   // NOT YET ALLOWED :( when it is, `UNI_INSTRUMENTS` may be dropped
         /// Demonstrates the caller is able to see `MultiType` as a `Multi`
-        fn as_multi(self) -> MultiType {
+        fn to_multi(self) -> MultiType {
             self.the_multi
         }
         /// Demonstrates we can access the type
@@ -421,7 +421,7 @@ fn generics() {
         }
     }
     type MyMultiType = MultiAtomicOgreArc::<u32, 1024, 1>;
-    let the_multi = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, _> {the_multi: MyMultiType::new("The Multi"), _phantom: PhantomData}.as_multi();
+    let the_multi = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, _> {the_multi: MyMultiType::new("The Multi"), _phantom: PhantomData}.to_multi();
     let _future = the_multi.close(Duration::ZERO);
     let the_multi = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, MultiAtomicOgreArc::<u32, 1024, 1>>::new_multi();
     let _future = the_multi.close(Duration::ZERO);

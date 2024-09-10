@@ -306,6 +306,7 @@ pub trait GenericUni {
     ///     the final `Stream`s may produce a combination of fallible/non-fallible &
     ///     futures/non-futures events;
     ///   - producing events that are sent to those `Stream`s.
+    /// 
     /// `uni_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
     /// argument passed to the [Uni] struct.
     fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self;
@@ -330,7 +331,7 @@ pub trait GenericUni {
     
     /// Waits (up to `duration`) until [Self::pending_items_count()] is zero -- possibly waking some tasks awaiting on the active `Stream`s.\
     /// Returns the pending items -- which will be non-zero if `timeout` expired.
-    fn flush(&self, timeout: Duration) -> impl Future<Output=u32>;
+    fn flush(&self, timeout: Duration) -> impl Future<Output=u32> + Send;
 
     /// Closes this Uni, in isolation -- flushing pending events, closing the producers,
     /// waiting for all events to be fully processed and calling the "on close" callback.\
@@ -338,7 +339,7 @@ pub trait GenericUni {
     /// If this Uni share resources with another one (which will get dumped by the "on close"
     /// callback), most probably you want to close them atomically -- see [unis_close_async!()]
     #[must_use = "Returns true if the Uni could be closed within the given time"]
-    fn close(&self, timeout: Duration) -> impl Future<Output=bool>;
+    fn close(&self, timeout: Duration) -> impl Future<Output=bool> + Send;
     
     /// Spawns an optimized executor for the `Stream` returned by `pipeline_builder()`, provided it produces elements which are `Future` & fallible
     /// (Actually, as many consumers as `MAX_STREAMS` will be spawned).\
