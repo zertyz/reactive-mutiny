@@ -182,7 +182,7 @@ pub trait ChannelProducer<'a, ItemType:        'a + Debug + Send + Sync,
     /// Proxy to [crate::prelude::advanced::BoundedOgreAllocator::alloc_ref()] from the underlying allocator,
     /// allowing caller to fill in the data as they wish -- in a non-blocking prone API.\
     /// See also [Self::send_reserved()] and [Self::cancel_slot_reserve()].
-    fn reserve_slot(&'a self) -> Option<&'a mut ItemType>;
+    fn reserve_slot(&self) -> Option<&mut ItemType>;
 
     /// Attempts to send an item previously reserved by [Self::reserve_slot()].
     /// Failure to do so (when `false` is returned) might be part of the normal channel operation,

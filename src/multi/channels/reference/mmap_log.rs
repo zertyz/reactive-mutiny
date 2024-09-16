@@ -223,7 +223,7 @@ MmapLog<'a, ItemType, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+    fn reserve_slot(&self) -> Option<&mut ItemType> {
         self.log_queue.leak_slot()
             .map(|(slot_ref, _slot_id)| slot_ref)
     }

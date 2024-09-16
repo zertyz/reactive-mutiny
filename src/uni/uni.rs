@@ -12,6 +12,7 @@ use std::future::Future;
 use std::marker::PhantomData;
 use futures::future::BoxFuture;
 use futures::Stream;
+use keen_retry::RetryConsumerResult;
 use tokio::sync::Mutex;
 
 
@@ -59,6 +60,30 @@ Uni<ItemType, UniChannelType, INSTRUMENTS, DerivedItemType> {
         self.channel.send_with(setter)
     }
 
+    #[inline(always)]
+    fn send_with_async<F:   FnOnce(&'static mut Self::ItemType) -> Fut + Send,
+                       Fut: Future<Output=&'static mut Self::ItemType> + Send>
+                      (&'static self,
+                       setter: F)
+                      -> impl Future<Output=RetryConsumerResult<(), F, ()>> + Send {
+        self.channel.send_with_async(setter)
+    }
+
+    #[inline(always)]
+    fn reserve_slot(&self) -> Option<&mut Self::ItemType> {
+        self.channel.reserve_slot()
+    }
+
+    #[inline(always)]
+    fn try_send_reserved(&self, reserved_slot: &mut Self::ItemType) -> bool {
+        self.channel.try_send_reserved(reserved_slot)
+    }
+
+    #[inline(always)]
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut Self::ItemType) -> bool {
+        self.channel.try_cancel_slot_reserve(reserved_slot)
+    }
+    
     fn consumer_stream(self) -> (Arc<Self> ,Vec<MutinyStream<'static,Self::ItemType,Self::UniChannelType,Self::DerivedItemType> >) {
         let streams = self.consumer_stream_internal();
         let arc_self = Arc::new(self);
@@ -310,13 +335,31 @@ pub trait GenericUni {
     /// `uni_name` is used for instrumentation purposes, depending on the `INSTRUMENT` generic
     /// argument passed to the [Uni] struct.
     fn new<IntoString: Into<String>>(uni_name: IntoString) -> Self;
-    
+
+    /// See [ChannelProducer::send()]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), ItemType>`"]
     fn send(&self, item: Self::ItemType) -> keen_retry::RetryConsumerResult<(), Self::ItemType, ()>;
-    
+
+    /// See [ChannelProducer::send_with()]
     #[must_use = "The return type should be examined in case retrying is needed -- or call map(...).into() to transform it into a `Result<(), F>`"]
     fn send_with<F: FnOnce(&mut Self::ItemType)>(&self, setter: F) -> keen_retry::RetryConsumerResult<(), F, ()>;
-    
+
+    /// See [ChannelProducer::send_with_async()]
+    fn send_with_async<F:   FnOnce(&'static mut Self::ItemType) -> Fut + Send,
+                       Fut: Future<Output=&'static mut Self::ItemType> + Send>
+                      (&'static self,
+                       setter: F)
+                      -> impl Future<Output=keen_retry::RetryConsumerResult<(), F, ()>> + Send;
+
+    /// See [ChannelProducer::reserve_slot()]
+    fn reserve_slot(&self) -> Option<&mut Self::ItemType>;
+
+    /// See [ChannelProducer::try_send_reserved()]
+    fn try_send_reserved(&self, reserved_slot: &mut Self::ItemType) -> bool;
+
+    /// See [ChannelProducer::try_cancel_slot_reserve()]
+    fn try_cancel_slot_reserve(&self, reserved_slot: &mut Self::ItemType) -> bool;
+
     /// Sets this [Uni] to return `Stream`s instead of executing them
     #[must_use = "By calling this method, the Uni gets converted into only providing Streams (rather than executing them) -- so the returned values of (self, Streams) must be used"]
     fn consumer_stream(self) -> (Arc<Self>, Vec<MutinyStream<'static, Self::ItemType, Self::UniChannelType, Self::DerivedItemType>>);

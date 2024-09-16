@@ -211,7 +211,7 @@ Atomic<'a, ItemType, OgreAllocatorType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+    fn reserve_slot(&self) -> Option<&mut ItemType> {
         self.allocator.alloc_ref()
             .map(|(slot_ref, _slot_id)| slot_ref)
     }

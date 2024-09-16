@@ -169,7 +169,7 @@ for Atomic<'a, ItemType, BUFFER_SIZE, MAX_STREAMS> {
     }
 
     #[inline(always)]
-    fn reserve_slot(&'a self) -> Option<&'a mut ItemType> {
+    fn reserve_slot(&self) -> Option<&mut ItemType> {
         self.channel.leak_slot_internal(|| false)
             .map(|(slot_ref, _slot_id, _len_before)| slot_ref)
     }
