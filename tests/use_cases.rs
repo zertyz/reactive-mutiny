@@ -22,6 +22,8 @@ use reactive_mutiny::prelude::advanced::{
     MultiAtomicOgreArc,
     MultiMmapLog,
 };
+use std::fmt::{Debug, Formatter};
+use std::ops::Deref;
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
 
@@ -427,4 +429,93 @@ fn generics() {
     let _future = the_multi.close(Duration::ZERO);
     let _future = GenericMultiUser::<{MyMultiType::INSTRUMENTS}, _> {the_multi: MyMultiType::new("The Multi"), _phantom: PhantomData}.close();
 
+}
+
+/// Ensures we are able to allocate a binary type (like a `Vec`) and use it as a reference to a Rust type
+/// -- this feature is specially needed for sending variable-sized binary messages
+#[cfg_attr(not(doc),tokio::test)]
+async fn vec_type_and_derived_reference() {
+    use rkyv::{
+        Archive, Serialize, AlignedVec, CheckBytes,
+        ser::{Serializer, serializers::WriteSerializer},
+        validation::validators::DefaultValidator,
+    };
+
+    /// NOTE: This simple wrapper type might be ready for use in production
+    #[derive(Default)]
+    struct SerializedWrapperType<T: Archive + Serialize<WriteSerializer<AlignedVec>>> {
+        raw: AlignedVec,
+        _phantom: PhantomData<T>,
+    }
+    impl<T: Archive + Serialize<WriteSerializer<AlignedVec>>> SerializedWrapperType<T> {
+        /// intended for use while sending
+        fn from_value(value: T) -> Self {
+            let buffer = {
+                let mut serializer = WriteSerializer::new(AlignedVec::new());
+                serializer.serialize_value(&value).unwrap();
+                serializer.into_inner()
+            };
+            Self {
+                raw: buffer,
+                _phantom: PhantomData,
+            }
+        }
+        /// intended for use while receiving -- when you are sure the source is trusty (or else the program may crash)
+        fn from_raw_unchecked(raw: AlignedVec) -> Self {
+            Self {
+                raw,
+                _phantom: PhantomData,
+            }
+        }
+
+        fn try_from_raw(raw: AlignedVec)
+                       -> Result<Self, ()>
+                       where for <'r> T::Archived: CheckBytes<DefaultValidator<'r>>,
+                             for <'r> <T as Archive>::Archived: 'r {
+            if rkyv::check_archived_root::<T>(&raw).is_err() {
+                Err(())
+            } else {
+                Ok(Self::from_raw_unchecked(raw))
+            }
+        }
+
+        fn try_from_raw_vec(mut raw: Vec<u8>)
+                           -> Result<Self, ()>
+                           where for <'r> T::Archived: CheckBytes<DefaultValidator<'r>>,
+                                 for <'r> <T as Archive>::Archived: 'r {
+            let mut aligned_vec = AlignedVec::new();
+            aligned_vec.extend_from_slice(raw.drain(..).as_slice());
+            Self::try_from_raw(aligned_vec)
+        }
+    }
+    impl<T: Archive + Serialize<WriteSerializer<AlignedVec>>> Deref for SerializedWrapperType<T> {
+        type Target = <T as Archive>::Archived;
+        fn deref(&self) -> &Self::Target {
+            unsafe {
+                rkyv::archived_root::<T>(&self.raw)
+            }
+        }
+    }
+    impl<T: Archive + Serialize<WriteSerializer<AlignedVec>>> Debug
+    for SerializedWrapperType<T>
+    where T::Archived: Debug {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            self.deref().fmt(f)
+        }
+    }
+
+    const EXPECTED_RAW_VALUE: u32 = 9758;
+
+    let observed_raw_type_value = Arc::new(AtomicU32::new(0));
+    let observed_raw_type_value_ref = Arc::clone(&observed_raw_type_value);
+    let raw_type_uni = UniMoveAtomic::<SerializedWrapperType<u32>, 1024>::new("RKYV wrapper for `u32` value")
+        .spawn_non_futures_non_fallibles_executors(1,
+                                                   move |payloads| {
+                                                       let observed_raw_type_value_ref = Arc::clone(&observed_raw_type_value_ref);
+                                                       payloads.map(move |payload| observed_raw_type_value_ref.store(*payload, Relaxed))
+                                                   },
+                                                   |_| async {});
+    assert!(raw_type_uni.send(SerializedWrapperType::from_value(EXPECTED_RAW_VALUE)).is_ok(), "couldn't send a raw value that would remain raw");
+    assert!(raw_type_uni.close(Duration::from_millis(100)).await, "couldn't close the raw Uni in time");
+    assert_eq!(observed_raw_type_value.load(Relaxed), EXPECTED_RAW_VALUE, "Values don't match for `raw_type_uni`");
 }

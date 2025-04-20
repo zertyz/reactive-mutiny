@@ -170,13 +170,12 @@ pub trait ChannelProducer<'a, ItemType:        'a + Debug + Send + Sync,
     // fn send_with_external_alloc();
 
     /// For channels that stores the `DerivedItemType` instead of the `ItemType`, this method may be useful
-    /// -- for instance: if the Stream consumes `Arc<String>` (the derived item type) and the channel is for `Strings`, With this method one may send an `Arc` directly.\
-    /// The default implementation, though, is made for types that don't have a derived item type.\
+    /// -- for instance: if the Stream consumes `OgreArc<Type>` (the derived item type) and the channel is for `Type`, with this method one may send an `OgreArc` directly.\
     /// IMPLEMENTORS: #[inline(always)]
     #[inline(always)]
     #[must_use = "The return type should be examined in case retrying is needed"]
     fn send_derived(&self, _derived_item: &DerivedItemType) -> bool {
-        todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose `Stream` items will see different types than the produced one -- example: send(`string`) / Stream<Item=Arc<String>>")
+        todo!("The default `ChannelProducer.send_derived()` was not re-implemented, meaning it is not available for this channel -- is only available for channels whose `Stream` items will see different types than the produced one -- example: send(`string`) / Stream<Item=OgreArc<String>>")
     }
     
     /// Proxy to [crate::prelude::advanced::BoundedOgreAllocator::alloc_ref()] from the underlying allocator,

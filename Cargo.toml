@@ -43,8 +43,13 @@ ctor          = "0.2"    # setup and teardown for modules
 ctor          = "0.2"    # setup and teardown for modules
 simple_logger = "5"      # a dirty console logger
 log           = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
-defaults      = "0.2"    # allows enums variantes requiring parameters to be annotated with #[default] 
+defaults      = "0.2"    # allows enums variantes requiring parameters to be annotated with #[default]
 
+
+# dependencies for the integration tests
+########################################
+
+rkyv = { version = "0.7", features = ["validation"] }
 
 # dependencies for the socket-server example
 ############################################

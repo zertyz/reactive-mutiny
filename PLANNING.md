@@ -21,6 +21,7 @@ Issues contain a *prefix* letter and a sequence number, possibly followed by a d
 This will enable `reactive-messaging` to receive variable sized binary messages.
 This should be better explored, as it seems there are options. Use cases tests should be added for sending
 RKYV's "Archived" structs and changes / implementations should follow from there.
+UPDATE: no new types nor features were needed -- just a tricky way to use our crate as depicted in the integration test `vec_type_and_derived_reference()`
 
 **(f22)** 2024-09-01: Complete & homogenize all channel implementations:
 Specially after **(f20)**, channels got new experimental & cool functionalities -- even if not all channels got an initial
