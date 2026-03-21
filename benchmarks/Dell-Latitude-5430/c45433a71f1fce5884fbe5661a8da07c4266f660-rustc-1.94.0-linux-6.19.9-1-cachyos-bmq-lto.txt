@@ -1,0 +1,19 @@
+Uni:
+    Move:
+        Atomic    : 16702236.85/s ✓
+        Crossbeam : 22421083.55/s ✓
+        Full Sync : 40319061.68/s ✓
+   Zero-Copy:
+        Atomic    : 9847037.34/s ✓
+        Full Sync : 22377549.76/s ✓
+
+Multi:
+    Arc:
+        Atomic    : 2114969.34/s ✓
+        Crossbeam : 2026458.25/s ✓
+        FullSync  : 2314772.15/s ✓
+    OgreArc:
+        Atomic    : 2153074.38/s ✓
+        FullSync  : 2505654.86/s ✓
+    Reference:
+        MmapLog   : 6450296.40/s ✓
